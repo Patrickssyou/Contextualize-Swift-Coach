@@ -59,12 +59,35 @@ const g = B.cleanChatGrade({ scores: { esc: 9, fr: 'na', amt: '2' }, route: { fa
 ok(g.scores.esc === 4 && g.scores.fr === 'na' && g.scores.amt === 2 && g.scores.ev === 0 && g.route.facts.mark === 'right', 'grade cleaner clamps and keeps N/A');
 ok(B.cleanChatRefs({ tickets: ['C46'], amounts: ['17.73', 0], orderType: 'Pickup' }).orderType === 'pickup', 'refs cleaner');
 
+// case type: compensation logic only on compensation cases (older replies with no caseType keep their bucket)
+const Fx = { timeline: [{ id: 'F1' }, { id: 'F2' }], claims: [], promises: [] };
+const nonComp = B.cleanChatAnalysis({ caseType: 'Menu_Setup', bucket: { id: 'none' }, affectedOrder: 'O1', saOffer: { amount: 7 }, fault: { who: 'None' } }, Fx, policy);
+ok(nonComp.caseType === 'menu_setup' && nonComp.bucket.id === '' && nonComp.affectedOrder === '' && nonComp.saOffer.amount === null && nonComp.fault.who === 'none', 'non-comp case: no bucket, order or offer; fault none');
+ok(B.compFor(nonComp, linked, policy).amount === null, 'non-comp case: no money computed');
+const isComp = B.cleanChatAnalysis({ caseType: 'compensation', bucket: { id: 'made_twice_one_paid' }, affectedOrder: 'o1', saOffer: { amount: '$17.73' }, escalation: { needed: true, to: 'Lead' } }, Fx, policy);
+ok(isComp.bucket.id === 'made_twice_one_paid' && isComp.affectedOrder === 'O1' && isComp.saOffer.amount === 17.73, 'comp case keeps bucket, order and offer');
+ok(isComp.ideal.escalation.needed === true && isComp.ideal.escalation.to === 'Lead', 'flat escalation key lands in ideal.escalation');
+ok(B.cleanChatAnalysis({ bucket: { id: 'unpaid' } }, Fx, policy).bucket.id === 'unpaid' && B.cleanChatAnalysis({ caseType: 'weird' }, Fx, policy).caseType === 'other', 'no caseType keeps the old behaviour; unknown type -> other');
+ok(B.CASE_TYPES.some(c => c[0] === 'compensation') && B.CASE_TYPES.length >= 8, 'case types listed');
+// N/A rows: fault and amount can be N/A, with the condition printed in the grade prompt
+ok(['fa', 'amt', 'fr', 'expl', 'esc'].every(id => B.CHAT_RUBRIC.find(r => r.id === id).na && B.CHAT_RUBRIC.find(r => r.id === id).naWhen), 'na rows carry naWhen');
+const gp = B.chatGradePrompt({ chat }, { timeline: [], claims: [], promises: [] }, Object.assign({}, nonComp), B.compFor(nonComp, [], policy), { amount: null }, []);
+ok(/N\/A when nothing went wrong/.test(gp) && /not a compensation case \(menu_setup\)/.test(gp) && /fa is "na"/.test(gp) && !/COMPENSATION MATH/.test(gp), 'grade prompt: N/A conditions, no comp math on a non-comp case');
+ok(/Score each flaw once/.test(gp) && /3 right · 2 right with a small gap/.test(gp), 'grade prompt: score once, mark anchors');
+// grade replies: reason-first criteria, N/A spellings
+const g2 = B.cleanChatGrade({ criteria: { fr: { why: 'ok', score: 2 }, amt: { why: 'none given', score: 'N/A' }, esc: { why: 'not needed', score: 'n/a' }, ev: { why: 'x', score: 3 } } });
+ok(g2.scores.fr === 2 && g2.scores.amt === 'na' && g2.scores.esc === 'na' && g2.scores.ev === 3 && g2.reasons.amt === 'none given', 'criteria {why, score} map to scores and reasons; N/A spellings');
+ok(B.cleanChatGrade({ scores: { esc: 'N/A' } }).scores.esc === 'na', 'old shape still read, N/A is not 0');
+
 // prompts carry the route and no real restaurant names baked into code
 const src = fs.readFileSync(path.join(__dirname, '..', 'src/chat.js'), 'utf8');
-ok([chat.clientName, String(chat.restaurant || '').split(' ')[0], chat.sid].filter(Boolean).every(w => !src.includes(w)), 'no case data in the source');
+ok([chat.clientName, String(chat.restaurant || '').split(' ')[0], chat.sid, tasks[0].sid].filter(Boolean).every(w => !src.includes(w)), 'no case data in the source');
 const k = { chat, tasks, orders: linked, calls: fx.callRows.map(B.callRow), slack: [], notFound: [] };
 const fp = B.chatFactsPrompt(k);
 ok(/CHECK THE SA'S CLAIMS/.test(fp) && /O1 · ticket 65/.test(fp) && /\[internal note, inferred\]/.test(fp), 'facts prompt has claims check, orders and internal notes');
+ok(new RegExp(`TASK ${tasks[0].sid} \\(child of this chat\\)`).test(fp) && /may be wrong/.test(fp) && /does not match this chat/.test(fp), 'facts prompt: child task labelled, auto links flagged as possibly wrong');
+const fp2 = B.chatFactsPrompt(Object.assign({}, k, { tasks: [Object.assign({}, tasks[0], { parent: 'other' })] }));
+ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possibly another case");
 // ---- end to end: the same runner the page uses, on the saved case with the saved Claude replies (run r2) ----
 (async () => {
   ok(B.chatWeek('2026-10-12T19:48:00') === '2026-10-12' && B.chatWeek('2026-10-18T23:59:00') === '2026-10-12' && B.chatWeek('2026-10-11T09:00:00') === '2026-10-05', 'Monday-start weeks');

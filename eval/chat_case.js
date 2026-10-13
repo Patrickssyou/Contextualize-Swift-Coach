@@ -5,26 +5,38 @@
 //   node eval/chat_case.js <sid> grade     -> needs analysis.out.json; writes the grade prompt
 //   node eval/chat_case.js <sid> report    -> needs grade.out.json; prints the audit
 //   node eval/chat_case.js <sid> all --run -> runs every pass blind through the Claude CLI (Sonnet, no tools, no project files), then prints the report
-// Options: --calib=none|all (default all, minus the case itself), --tag=<name> (output prefix, default "run"), --model=<alias> (default sonnet)
+//   node eval/chat_case.js <sid> <pass> --run -> writes that pass's prompt and runs it blind (refs | facts | analysis | grade)
+// Options: --calib=none|all (default all, minus the case itself), --tag=<name> (output prefix, default "run"), --model=<alias> (default sonnet),
+//          --brain=<path to a chat.js> (compare an older prompt version on the same fixtures),
+//          --pick (use the reviewer's order pick from data/chats/eval_expect.json instead of the automatic match, like the page's override)
 // Case fixtures and outputs live in data/chats/cases/ (git-ignored real data).
 const fs = require('fs'), path = require('path');
-const B = require('../src/chat.js');
+const brainArg = process.argv.find(a => a.startsWith('--brain='));
+const B = require(brainArg ? path.resolve(brainArg.slice(8)) : '../src/chat.js'); // --brain=<file>: run an older chat.js for before/after (needs ./core.js beside it)
 const ROOT = path.join(__dirname, '..'), DIR = path.join(ROOT, 'data/chats/cases');
 const [sid, step] = process.argv.slice(2);
 const opt = Object.fromEntries(process.argv.slice(4).map(a => a.replace(/^--/, '').split('=')));
 const tag = opt.tag || 'run', F = s => path.join(DIR, `${sid}.${tag}.${s}`);
 const rj = f => JSON.parse(fs.readFileSync(f, 'utf8'));
-/* one blind pass: the prompt file goes to a fresh Claude with no tools and no project context, the JSON reply is saved */
-function blind(pass) {
+/* one blind pass: the prompt file goes to a fresh Claude with no tools and no project context, the JSON reply is saved.
+   A reply that isn't valid JSON is retried once (the page's retry does the same); the bad reply is kept as <pass>.bad.txt */
+function blind(pass, attempt = 1) {
   const { execFileSync } = require('child_process'), os = require('os');
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-eval-'));
   const txt = execFileSync('claude', ['-p', '--safe-mode', '--model', opt.model || 'sonnet', '--tools', '', '--output-format', 'text',
     '--system-prompt', 'Follow the instructions in the message exactly. Reply with only the JSON object it asks for.'],
     { input: fs.readFileSync(F(pass + '.txt')), cwd, maxBuffer: 1e8, timeout: 900000 }).toString();
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error(`${pass}: no JSON in the reply: ${txt.slice(0, 300)}`);
-  fs.writeFileSync(F(pass + '.out.json'), JSON.stringify(JSON.parse(txt.slice(a, b + 1)), null, 1));
-  console.log(`ran ${pass} blind -> ${F(pass + '.out.json')}`);
+  let out = null; try { if (a >= 0 && b > a) out = JSON.parse(txt.slice(a, b + 1)); } catch (e) { out = null; }
+  if (!out) { fs.writeFileSync(F(pass + '.bad.txt'), txt); if (attempt < 2) { console.log(`${pass}: reply was not valid JSON, retrying once`); return blind(pass, attempt + 1); }
+    throw new Error(`${pass}: no valid JSON in the reply: ${txt.slice(0, 300)}`); }
+  fs.writeFileSync(F(pass + '.out.json'), JSON.stringify(out, null, 1));
+  console.log(`ran ${pass} blind -> ${F(pass + '.out.json')}${attempt > 1 ? ' (after a retry)' : ''}`);
+}
+if (step === 'all' || ('run' in opt && ['refs', 'facts', 'analysis', 'grade'].includes(step))) {
+  const self = process.argv.slice(1, 3), rest = process.argv.slice(4).filter(a => a !== '--run');
+  const sub = st => require('child_process').execFileSync(process.execPath, [...self, st, ...rest], { stdio: 'inherit' });
+  if (step !== 'all') { sub(step); blind(step); process.exit(0); }
 }
 if (step === 'all') {
   if (!('run' in opt)) throw new Error('all needs --run');
@@ -49,7 +61,9 @@ async function assemble() {
     if (/ · same caller$/.test(title)) return (fx.callRows || []).filter(r => cfg.filters.dimensions.includes(r.calls_call_phone_detail));
     return []; };
   const ask = async () => fs.existsSync(F('refs.out.json')) ? rj(F('refs.out.json')) : {};
-  const k = await B.chatContext(chat, { query, ask, orderIds: fx.orderIds });
+  let orderIds = fx.orderIds;
+  if ('pick' in opt) { const e = rj(path.join(ROOT, 'data/chats/eval_expect.json'))[sid]; if (!e || !Array.isArray(e.pick)) throw new Error('no reviewer pick for ' + sid); orderIds = e.pick; }
+  const k = await B.chatContext(chat, { query, ask, orderIds });
   k.slack = fx.slack || []; k.notFound = k.notFound.concat(fx.notFound || []); k.review = fx.review;
   return k;
 }
@@ -77,11 +91,11 @@ if (['grade', 'report'].includes(step)) {
 if (step === 'grade') { fs.writeFileSync(F('grade.txt'), B.chatGradePrompt(k, Fx, A, comp, offer, cal)); console.log('comp', comp, 'offer', offer); console.log('wrote', F('grade.txt')); }
 if (step === 'report') {
   const G = B.cleanChatGrade(rj(F('grade.out.json'))), pct = B.chatScore(G.scores), v = B.chatVerdict(pct);
-  const out = { sid, verdict: v, pct, reviewer: k.review, fault: A.fault, bucket: A.bucket, comp, offer, saPath: A.saPath, ae: A.aeInvolvement, firstResponse: A.firstResponse, ideal: A.ideal,
+  const out = { sid, verdict: v, pct, reviewer: k.review, caseType: A.caseType || '', request: A.request || '', fault: A.fault, bucket: A.bucket, comp, offer, saPath: A.saPath, ae: A.aeInvolvement, firstResponse: A.firstResponse, ideal: A.ideal,
     claims: Fx.claims, scores: G.scores, reasons: G.reasons, route: G.route, wentWell: G.wentWell, nextTime: G.nextTime, verdictWhy: G.verdictWhy };
   fs.writeFileSync(F('audit.json'), JSON.stringify(out, null, 1));
   console.log(`VERDICT ${v && v.label} ${pct}%  (reviewer: ${k.review && k.review.verdict})`);
-  console.log('fault', A.fault.who, '|', A.fault.why); console.log('bucket', A.bucket.id, '|', comp.formula, '| SA offered', offer.amount, offer.match, offer.note);
+  console.log('type', A.caseType || '-', '|', A.request || ''); console.log('fault', A.fault.who, '|', A.fault.why); console.log('bucket', A.bucket.id, '|', comp.formula, '| SA offered', offer.amount, offer.match, offer.note);
   console.log('path', A.saPath.match, A.saPath.why); console.log('AE', A.aeInvolvement.kind, A.aeInvolvement.saCouldPrevent, A.aeInvolvement.why);
   console.log('first response', A.firstResponse.concludedBeforeEvidence, A.firstResponse.why);
   console.log('claims', Fx.claims.map(c => `${c.id} ${c.check}: ${c.claim}`).join('\n  '));
