@@ -56,6 +56,7 @@ if (step === 'all') {
 const policy = rj(path.join(ROOT, 'data/chats/policy_pack.json'));
 const calAll = fs.existsSync(path.join(ROOT, 'data/chats/calibration.json')) ? rj(path.join(ROOT, 'data/chats/calibration.json')) : [];
 const cal = opt.calib === 'none' ? [] : calAll.filter(c => c.sid !== sid);
+const lessons = fs.existsSync(path.join(ROOT, 'data/chats/lessons.json')) ? rj(path.join(ROOT, 'data/chats/lessons.json')) : [];
 
 /* the same runner the page uses (chatContext), fed from the saved fixture instead of Lightdash */
 async function assemble() {
@@ -87,21 +88,22 @@ if (step === 'facts') {
   console.log('messages', k.chat.msgs.map(m => `M${m.n}:${m.role}${m.internal ? '(internal)' : ''}:${m.name}`).join(' '));
   fs.writeFileSync(F('facts.txt'), B.chatFactsPrompt(k)); console.log('wrote', F('facts.txt'), fs.statSync(F('facts.txt')).size, 'bytes');
 }
-let Fx, A, comp, offer;
+let Fx, A, comp, offer, check;
 if (['analysis', 'grade', 'report'].includes(step)) {
   Fx = B.cleanChatFacts(rj(F('facts.out.json')), k.calls); if (!Fx) throw new Error('facts did not clean');
 }
-if (step === 'analysis') { fs.writeFileSync(F('analysis.txt'), B.chatAnalysisPrompt(k, Fx, policy, cal)); console.log('wrote', F('analysis.txt'), 'calibration cases', cal.length); }
+if (step === 'analysis') { fs.writeFileSync(F('analysis.txt'), B.chatAnalysisPrompt(k, Fx, policy, cal, lessons)); console.log('wrote', F('analysis.txt'), 'calibration cases', cal.length); }
 if (['grade', 'report'].includes(step)) {
   A = B.cleanChatAnalysis(rj(F('analysis.out.json')), Fx, policy); if (!A) throw new Error('analysis did not clean');
-  comp = B.compFor(A, k.orders, policy); offer = B.offerCheck(A.saOffer, comp, k.orders);
+  comp = B.compFor(A, k.orders, policy); offer = B.offerCheck(A.saOffer, comp, k.orders); check = B.compCheck(A, k, policy);
 }
-if (step === 'grade') { fs.writeFileSync(F('grade.txt'), B.chatGradePrompt(k, Fx, A, comp, offer, cal)); console.log('comp', comp, 'offer', offer); console.log('wrote', F('grade.txt')); }
+if (step === 'grade') { fs.writeFileSync(F('grade.txt'), B.chatGradePrompt(k, Fx, A, comp, offer, cal, check, lessons)); console.log('check', check.applies ? `${check.status} · ${check.summary}` : 'n/a'); console.log('wrote', F('grade.txt')); }
 if (step === 'report') {
   /* two reads, averaged like the page (gradeChat), when grade2.out.json exists */
-  const G1 = B.cleanChatGrade(rj(F('grade.out.json'))), G = fs.existsSync(F('grade2.out.json')) ? B.mergeGrades(G1, B.cleanChatGrade(rj(F('grade2.out.json')))) : G1, pct = B.chatScore(G.scores), v = B.chatVerdict(pct);
+  /* the same finishing step as the page: two reads merged, the comp check's mark, the ticket's findings */
+  const G1 = B.cleanChatGrade(rj(F('grade.out.json'))), G2 = fs.existsSync(F('grade2.out.json')) ? B.cleanChatGrade(rj(F('grade2.out.json'))) : null, G = B.finishGrade(G1, G2, A, check, k, Fx), pct = B.chatScore(G.scores), v = B.chatVerdict(pct);
   const out = { sid, verdict: v, pct, reviewer: k.review, caseType: A.caseType || '', request: A.request || '', fault: A.fault, bucket: A.bucket, comp, offer, saPath: A.saPath, ae: A.aeInvolvement, firstResponse: A.firstResponse, ideal: A.ideal,
-    claims: Fx.claims, scores: G.scores, reasons: G.reasons, route: G.route, wentWell: G.wentWell, nextTime: G.nextTime, verdictWhy: G.verdictWhy };
+    claims: Fx.claims, scores: G.scores, reasons: G.reasons, route: G.route, wentWell: G.wentWell, nextTime: G.nextTime, verdictWhy: G.verdictWhy, check, findings: G.findings };
   fs.writeFileSync(F('audit.json'), JSON.stringify(out, null, 1));
   console.log(`VERDICT ${v && v.label} ${pct}%${G.runPcts ? `  (reads ${G.runPcts.join(' / ')})` : ''}  (reviewer: ${k.review && k.review.verdict})`);
   console.log('type', A.caseType || '-', '|', A.request || ''); console.log('fault', A.fault.who, '|', A.fault.why); console.log('bucket', A.bucket.id, '|', comp.formula, '| SA offered', offer.amount, offer.match, offer.note);
@@ -110,6 +112,8 @@ if (step === 'report') {
   console.log('claims', Fx.claims.map(c => `${c.id} ${c.check}: ${c.claim}`).join('\n  '));
   B.CHAT_RUBRIC.forEach(r => console.log(`  ${r.id.padEnd(5)} ${String(G.scores[r.id]).padEnd(3)}/${r.max}  ${G.reasons[r.id]}`));
   Object.entries(G.route).forEach(([k2, v2]) => console.log(`  route ${k2}: ${v2.mark} — ${v2.why}`));
+  if (check && check.applies) console.log('COMP CHECK', check.status, '|', check.summary, check.errors.map(e => e.label).join(', '), check.flags.map(f => f.label).join(', '));
+  G.findings.forEach(f => console.log(`FINDING ${f.priority} ${f.label} · ${f.type} (${f.score}/${f.max})\n   what: ${f.what}\n   evidence: ${f.evidence.map(e => `${e.src}${e.ok === true ? '✓' : e.ok === false ? '✗' : ''}${e.swapped ? '(msg)' : ''} "${e.quote}"`).join(' | ')}\n   should: ${f.should}`));
   console.log('went well', G.wentWell); G.nextTime.forEach(n => console.log('NEXT:', n.what, '\n   why:', n.why, '\n   do:', n.do, '\n   model:', n.model));
 }
 })().catch(e => { console.error(e); process.exit(1); });

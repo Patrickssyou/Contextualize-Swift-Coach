@@ -2,8 +2,8 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:2};
-const CHAT_V = "chat-1";
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:2, lessonMax:20};
+const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
   "wira_project_tasks_conversation_direction","wira_project_tasks_created_by","wira_project_tasks_created_by_title","wira_project_tasks_assigned_user",
@@ -266,6 +266,59 @@ function offerCheck(offer,comp,orders){const a=offer&&Number(offer.amount);if(!(
   if(comp&&comp.amount!=null)res.note=`${money(a)} vs the policy amount ${money(comp.amount)}`;
   return res}
 
+/* ---------- 3b. The compensation check: what was due, what the SA gave, and exactly how it went wrong ----------
+   Compensation cases only, and all arithmetic on Tarro's order data. Claude supplies only the policy row, the affected order, whether the SA gave or
+   promised compensation, the amount and where it is written, and whether a lead approved it. The result sets Resolution accuracy (amt). */
+const COMP_ERR = {tax:"Taxes included", tip:"Tip included", fees:"Fees included", pct:"Wrong percentage", order:"Wrong order", fee_missing:"Delivery fee left out",
+  rounding:"Rounded", math:"Math error", not_recorded:"Amount not recorded", not_given:"Not offered", not_due:"Not due", shared:"Offered on a shared fault without approval",
+  over_limit:"Over the limit without approval"};
+/* which formula the SA's amount came from: the affected order first (every base, every policy %, with and without the delivery fee), then other orders that day (items or total at the due %) */
+function compDiagnose(g,due,orders,day,P){
+  const pcts=[...new Set([due.pct].concat((P.buckets||[]).map(b=>b.pct).filter(x=>x>0)))],fee=due.fee||0;
+  const aff=(orders||[]).find(o=>o.label===due.order||o.id===due.order)||null;
+  const parts=o=>[[[],o.items],[["tax"],o.items+o.tax],[["tip"],o.items+o.tip],[["fees"],o.items+o.other],[["tax","tip"],o.items+o.tax+o.tip],[["tax","fees"],o.items+o.tax+o.other],[["tax","tip","fees"],o.items+o.tax+o.tip+o.other]]
+    .filter(([p])=>p.every(x=>x==="tax"?o.tax>0:x==="tip"?o.tip>0:o.other>0));
+  const baseL=(o,p,b)=>p.length?`${money(b)} (items ${money(o.items)}${p.includes("tax")?` + tax ${money(o.tax)}`:""}${p.includes("tip")?` + tip ${money(o.tip)}`:""}${p.includes("fees")?` + fees ${money(o.other)}`:""})`:`${money(o.items)} items`;
+  const tryO=(o,pl,bases)=>{for(const pct of pl)for(const [p,b] of bases)for(const f of fee?[fee,0]:[0]){const v=r2(b*pct/100+f);if(Math.abs(v-g)>0.011)continue;
+    const codes=[];if(aff&&o!==aff)codes.push({code:"order",detail:`Built on ticket ${o.ticket||"?"} instead of ticket ${aff.ticket||"?"}.`});
+    if(pct!==due.pct)codes.push({code:"pct",detail:`Used ${pct}% where "${due.label}" is ${due.pct}%.`});
+    p.forEach(x=>codes.push({code:x,detail:x==="tax"?`Tax (${money(o.tax)}) was in the base. Compensation is on the food only.`:x==="tip"?`The tip (${money(o.tip)}) was in the base.`:`Fees (${money(o.other)}) were in the base.`}));
+    if(fee&&!f)codes.push({code:"fee_missing",detail:`Self-delivery: the ${money(fee)} delivery fee goes on top.`});
+    if(codes.length)return {formula:`${pct}% × ${baseL(o,p,b)}${f?` + ${money(f)} delivery fee`:""} = ${money(v)}`,codes}}return null};
+  if(aff){const m=tryO(aff,pcts,parts(aff));if(m)return m}
+  for(const o of (orders||[]).concat((day||[]).filter(x=>!(orders||[]).some(y=>y.id===x.id))))if(o!==aff){const m=tryO(o,[due.pct],parts(o).filter(([p])=>!p.length||p.length===3));if(m)return m}
+  return null}
+function compCheck(A,k,policy){policy=policy||CHAT_POLICY_EMPTY;const P=policy.comp||CHAT_POLICY_EMPTY.comp,lim=P.approvalLimit||25,sa=((k&&k.chat&&k.chat.sa)||"The SA").split(" ")[0];
+  if(!A||(A.caseType&&A.caseType!=="compensation"))return {applies:false};
+  const orders=(k&&k.orders)||[],due=compFor(A,orders,policy),so=A.saOffer||{},ap=A.approval||{};
+  const g=so.amount==null||isNaN(so.amount)?null:r2(so.amount),gave=so.given===true||g!=null;
+  const out={applies:true,due,given:{amount:g,given:gave,where:so.where||"",text:so.text||"",cites:so.cites||[]},status:"unknown",errors:[],flags:[],computed:"",diff:null,score:null,summary:""};
+  const err=(code,detail)=>out.errors.push({code,label:COMP_ERR[code],detail});
+  if(!due.bucket){out.summary="No policy row was chosen, so the amount due is unknown.";return out}
+  if(!due.pct){if(gave){out.status="not_due";out.score=0;err("not_due",`"${due.label}": nothing was due, but ${g!=null?money(g):"compensation"} was given.`)}
+    else{out.status="none_due";out.score="na"}
+    out.summary=gave?out.errors[0].detail:`"${due.label}": nothing due, nothing given.`;return out}
+  /* shared or unclear fault: the policy says don't offer; escalate if the client insists. Above the limit: hold until the lead approves. Holding is right, and Escalation scores it */
+  const shared=["shared_tarro","shared_other","unclear"].includes(A.fault&&A.fault.who);
+  if(!gave&&(shared||due.needsApproval)){out.status="held";out.score="na";out.summary=shared?"Shared or unclear fault: compensation isn't offered unless a lead approves it.":`Above the ${money(lim)} limit: compensation waits for ${P.approver||"the lead"}'s approval.`;return out}
+  if(!gave){out.status="missing";out.score=0;err("not_given",`Compensation was due${due.amount!=null?` (${money(due.amount)})`:""} and none was given or promised.`);out.summary=out.errors[0].detail;return out}
+  if(shared&&ap.approved!==true){err("shared",`The fault is shared or unclear, and ${sa} offered compensation without ${P.approver||"the lead"}'s approval.`)}
+  if(g==null){out.status="not_recorded";out.score=0;err("not_recorded","Compensation was given or promised, but its amount is written nowhere: not in the chat, a note or a WIRA ticket.");
+    out.summary=`${out.errors[0].detail}${due.amount!=null?` Due: ${due.formula}.`:""}`;return out}
+  if(due.amount==null){out.summary=`${sa} gave ${money(g)}. The affected order isn't linked, so the amount can't be checked.`;return out}
+  out.diff=r2(g-due.amount);
+  if(Math.abs(out.diff)<0.005&&!out.errors.length){out.status="right";out.score=3;out.computed=due.formula;out.summary=`Right: ${due.formula}.`}
+  else if(Math.abs(out.diff)<0.005){out.status="wrong";out.score=1;out.computed=due.formula;out.summary=`${due.formula}, but ${out.errors[0].detail.charAt(0).toLowerCase()+out.errors[0].detail.slice(1)}`}
+  else{const m=compDiagnose(g,due,orders,(k&&k.allOrders)||[],P);
+    if(m){out.computed=m.formula;m.codes.forEach(c=>err(c.code,c.detail))}
+    else if(Math.abs(out.diff)<1&&Math.round(g*100)%50===0)err("rounding",`${money(g)} instead of the exact ${money(due.amount)}.`);
+    else err("math",`${money(g)} matches no policy formula on this order.`);
+    const minor=out.errors.every(e=>e.code==="rounding");out.status=minor?"minor":"wrong";out.score=minor?2:1;
+    out.summary=`Due ${money(due.amount)} (${due.formula}). ${sa} gave ${money(g)}${out.computed?`: ${out.computed}`:""}. ${out.diff>0?"Over":"Under"} by ${money(Math.abs(out.diff))}.`}
+  /* above the limit the lead approves before the client is told; that is an escalation matter, flagged here and scored under Escalation */
+  if(g>lim&&ap.approved!==true)out.flags.push({code:"over_limit",label:COMP_ERR.over_limit,detail:`${money(g)} is above the ${money(lim)} limit; ${P.approver||"the lead"} must approve before the client is told.`});
+  return out}
+
 /* ---------- 4. Prompts ---------- */
 const CHAT_CTX = "Tarro answers the phones and runs the POS, online ordering and delivery for pizza restaurants. The restaurant is Tarro's client. Super Agents (SAs) support clients through WIRA chat and phone. AEs/CSMs manage client accounts; leads (e.g. Howard Ho) approve exceptions.";
 const EVIDENCE_RULES = [
@@ -341,6 +394,8 @@ function chatFactLines(F){return F.timeline.map(t=>`${t.id} · ${[t.when,t.src].
   "\n\nSA CLAIMS CHECK\n"+(F.claims.length?F.claims.map(c=>`${c.id} · ${c.src} · ${c.check.toUpperCase()}: ${c.claim} — ${c.evidence}`).join("\n"):"No factual claims.")+
   "\n\nPROMISES\n"+(F.promises.length?F.promises.map(p=>`${p.id} · ${p.src} · ${p.who} to ${p.to}: ${p.what}`).join("\n"):"None.")}
 function calibLines(cal){return (cal||[]).slice(0,CHAT.calibMax).map((c,i)=>`CASE ${i+1} · ${c.agent||"SA"} · ${c.restaurant||""} · ${c.date||""} · QA lead's verdict: ${String(c.verdict||"").toUpperCase()}\n`+(c.lessons||[]).map(l=>"- "+l).join("\n")).join("\n\n")}
+/* the QA lead's corrections: findings marked "not a mistake" (newest first) */
+function lessonLines(ls){return (ls||[]).slice(0,CHAT.lessonMax).map(l=>`- ${l.label||l.crit||"Finding"}${l.type?` · ${l.type}`:""}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${l.note?`: ${capText(l.note,200)}`:"."}`).join("\n")}
 /* what the client asked for; only "compensation" uses the policy buckets and the money */
 const CASE_TYPES = [
   ["compensation","the client reports an order problem that may be Tarro's mistake, or compensation was asked for, offered or promised"],
@@ -354,7 +409,7 @@ const CASE_TYPES = [
   ["order_admin","void an order, mark it paid or unpaid, change its type, dispatch or driver problems"],
   ["how_to","how to use Tarro's tools"],
   ["other","anything else"]];
-function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(policy&&policy.comp)||CHAT_POLICY_EMPTY.comp;
+function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA",P=(policy&&policy.comp)||CHAT_POLICY_EMPTY.comp;
   const buckets=(P.buckets||[]).map(b=>`${b.id} (${b.label}: ${b.pct}%${b.deliveryFee?", + delivery fee on self-delivery":""})`).join("; ")||"none loaded";
   return [`You are the analyst for a QA lead at Tarro. ${CHAT_CTX}`,
     `Below is the record of one support chat (facts F#, SA claims C#, promises P#) and the orders it was tied to (O#). Analyze it the way the QA lead does: FIRST the facts, THEN fault, THEN the right solution, THEN how the SA's solution compares. Use only the record and the policy; cite fact ids.`,
@@ -370,7 +425,8 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     `  A client's claim is not proof; the recording is. Fault is about who caused it, not how sure we are: when the recording confirms a Tarro agent's own miss and the rest is the client's word about what Tarro can't see, it is "tarro".`,
     `- Compensation policy applies only to the compensation type. There, pick the bucket that fits the facts and the affected order (O#); pick the bucket even when no order is linked. "none" is only for a fault that isn't Tarro's. Do NOT calculate money; the system does it from the bucket and the order's item subtotal. For any other type, set bucket.id and affectedOrder to "" and saOffer.amount to null. A credit or refund the restaurant gives its own customer is not Tarro compensation.`,
     `- Say what the ideal SA would have done for the client (and the customer, if relevant), whether escalation to a lead was needed, and why.`,
-    `- Record what ${sa} offered or recorded (the amount, where it is written: chat, internal note or WIRA ticket, and what it was built on) and whether ${sa}'s path matches the ideal.`,
+    `- Record what ${sa} offered or recorded: given (compensation given or promised by ${sa}: true or false), the amount exactly as written (null if written nowhere), where it is written (chat, note or ticket), and whether ${sa}'s path matches the ideal. Copy the amount; never compute it.`,
+    `- Approval: whether ${sa}'s amount or an exception needed a lead's approval (above the limit, or more than the policy gives), whether ${sa} asked, and whether the lead approved before the client was told.`,
     `- AE/CSM involvement: "over_head" (the client went over the SA to the AE), "corrected_sa" (the AE had to correct the SA), "ae_initiated" (the AE created the chat), "context" (the AE added context), or "none". Say whether ${sa} could reasonably have prevented it.`,
     `- First response: did ${sa}'s first substantive reply defend, blame or conclude before checking the evidence? Cite it.`,
     `- Follow the QA lead's calibration cases below where they apply; they show how the lead grades.`,
@@ -385,7 +441,8 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     ` "affectedOrder": "O1 or empty", "selfDelivery": false, "deliveryFee": null,`,
     ` "ideal": {"client": "what the ideal SA tells and gives the client, under 40 words", "customer": "under 25 words, or empty"},`,
     ` "escalation": {"needed": true, "why": "under 25 words", "to": "who"},`,
-    ` "saOffer": {"amount": 12.34, "text": "what ${sa} offered or recorded and where (chat, internal note or WIRA ticket), under 20 words; amount null if none", "cites": ["F8"]},`,
+    ` "saOffer": {"given": true, "amount": 12.34, "where": "chat | note | ticket | none", "text": "what ${sa} offered or recorded, under 20 words", "cites": ["F8"]},`,
+    ` "approval": {"needed": false, "asked": false, "approved": false, "by": "", "cites": []},`,
     ` "saPath": {"match": "yes | partly | no", "why": "under 30 words"},`,
     ` "aeInvolvement": {"kind": "over_head | corrected_sa | ae_initiated | context | none", "saCouldPrevent": false, "why": "under 30 words"},`,
     ` "firstResponse": {"concludedBeforeEvidence": false, "why": "under 30 words", "cites": []}}`,
@@ -393,6 +450,7 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     ``,`COMPENSATION POLICY (${policy&&policy.version||"none loaded"})`,(policy&&policy.text)||"No policy loaded: say so in every answer that depends on it.",
     `Buckets: ${buckets}. Approval limit: ${money(P.approvalLimit)} (above it, ${P.approver||"the lead"} approves first).`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
+    ...(lessons&&lessons.length?[``,`QA LEAD'S CORRECTIONS (findings the lead marked "not a mistake")`,lessonLines(lessons)]:[]),
     ``,`CHAT ${k.chat.sid} · ${k.chat.restaurant} · audited SA ${sa}`,
     `ORDERS`,(k.orders||[]).map(o=>`${o.label} · ticket ${o.ticket||"?"} · ${o.type||o.source} · items ${money(o.items)}, tax ${money(o.tax)}${o.tip?`, tip ${money(o.tip)}`:""}, total ${money(o.total)}`).join("\n")||"None linked.",
     ``,`RECORD`,chatFactLines(F)].join("\n")}
@@ -403,12 +461,13 @@ const CHAT_RUBRIC = [
   {id:"rs",label:"Restated the case correctly",w:10,max:3,d:"Told the client what happened, or confirmed the request back, accurately and plainly."},
   {id:"fa",label:"Fault attribution",w:15,max:3,na:true,naWhen:"nothing went wrong, so there was no fault to attribute (a plain request: menu, hours, settings, how-to)",d:"Correct fault; owned clearly when it's Tarro's; pushed back when it isn't."},
   {id:"path",label:"Resolution path",w:15,max:3,d:"Chose the right path for the case type: the policy path for compensation; for a request, the right action, team or ticket, confirmed with the client; for a customer credit, the restaurant's decision carried out."},
-  {id:"amt",label:"Resolution accuracy",w:10,max:3,na:true,naWhen:"no compensation, credit, refund or fee was given, promised or due",d:"The amount and terms are exactly right, wherever the SA recorded them (chat, internal note or WIRA ticket): for Tarro compensation, the right base (items only), right % and fees handled; for a credit or refund the restaurant decided, exactly what the restaurant approved. Given or promised but recorded nowhere: 0."},
+  {id:"amt",label:"Resolution accuracy",w:10,max:3,na:true,naWhen:"no compensation, credit, refund or fee was given, promised or due",d:"The amount and terms are exactly right, wherever the SA recorded them (chat, internal note or WIRA ticket): for Tarro compensation, the right base (items only), right % and fees handled; for a credit or refund the restaurant decided, exactly what the restaurant approved. Given or promised but recorded nowhere: 0. On compensation cases the system's compensation check sets this mark."},
   {id:"expl",label:"Solution explained",w:5,max:3,na:true,naWhen:"there was nothing to explain beyond confirming it was done",d:"The client understands what they get, why and when; explains the math when challenged. The SA need not state a compensation amount unless the client asks."},
   {id:"esc",label:"Escalation",w:15,max:4,na:true,naWhen:"no escalation was needed",d:"0 needed but not done · 1 tagged the lead · 2 + a summary the lead will read (chat or ticket) · 3 + a recommended solution, asking the lead's opinion · 4 + the recommendation is correct, with clear logic."},
   {id:"tone",label:"Reply quality",w:5,max:3,d:"Clear, warm, professional; owns mistakes; no over-promising."}];
 const VERDICTS = [["great",90,"Great"],["good",80,"Good"],["okay",65,"Okay"],["needs_work",50,"Needs work"],["miss",0,"Miss"]];
-function chatGradePrompt(k,F,A,comp,offer,cal){const sa=k.chat.sa||"the SA";
+function chatGradePrompt(k,F,A,comp,offer,cal,check,lessons){const sa=k.chat.sa||"the SA",first=sa.split(" ")[0];
+  const sys=check&&check.applies&&check.score!=null;
   return [`You are Swift Coach, the QA lead's coaching assistant at Tarro. ${CHAT_CTX}`,
     `Grade how ${sa} handled this chat and coach ${sa.split(" ")[0]}. You have the record, the analysis and the system's compensation math. Do not re-decide the facts or the money; grade against them.`,
     ``,`The QA lead's route: (1) establish the case facts, (2) analyze them and attribute fault, (3) give the right solution, (4) reply well. Judge each step.`,
@@ -416,23 +475,27 @@ function chatGradePrompt(k,F,A,comp,offer,cal){const sa=k.chat.sa||"the SA";
     ...CHAT_RUBRIC.map(r=>`- ${r.id} · ${r.label}${r.max!==3?` (0-${r.max})`:""}: ${r.d}${r.naWhen?` N/A when ${r.naWhen}.`:""}`),
     ...(A.fault&&A.fault.who==="none"?[`- The analysis found nothing went wrong, so fa is "na".`]:[]),
     ...(A.caseType&&!["compensation","customer_recovery"].includes(A.caseType)?[`- This is not a compensation or customer-credit case: amt is "na" unless the SA gave or set a credit, refund or fee in this chat.`]:[]),
+    ...(sys?[`- amt is set by the system's compensation check below: score it ${check.score==="na"?'"na"':check.score} and give the check's reason.`]:[]),
     ``,`Rules:`,
     `- For each criterion write the reason first, then the score that follows from it. Every reason cites facts (F#, C#, M#) and says exactly what was right or wrong, in one sentence; an "na" reason says why the row doesn't apply.`,
-    `- Use the calibration cases: they are how the QA lead grades.`,
+    `- Use the calibration cases and the QA lead's corrections: they are how the QA lead grades.`,
     ...leadRules(sa),
     SCORE_ONCE,
     ...EVIDENCE_RULES,
     NO_PRONOUNS,
-    `- Coaching is for ${sa.split(" ")[0]}. Plain, direct, specific. Each "next time" item: what happened (quote it), why it matters, what to do, and a model message ${sa.split(" ")[0]} could have sent. For an escalation, the model message is a Level 4 escalation: summary + recommendation + logic.`,
+    `- Findings: one for every criterion scored below full marks (not for "na"), in the QA ticket format. type is a short name for the mistake ("Taxes in the base", "Defended before checking"). what: what ${first} did. evidence: 1-3 exact quotes, each copied word for word from one source (a chat message M#, a call, an order or a task) with that source; quotes are checked against the source. should: what ${first} should have done. model: a message ${first} could have sent; for an escalation, a Level 4 escalation (summary + recommendation + logic).`,
+    `- Coaching is for ${first}. Plain, direct, specific.`,
     ``,`Reply with only a JSON object:`,
     `{"criteria": {${CHAT_RUBRIC.map(r=>`"${r.id}": {"why": "one sentence", "score": ${r.na?`"0-${r.max} or na"`:`"0-${r.max}"`}}`).join(", ")}},`,
     ` "route": {"facts": {"mark": "right | partly | wrong", "why": ""}, "analysis": {"mark": "", "why": ""}, "solution": {"mark": "", "why": ""}, "escalation": {"mark": "", "why": ""}},`,
     ` "wentWell": ["2-3 items, each under 20 words"],`,
-    ` "nextTime": [{"what": "what happened, quoting the chat", "why": "why it matters", "do": "what to do next time", "model": "a message ${sa.split(" ")[0]} could have sent"}],`,
+    ` "findings": [{"criterion": "${CHAT_RUBRIC.map(r=>r.id).join(" | ")}", "type": "under 6 words", "what": "under 30 words", "why": "why it matters, under 25 words", "evidence": [{"src": "M8 | Call 2 | O1 | Task 1234567", "quote": "exact words from that source, under 25 words"}], "should": "under 30 words", "model": "a message ${first} could have sent"}],`,
     ` "verdictWhy": "two sentences on the overall grade"}`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
-    ``,`ANALYSIS`,JSON.stringify({caseType:A.caseType,request:A.request,summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
+    ``,`QA LEAD'S CORRECTIONS (findings the lead marked "not a mistake"; don't repeat them)`,lessonLines(lessons)||"None yet.",
+    ``,`ANALYSIS`,JSON.stringify({caseType:A.caseType,request:A.request,summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,approval:A.approval,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
     A.caseType&&A.caseType!=="compensation"?`COMPENSATION: not a compensation case (${A.caseType}); the policy amount does not apply.`:
+    check&&check.applies?`COMPENSATION CHECK (system, final): ${check.status}. ${check.summary}${check.errors.length?` Errors: ${check.errors.map(e=>`${e.label} (${e.detail})`).join("; ")}.`:""}${check.flags.length?` Flags: ${check.flags.map(f=>f.detail).join("; ")}`:""}`:
     `COMPENSATION MATH (system): right amount ${comp.amount==null?"unknown":money(comp.amount)} (${comp.formula}); ${sa} offered ${offer.amount==null?"nothing":money(offer.amount)}${offer.note?` — ${offer.note}`:""}.${comp.needsApproval?` Above the ${money(comp.limit)} approval limit.`:""}`,
     ``,`CHAT ${k.chat.sid} · ${k.chat.restaurant} · audited SA ${sa} · first reply ${k.chat.frt==null?"unknown":k.chat.frt+" min"}`,
     chatTranscript(k.chat),``,`RECORD`,chatFactLines(F)].join("\n")}
@@ -462,7 +525,8 @@ function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray
     affectedOrder:comp&&/^O\d+$/i.test(String(x.affectedOrder||"").trim())?String(x.affectedOrder).trim().toUpperCase():"",
     selfDelivery:x.selfDelivery===true,deliveryFee:Number(x.deliveryFee)>0?r2(x.deliveryFee):null,
     ideal:{client:chS(id.client,400),customer:chS(id.customer,250),escalation:{needed:es.needed===true,why:chS(es.why,250),to:chS(es.to,60)}},
-    saOffer:{amount:!comp||isNaN(amt)?null:amt,text:chS(so.text,200),cites:cites(so.cites)},
+    saOffer:{given:comp&&(so.given===true||(!isNaN(amt)&&amt!=null)),amount:!comp||isNaN(amt)?null:amt,where:["chat","note","ticket"].includes(low(so.where))?low(so.where):"",text:chS(so.text,200),cites:cites(so.cites)},
+    approval:(()=>{const a=o(x.approval);return {needed:a.needed===true,asked:a.asked===true,approved:a.approved===true,by:chS(a.by,60),cites:cites(a.cites)}})(),
     saPath:{match:MATCH.includes(low(sp.match))?low(sp.match):"partly",why:chS(sp.why,300)},
     aeInvolvement:{kind:AE_KINDS.includes(low(ae.kind))?low(ae.kind):"none",saCouldPrevent:ae.saCouldPrevent===true,why:chS(ae.why,300)},
     firstResponse:{concludedBeforeEvidence:fr.concludedBeforeEvidence===true,why:chS(fr.why,300),cites:cites(fr.cites)}}}
@@ -470,15 +534,20 @@ const MARKS=["right","partly","wrong"];
 /* reads {criteria:{id:{why,score}}} (asked since chat-1 b13) or the older {scores, reasons}; returns {scores, reasons, ...} either way */
 function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;const cr=x.criteria&&typeof x.criteria==="object"&&!Array.isArray(x.criteria)?x.criteria:null;
   /* a reply that never closed "criteria" carries the rest inside it: lift those keys back up */
-  if(cr)["route","wentWell","nextTime","verdictWhy"].forEach(k=>{if(x[k]==null&&cr[k]!=null)x=Object.assign({},x,{[k]:cr[k]})});
+  if(cr)["route","wentWell","nextTime","findings","verdictWhy"].forEach(k=>{if(x[k]==null&&cr[k]!=null)x=Object.assign({},x,{[k]:cr[k]})});
   const pick=(k,f)=>{const o={};if(cr)Object.entries(cr).forEach(([id,v])=>{if(v&&typeof v==="object")o[id]=v[k]});return Object.keys(o).length?o:f};
   const sc=pick("score",x.scores&&typeof x.scores==="object"?x.scores:{}),rs=pick("why",x.reasons&&typeof x.reasons==="object"?x.reasons:{});
   const scores={},reasons={};CHAT_RUBRIC.forEach(r=>{const v=sc[r.id];const na=/^\s*(n\/?a|not applicable)\s*$/i.test(String(v))||v==null;
     scores[r.id]=na&&r.na?"na":Math.max(0,Math.min(r.max,Math.round(Number(v)||0)));reasons[r.id]=chS(rs[r.id],300)});
   const rt=x.route&&typeof x.route==="object"?x.route:{},route={};["facts","analysis","solution","escalation"].forEach(k=>{const v=rt[k]&&typeof rt[k]==="object"?rt[k]:{};
     route[k]={mark:MARKS.includes(String(v.mark).toLowerCase())?String(v.mark).toLowerCase():"partly",why:chS(v.why,300)}});
-  return {scores,reasons,route,wentWell:arr(x.wentWell).map(t=>chS(t,200)).filter(Boolean).slice(0,4),
-    nextTime:arr(x.nextTime).filter(n=>n&&(n.what||n.do)).slice(0,5).map(n=>({what:chS(n.what,300),why:chS(n.why,300),do:chS(n.do,300),model:chS(n.model,900)})),
+  /* findings (asked since chat-2): one per criterion below full marks, in the QA ticket format */
+  const ids=CHAT_RUBRIC.map(r=>r.id),findings=arr(x.findings).filter(f=>f&&typeof f==="object"&&ids.includes(String(f.criterion||"").trim().toLowerCase())).slice(0,12).map(f=>({
+    criterion:String(f.criterion).trim().toLowerCase(),type:chS(f.type,60),what:chS(f.what,400),why:chS(f.why,300),
+    evidence:arr(f.evidence).filter(e=>e&&e.quote).slice(0,3).map(e=>({src:chS(e.src,24),quote:chS(e.quote,300)})),should:chS(f.should,400),model:chS(f.model,900)}));
+  const nextTime=arr(x.nextTime).filter(n=>n&&(n.what||n.do)).slice(0,5).map(n=>({what:chS(n.what,300),why:chS(n.why,300),do:chS(n.do,300),model:chS(n.model,900)}));
+  return {scores,reasons,route,wentWell:arr(x.wentWell).map(t=>chS(t,200)).filter(Boolean).slice(0,4),findings,
+    nextTime:nextTime.length?nextTime:findings.map(f=>({what:f.what,why:f.why,do:f.should,model:f.model})).slice(0,5),
     verdictWhy:chS(x.verdictWhy,500)}}
 /* two reads of the grade: marks averaged per criterion (a half mark means the reads differed by one); N/A only when both reads say so.
    Reasons, route and coaching come from the first read. Added fields: runs (each read's marks), runPcts, spread (points between the reads) */
@@ -487,6 +556,40 @@ function mergeGrades(G1,G2){if(!G2)return G1;if(!G1)return G2;const scores={};
     scores[r.id]=a==="na"&&b==="na"?"na":a==="na"?b:b==="na"?a:Math.round((Number(a)+Number(b)))/2});
   const p1=chatScore(G1.scores),p2=chatScore(G2.scores);
   return Object.assign({},G1,{scores,runs:[G1.scores,G2.scores],runPcts:[p1,p2],spread:p1!=null&&p2!=null?Math.round(Math.abs(p1-p2)*10)/10:null})}
+/* ---------- 5b. The QA ticket: one finding per criterion below full marks ----------
+   Priority by impact (the QA lead's rule): P1 money wrong, wrong fault, or a needed escalation missed; P2 other real misses; P3 polish. */
+const PRIO = {P1:0,P2:1,P3:2};
+function findingPriority(r,s,A,check){const v=Number(s),gap=r.max-v;
+  if(r.id==="amt"&&check&&check.applies)return check.status==="minor"?"P2":"P1";
+  if(r.id==="amt"&&A&&["compensation","customer_recovery"].includes(A.caseType))return "P1";
+  if(r.id==="fa"&&v<=1)return "P1";
+  if(r.id==="esc"&&v===0)return "P1";
+  return gap<=0.5||r.w<=5?"P3":"P2"}
+/* a quote is checked against its source: chat messages and call transcripts. A chat quote that isn't in the message is replaced by the message itself */
+const qNorm=s=>String(s||"").toLowerCase().replace(/[\u2018\u2019]/g,"'").replace(/[^a-z0-9$.%']+/g," ").replace(/\s+/g," ").trim();
+function quoteCheck(k,src,quote){const q=qNorm(String(quote||"").split(/\.\.\.|…/)[0]).slice(0,80);if(!q)return {ok:false};
+  let m=/^M(\d+)$/i.exec(String(src||"").trim());
+  if(m){const msg=((k&&k.chat&&k.chat.msgs)||[]).find(x=>x.n===Number(m[1]));if(!msg)return {ok:false};return qNorm(msg.text).includes(q)?{ok:true}:{ok:false,text:capText(msg.text,280)}}
+  m=/^Call\s*(\d+)$/i.exec(String(src||"").trim());
+  if(m){const l=((k&&k.calls)||[])[Number(m[1])-1];return l?{ok:qNorm(l.text).includes(q.slice(0,60))}:{ok:false}}
+  return {ok:null}}
+function buildFindings(G,A,check,k,F,G2){const raw=arr(G&&G.findings).concat(arr(G2&&G2.findings)),out=[];if(!G)return out;
+  const factEv=reason=>[...new Set(String(reason||"").match(/\b[FCP]\d+\b/g)||[])].slice(0,3).map(id=>{const t=F&&(F.timeline.find(x=>x.id===id)||F.claims.find(x=>x.id===id));
+    return t?{src:t.src||id,quote:t.what||t.claim,ok:null,fact:id}:null}).filter(Boolean);
+  CHAT_RUBRIC.forEach(r=>{const sc=G.scores[r.id];if(sc==="na"||sc==null||Number(sc)>=r.max)return;
+    const f=raw.find(x=>x.criterion===r.id)||{};let type=f.type||"",what=f.what||G.reasons[r.id]||"";
+    if(r.id==="amt"&&check&&check.applies&&check.errors.length){type=check.errors.map(e=>e.label).join(" · ");what=check.summary}
+    let ev=arr(f.evidence).map(e=>{const v=quoteCheck(k,e.src,e.quote);return {src:e.src,quote:v.ok===false&&v.text?v.text:e.quote,ok:v.ok===false&&v.text?true:v.ok,swapped:v.ok===false&&!!v.text}});
+    if(!ev.length)ev=factEv(r.id==="amt"&&check&&check.applies?arr(check.given.cites).join(" ")+" "+(G.reasons[r.id]||""):G.reasons[r.id]);
+    out.push({id:r.id,label:r.label,score:sc,max:r.max,priority:findingPriority(r,sc,A,check),type:chS(type,80),what:chS(what,500),why:f.why||"",evidence:ev,should:f.should||"",model:f.model||"",reason:G.reasons[r.id]||""})});
+  (check&&check.flags||[]).forEach(fl=>{if(!out.some(x=>x.id==="esc"&&x.priority==="P1"))out.push({id:"approval",label:"Approval",score:null,max:null,priority:"P1",type:fl.label,what:fl.detail,why:"The policy holds the confirmation until the lead approves.",evidence:[],should:"Hold the confirmation, send the lead a summary with the order, fault, policy row and amount, and tell the client once approved.",model:"",reason:""})});
+  return out.sort((a,b)=>PRIO[a.priority]-PRIO[b.priority]||CHAT_RUBRIC.findIndex(r=>r.id===a.id)-CHAT_RUBRIC.findIndex(r=>r.id===b.id))}
+/* the two reads merged, the compensation check's mark on Resolution accuracy, then the ticket's findings and the coaching items (gradeChat and the eval both use this) */
+function finishGrade(G1,G2,A,check,k,F){let G=G2?mergeGrades(G1,G2):Object.assign({},G1);
+  if(check&&check.applies&&check.score!=null)G=Object.assign({},G,{scores:Object.assign({},G.scores,{amt:check.score}),reasons:Object.assign({},G.reasons,{amt:check.summary}),amtBy:"system"});
+  G.findings=buildFindings(G,A,check,k,F,G2);
+  if(!G1.nextTime.length||G1.findings.length)G.nextTime=G.findings.filter(f=>f.priority!=="P3"||G.findings.length<=3).slice(0,5).map(f=>({what:f.what,why:f.why,do:f.should,model:f.model}));
+  return G}
 /* score and verdict are computed, so the same marks always give the same grade */
 function chatScore(scores){let got=0,den=0;CHAT_RUBRIC.forEach(r=>{const v=scores&&scores[r.id];if(v==="na"||v==null||v==="")return;den+=r.w;got+=r.w*Math.min(r.max,Number(v))/r.max});
   return den?Math.round(got/den*1000)/10:null}
@@ -583,18 +686,19 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
 async function gradeChat(k,deps){const step=deps.step||(()=>{}),policy=deps.policy||CHAT_POLICY_EMPTY,cal=(deps.cal||[]).filter(x=>String(x.sid)!==String(k.chat.sid));
   step("facts","run");const F=cleanChatFacts(await askPass(deps,chatFactsPrompt(k),"facts"),k.calls);if(!F)throw {code:"ai_shape",pass:"facts"};
   step("facts","done",`${F.timeline.length} facts · ${F.claims.length} claims`);
-  step("analysis","run");const A=cleanChatAnalysis(await askPass(deps,chatAnalysisPrompt(k,F,policy,cal),"analysis"),F,policy);if(!A)throw {code:"ai_shape",pass:"analysis"};
+  step("analysis","run");const A=cleanChatAnalysis(await askPass(deps,chatAnalysisPrompt(k,F,policy,cal,deps.lessons),"analysis"),F,policy);if(!A)throw {code:"ai_shape",pass:"analysis"};
   step("analysis","done");
-  const comp=compFor(A,k.orders,policy),offer=offerCheck(A.saOffer,comp,k.orders);
-  const gp=chatGradePrompt(k,F,A,comp,offer,cal);
+  const comp=compFor(A,k.orders,policy),offer=offerCheck(A.saOffer,comp,k.orders),check=compCheck(A,k,policy),lessons=deps.lessons||[];
+  const gp=chatGradePrompt(k,F,A,comp,offer,cal,check,lessons);
   step("grade","run");const G1=cleanChatGrade(await askPass(deps,gp,"grade"));if(!G1)throw {code:"ai_shape",pass:"grade"};
   /* the same grade asked a second time, fresh, and the marks averaged: one read can swing 15-30 points */
-  let G=G1;
+  let G2=null;
   if((deps.gradeRuns==null?CHAT.gradeRuns:deps.gradeRuns)>1){step("grade","run","second read");
-    try{const G2=cleanChatGrade(await askPass(deps,gp,"grade",{fresh:true}));if(G2)G=mergeGrades(G1,G2)}
+    try{G2=cleanChatGrade(await askPass(deps,gp,"grade",{fresh:true}))}
     catch(e){if(deps.isStop&&deps.isStop(e))throw e}}
+  const G=finishGrade(G1,G2,A,check,k,F);
   const pct=chatScore(G.scores),verdict=chatVerdict(pct);step("grade","done",verdict?`${verdict.label} ${pct}%`+(G.spread>=15?` · reads ${G.runPcts.join(" / ")}`:""):"");
-  return {F,A,comp,offer,G,pct,verdict}}
+  return {F,A,comp,offer,check,G,pct,verdict}}
 /* where chat data lives in the artifact db. Each week is its own small set of collections, so the page only ever reads one week */
 const CHAT_PATHS = {chats:w=>`chatWeeks/${w}/chats`, audits:w=>`chatWeeks/${w}/audits`, tx:w=>`chatWeeks/${w}/tx`, reviews:w=>`chatWeeks/${w}/reviews`,
   calib:"chatCalib", policy:"settings/chatPolicy", staff:"settings/staff"};
@@ -612,7 +716,8 @@ function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
     orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
     calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk"})),
     slack:k.slack,notFound:k.notFound,
-    facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,grade:R.G,pct:R.pct,verdict:R.verdict?R.verdict.id:null,
+    facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,check:R.check||null,grade:R.G,pct:R.pct,verdict:R.verdict?R.verdict.id:null,
+    priority:((R.G&&R.G.findings)||[]).map(f=>f.priority).sort()[0]||null,
     gradedAt:meta.at||new Date().toISOString(),by:meta.by||null}}
 function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:l.id,text:capText(l.text,CHAT.txCap)}))}}
 /* CHAT-CORE END */
@@ -620,5 +725,5 @@ if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(gl
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
-    CHAT_STEPS,CHAT_PATHS,mergeGrades,leadRules,muUsd,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
+    CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
     rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}

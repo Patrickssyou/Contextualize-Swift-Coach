@@ -160,5 +160,35 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   let threw = null; try { await B.askPass({ ask: async () => { throw { code: 'rate_limited' }; } }, 'p', 'facts'); } catch (e) { threw = e.code; }
   ok(threw === 'rate_limited', 'other errors pass through');
   ok(doc.dayOrders.length === Math.min(150, fx.orderRows.length) && doc.dayOrders[0].at >= doc.dayOrders[doc.dayOrders.length - 1].at && JSON.stringify(doc).length < 80000, `same-day orders kept for the reviewer (${doc.dayOrders.length})`);
+  // ---- the compensation check: what was due, what the SA gave, how it went wrong (all from order data) ----
+  const kc = { chat, orders: linked, allOrders: orders }, cbase = { caseType: 'compensation', bucket: { id: 'made_twice_one_paid' }, affectedOrder: 'O1', fault: { who: 'tarro' } };
+  const cc = (so, ex) => B.compCheck(Object.assign({}, cbase, { saOffer: so }, ex || {}), kc, policy);
+  let c1 = cc({ amount: 17.73 });
+  ok(c1.status === 'wrong' && c1.score === 1 && c1.errors.map(e => e.code).join() === 'tax' && /30% × \$59\.10 \(items \$54\.72 \+ tax \$4\.38\)/.test(c1.computed) && c1.diff === 1.31, 'tax in the base found and shown');
+  ok(cc({ amount: 16.42 }).status === 'right' && cc({ amount: 16.42 }).score === 3, 'exact amount is right');
+  ok(cc({ amount: 16.5 }).status === 'minor' && cc({ amount: 16.5 }).score === 2 && cc({ amount: 16.5 }).errors[0].code === 'rounding', 'rounding is flagged (to the cent)');
+  c1 = cc({ amount: 54.72 }); ok(c1.errors.map(e => e.code).join() === 'pct' && c1.flags[0].code === 'over_limit', '100% instead of 30%, over the limit without approval');
+  ok(cc({ amount: 54.72 }, { approval: { approved: true } }).flags.length === 0, 'an approved amount over the limit is not flagged');
+  ok(cc({ given: true, amount: null }).status === 'not_recorded' && cc({ given: true, amount: null }).score === 0, 'amount recorded nowhere = 0');
+  ok(cc({}).status === 'missing' && cc({}).score === 0, 'due but not given = 0');
+  ok(cc({}, { fault: { who: 'shared_tarro' } }).status === 'held' && cc({}, { fault: { who: 'shared_tarro' } }).score === 'na', 'shared fault, nothing offered: held (N/A)');
+  ok(cc({ amount: 16.42 }, { fault: { who: 'shared_tarro' } }).errors[0].code === 'shared', 'shared fault, offered without approval');
+  ok(cc({ amount: 5 }, { bucket: { id: 'none' } }).status === 'not_due' && cc({}, { bucket: { id: 'none' } }).score === 'na', 'not due: given = 0, nothing given = N/A');
+  ok(cc({ amount: 5 }).errors[0].code === 'math', 'an amount no formula explains is a math error');
+  ok(!B.compCheck({ caseType: 'menu_setup' }, kc, policy).applies, 'non-compensation chats are not checked');
+  // ---- the QA ticket: findings by impact, quotes checked against the source ----
+  ok(B.quoteCheck(k2, 'M1', 'We made her order twice').ok === true && B.quoteCheck(k2, 'M1', 'something never said').ok === false && B.quoteCheck(k2, 'M1', 'something never said').text.length > 20, 'chat quotes verified; a wrong quote is swapped for the message');
+  ok(B.quoteCheck(k2, 'Call 2', 'why am I being charged extra').ok === true, 'call quotes verified against the transcript');
+  const Gf = B.finishGrade(B.cleanChatGrade({ criteria: { fr: { score: 1, why: 'F31' }, ev: { score: 3 }, rs: { score: 3 }, fa: { score: 1 }, path: { score: 3 }, amt: { score: 3 }, expl: { score: 2 }, esc: { score: 0 }, tone: { score: 2 } },
+    findings: [{ criterion: 'fr', type: 'Defended before checking', what: 'x', evidence: [{ src: 'M1', quote: 'We made her order twice' }, { src: 'M3', quote: 'made up words' }], should: 'y', model: 'z' }] }), null,
+    Object.assign({}, cbase, { saOffer: { amount: 17.73 } }), B.compCheck(Object.assign({}, cbase, { saOffer: { amount: 17.73 } }), kc, policy), k2, R.F);
+  const P = Object.fromEntries(Gf.findings.map(f => [f.id, f.priority]));
+  ok(Gf.scores.amt === 1 && Gf.amtBy === 'system' && P.amt === 'P1' && P.fa === 'P1' && P.esc === 'P1' && P.fr === 'P2' && P.expl === 'P3' && P.tone === 'P3' && Gf.findings[0].priority === 'P1', 'the check sets amt; priority by impact');
+  const ff = Gf.findings.find(f => f.id === 'fr');
+  ok(ff.evidence[0].ok === true && ff.evidence[1].swapped === true && ff.type === 'Defended before checking', 'finding evidence verified or swapped');
+  ok(Gf.findings.find(f => f.id === 'amt').type === 'Taxes included' && Gf.nextTime.length > 0, 'the amount finding carries the check');
+  const gpt = B.chatGradePrompt(k2, R.F, R.A, R.comp, R.offer, [], R.check, [{ crit: 'fr', label: 'First response', type: 'Defended before checking', what: 'said the call was fine', note: 'checking took a minute' }]);
+  ok(/COMPENSATION CHECK \(system, final\): wrong/.test(gpt) && /score it 1/.test(gpt) && /marked it not a mistake: checking took a minute/.test(gpt) && /"findings"/.test(gpt), 'grade prompt carries the check, the lead\'s corrections and asks for findings');
+  ok(R.check.applies && doc.check && doc.priority === 'P1', 'the audit doc keeps the check and the ticket priority');
   console.log(`chat brain: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });
