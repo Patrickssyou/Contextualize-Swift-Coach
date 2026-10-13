@@ -229,10 +229,11 @@ function rankOrders(orders,refs,chatAt){const t0=ldTs(chatAt),day0=String(chatAt
     if(refs.orderType&&o.type&&refs.orderType===o.type)score+=1;
     const at=ldTs(o.at);if(!isNaN(at)&&!isNaN(t0)){if(at<=t0&&t0-at<=12*36e5)score+=1;else if(at>t0)score-=2}
     return {order:o,score,why,strong,assoc}}).filter(r=>r.score>0).sort((a,b)=>b.score-a.score||String(b.order.at).localeCompare(String(a.order.at))).slice(0,5)}
-/* WIRA's own tie is linked as is (up to 3 orders). Otherwise one order: a ticket match needs a score of 5, amounts alone need 6 (a unique total that came just before the chat, or two amounts that agree).
+/* WIRA's own tie is linked (up to 3 orders), with any other order the chat names by ticket. Otherwise one order: a ticket match needs a score of 5, amounts alone need 6 (a unique total that came just before the chat, or two amounts that agree).
    A close second leaves it to the reviewer */
 function linkedOrders(ranked){if(!ranked.length)return [];
-  const wira=ranked.filter(r=>r.assoc);if(wira.length)return wira.slice(0,3).map(r=>r.order);
+  const wira=ranked.filter(r=>r.assoc);
+  if(wira.length)return wira.concat(ranked.filter(r=>!r.assoc&&r.strong&&r.score>=5)).slice(0,3).map(r=>r.order);  /* plus an order the text names that WIRA did not tie: a wrong bag, a swapped order */
   const top=ranked[0];if(top.score<(top.strong?5:6))return [];if(ranked[1]&&ranked[1].score>=top.score-1)return [];return [top.order]}
 function callsByIdsConfig(ids,from,to){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
   filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_conversation_id equals=${ids.map(ldVal).join(",")}`}}}

@@ -83,8 +83,11 @@ const CHAT_AT = '2026-10-10T12:00:00';
   eq(B.linkedOrders(B.rankOrders([ord('Z', 4, '2026-10-07T11:00:00', 15.99, 17.79)], refs({ tickets: ['4'], dates: ['10-07'] }), CHAT_AT)).map(o => o.id), ['Z'], 'a ticket on a named date links'); }
 { // WIRA's own tie is authoritative and may sit on an older day
   const O = [ord('A', 7, '2026-10-10T11:00:00', 10, 12), ord('W', 9, '2026-10-09T09:00:00', 20, 24)];
-  eq(B.linkedOrders(B.rankOrders(O, refs({ tickets: ['7'], wids: ['W'] }), CHAT_AT)).map(o => o.id), ['W'], 'an associated order beats a ticket mention');
-  eq(B.linkedOrders(B.rankOrders(O, refs({ wids: ['W', 'A'] }), CHAT_AT)).map(o => o.id).sort(), ['A', 'W'], 'both associated orders link'); }
+  eq(B.linkedOrders(B.rankOrders(O, refs({ wids: ['W'] }), CHAT_AT)).map(o => o.id), ['W'], 'an associated order links without any text clue, and the nearer order is not added');
+  eq(B.linkedOrders(B.rankOrders(O, refs({ wids: ['W', 'A'] }), CHAT_AT)).map(o => o.id).sort(), ['A', 'W'], 'both associated orders link');
+  eq(B.linkedOrders(B.rankOrders(O, refs({ tickets: ['7'], wids: ['W'] }), CHAT_AT)).map(o => o.id), ['W', 'A'], 'an order the chat names by ticket that WIRA did not tie is linked after it (a wrong bag, a swap)');
+  const Y = [ord('Y', 4, '2026-10-09T11:00:00', 15.99, 17.79), ord('T', 4, '2026-10-10T11:00:00', 7.75, 11.32)];
+  eq(B.linkedOrders(B.rankOrders(Y, refs({ tickets: ['4'], wids: ['T'] }), CHAT_AT)).map(o => o.id), ['T'], 'a ticket that only matches another day is not added next to WIRA\'s tie'); }
 { // amounts
   const O = [ord('F', 1, '2026-10-10T11:00:00', 0, 2), ord('X', 2, '2026-10-10T11:30:00', 16, 19.28)];
   eq(B.linkedOrders(B.rankOrders(O, refs({ amounts: [2], tickets: ['2'] }), CHAT_AT)).map(o => o.id), ['X'], 'a $2 fee is not an order total; the ticket decides');
