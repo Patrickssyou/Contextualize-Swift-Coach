@@ -159,6 +159,13 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator('.crow .compchip').count() === 9 && await page.locator('.crow .compchip', { hasText: 'Comp ✓' }).count() === 8 && await page.locator('.crow .prio').count() >= 6, 'graded rows: 9 comp chips (8 ✓ nothing due), priority badges');
   ok((await page.locator('.sacard', { hasText: SA0 }).innerText()).replace(/\s+/g, ' ').includes('Comp right 0 of 1') && await page.locator('.sacard .sacomp').count() === 1, `${first}'s card: Comp right 0 of 1; no line where no check counts`);
   ok(await page.locator('.crow .cflags').count() === 9 && await page.locator('.crow:not(:has(.pill.solid)):not(:has(.cflags)) .pill', { hasText: 'Graded' }).count() === 0, 'every graded row has its flags');
+  // first reply: the times (timing.firstReplyMin), red when slow, WIRA's own figure when it's off by a minute or more; the SA card's average
+  const slowRow = page.locator('.crow[data-open="9900106"] .cfr'), wiraRow = page.locator('.crow[data-open="9900104"]');
+  ok((await slowRow.innerText()) === 'Reply 24 min' && await slowRow.evaluate(e => e.classList.contains('t-bad') && getComputedStyle(e).color === getComputedStyle(document.querySelector('.t-bad')).color && getComputedStyle(e).color !== getComputedStyle(e.parentElement).color), 'a slow first reply (24 min) shows in red in the queue');
+  ok((await wiraRow.locator('.cfr').innerText()) === 'Reply 9 min' && (await wiraRow.locator('.wsays').innerText()) === 'WIRA 2.1 min' && await page.locator(`.crow[data-open="${SID}"] .wsays`).count() === 0, "the queue shows WIRA's figure only where it differs by 1 min or more");
+  ok((await page.locator(`.crow[data-open="${SID}"] .cfr`).innerText()) === 'Reply 2.3 min' && await page.locator(`.crow[data-open="${SID}"] .cfr.t-bad`).count() === 0, 'the real case: Reply 2.3 min, not slow');
+  const mara = (await page.locator('.sacard', { hasText: 'Mara Quill' }).innerText()).replace(/\s+/g, ' ');
+  ok(/Avg first reply \d+(\.\d)? min/.test(mara) && (await page.locator('.sacard', { hasText: SA0 }).locator('.safr').innerText()).includes('Avg first reply'), `SA cards add Avg first reply (${mara.match(/Avg first reply [^ ]+ min/)[0]})`);
   await shot(page, 'chats-queue.png'); await shot(page, 'queue-ticket.png');
   for (const wd of [1100, 900]) { await page.setViewportSize({ width: wd, height: 900 }); await page.waitForTimeout(120);
     ok(await width(page) <= wd && await page.evaluate(() => [...document.querySelectorAll('.crow .cmain')].every(m => m.getBoundingClientRect().width >= 160)), `${wd}px queue: rows keep room for the chat, no overflow`) }
@@ -185,6 +192,39 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(JSON.stringify(tdts.map(t => t.trim().toLowerCase())) === JSON.stringify(['restaurant', 'sa', 'chat', 'order', 'case type', 'fault', 'opened', 'first reply', 'closed', 'started by', 'recordings']), 'field grid: Restaurant, SA, Chat, Order, Case type, Fault, Opened, First reply, Closed, Started by, Recordings');
   const fv = async k => (await page.locator('#cTicket .tkf', { has: page.locator('dt', { hasText: new RegExp('^' + k + '$', 'i') }) }).locator('dd').innerText()).replace(/\s+/g, ' ').trim();
   ok((await fv('Restaurant')).includes(W.code) && (await fv('SA')) === SA0 && (await fv('First reply')) === '2.3 min' && (await fv('Started by')) === 'Client' && /^Not closed · Blocked/.test(await fv('Closed')) && (await fv('Case type')) === 'COMPENSATION' && /Shared/.test(await fv('Fault')), 'fields: restaurant code, SA, first reply, started by, closed, case type, fault');
+  // the Timing block: the times, the status strip (sized by minutes, "now" on the ongoing one), totals, and the one note
+  ok(realA.timing && realA.timing.states.length === 2 && realA.timing.firstReplyMin === 2.3, "the audit carries timing with the case's two status changes (wira_tasks_state)");
+  const tm = await page.evaluate(() => { const words = x => [...x.children].map(c => c.textContent.trim()).filter(Boolean).join(' '), T = document.getElementById('tkTiming'), cell = k => [...T.querySelectorAll('.tmc')].find(c => c.querySelector('dt').textContent === k).querySelector('dd').textContent.replace(/\s+/g, ' ').trim();
+    return { fr: cell('First reply'), closed: cell('Closed'), handle: cell('Handle time'), slow: !!T.querySelector('.slowb'), segs: [...T.querySelectorAll('.tmseg')].map(x => x.className), legend: [...T.querySelectorAll('.tmst')].map(words),
+      tot: [...T.querySelectorAll('.tmtc')].map(words), note: T.querySelector('.tmnote').textContent, grow: [...T.querySelectorAll('.tmseg')].map(x => x.getBoundingClientRect().width) } });
+  ok(/2\.3 min$/.test(tm.fr) && !tm.slow && tm.closed === 'Open' && tm.handle === 'Still open', `timing: first reply ${tm.fr}, not slow, Open, still open`);
+  ok(tm.segs.length === 2 && /on-support/.test(tm.segs[0]) && !/now/.test(tm.segs[0]) && /on-client/.test(tm.segs[1]) && /\bnow\b/.test(tm.segs[1]) && /^Support's turn 2\.3 min/.test(tm.legend[0]) && /^Waiting on client now/.test(tm.legend[1]), `status strip: ${tm.legend.join(' → ')}`);
+  ok(tm.tot[0] === "On Support's side 2.3 min" && tm.tot[1] === "On the client's side –" && tm.tot[2] === 'In handoff –', 'totals: Support 2.3 min, client –, handoff –');
+  ok(tm.note === "WIRA doesn't record a time for each message, so only the first reply can be timed." && await page.locator('#cTicket .tmnote').count() === 1, 'the note says why only the first reply is timed');
+  const tmx = await page.evaluate(() => { const d = document.createElement('div'), c = { sid: '1', at: '2026-10-12T10:00:00', frt: 2.1 };
+    d.innerHTML = chTimingHtml(c, { timing: { opened: c.at, firstClientAt: c.at, firstReplyAt: '2026-10-12T10:22:00', firstReplyMin: 22, wiraFirstReplyMin: 2.1, slowFirstReply: true, closedAt: '2026-10-12T12:40:00', handleMin: 160,
+      states: [{ at: c.at, on: 'support', min: 22 }, { at: '2026-10-12T10:22:00', on: 'handoff', min: 60 }, { at: '2026-10-12T11:22:00', on: 'client', min: 78 }, { at: '2026-10-12T12:40:00', on: 'closed', min: null }], waitingOnSupportMin: 22, waitingOnClientMin: 78, waitingOnHandoffMin: 60 } });
+    const old = document.createElement('div'); old.innerHTML = chTkFields({ sid: '2', frt: 4, at: c.at }, { sid: '2' }) + chTimingHtml({ sid: '2', frt: 4 }, { sid: '2' });
+    return { slow: [...d.querySelectorAll('.slowb')].map(x => x.textContent), red: !!d.querySelector('.tmfr .frm.t-bad'), wira: d.querySelector('.wsays').textContent, handle: d.textContent.includes('2 h 40 min'), closed: d.textContent.includes('12:40 PM'),
+      legend: [...d.querySelectorAll('.tmst')].map(x => [...x.children].map(c => c.textContent.trim()).filter(Boolean).join(' ')), oldFr: [...old.querySelectorAll('.tkf')].find(x => x.querySelector('dt').textContent === 'First reply').querySelector('dd').textContent, oldTiming: !!old.querySelector('#tkTiming') } });
+  ok(tmx.slow.includes('Slow first reply') && tmx.slow.includes('Slow') && tmx.red && tmx.handle && tmx.closed, 'a slow chat: Slow badge, red minutes, closed time and handle time 2 h 40 min');
+  ok(tmx.wira === 'WIRA says 2.1 min', 'the WIRA mismatch hint shows when the two first-reply values differ (22 vs 2.1)');
+  ok(tmx.legend.length === 4 && /^Handoff 1 h/.test(tmx.legend[1]) && /^Closed/.test(tmx.legend[3]), `status labels: ${tmx.legend.join(' → ')}`);
+  ok(tmx.oldFr === '4 min' && !tmx.oldTiming, 'an older audit without timing: first reply from frt, no Timing block');
+  // full width: What happened and the Analysis rows fill their cards at 1280, 1100 and 900
+  const fill = () => page.evaluate(() => { const inner = e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return [r.left + parseFloat(s.paddingLeft), r.right - parseFloat(s.paddingRight)] };
+    const span = (els, box) => { const [l, r] = inner(box), R = [...els].map(e => e.getBoundingClientRect()); return (Math.max(...R.map(x => x.right)) - Math.min(...R.map(x => x.left))) / (r - l) };
+    const wh = document.querySelector('#tkWhat .tkwh'), body = document.querySelector('#cTicket .tkbody'), an = document.querySelector('#cs-an .qbody');
+    const rows = [...document.querySelectorAll('#cs-an .arow')], lefts = new Set(rows.map(x => Math.round(x.getBoundingClientRect().left)));
+    return { what: span(wh.children, body), timing: span([document.getElementById('tkTiming')], body), comp: span([document.getElementById('tkComp')], body), an: span(rows, an), anHalf: span(rows.filter(x => !x.classList.contains('wide')), an), cols: lefts.size,
+      side: !!wh.querySelector('.tkside') } });
+  for (const wd of [1280, 1100, 900]) { await page.setViewportSize({ width: wd, height: 900 }); await page.waitForTimeout(150); const f = await fill();
+    ok(f.what >= 0.9 && f.timing >= 0.9 && f.comp >= 0.9 && f.an >= 0.9 && f.anHalf >= 0.9 && f.cols === 2 && await width(page) <= wd,
+      `${wd}px: What happened ${Math.round(f.what * 100)}%, Timing ${Math.round(f.timing * 100)}%, comp ${Math.round(f.comp * 100)}%, Analysis rows ${Math.round(f.an * 100)}% (${f.cols} columns) of the card`) }
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(150);
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('tkWhat').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(80);
+  { const a = await page.locator('#tkWhat').boundingBox(), b = await page.locator('#tkTiming').boundingBox(); await page.screenshot({ path: path.join(SH, 'ticket-timing.png'), clip: { x: a.x - 18, y: a.y - 12, width: a.width + 36, height: b.y + b.height - a.y + 24 } }) }
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cs-an').screenshot({ path: path.join(SH, 'analysis-wide.png') });
   const wira = page.locator('#cTicket .tkf a', { hasText: 'WIRA ' + SID }), gdo = page.locator('#cTicket .tkf a', { hasText: 'Ticket 65' }), o1 = realA.orders[0];
   ok(await wira.getAttribute('href') === W.fx.chatRow.wira_project_tasks_wira_ticket_url && await wira.getAttribute('target') === '_blank', 'Chat: the WIRA link, new tab');
   ok((await gdo.getAttribute('href')) === `https://greendot.prod.letsdowonders.io/greendot/restaurant/${encodeURIComponent(W.code)}?orderId=${encodeURIComponent(o1.id)}` && (await gdo.getAttribute('href')).includes(encodeURIComponent(o1.id)) && (await fv('Order')).includes('$59.10'), 'Order: GreenDot order link with the order id, and the total');
@@ -220,6 +260,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(plain.startsWith(`QA ticket · Chat ${SID} · ${RV} ${RP}% · P1`) && plain.includes('Order: Ticket 65 ($59.10) https://greendot') && plain.includes('Compensation check: Wrong') && plain.includes('- Taxes included:') && plain.includes('- Offered on a shared fault without approval:')
     && /\n1\. P1 · Approval · Offered on a shared fault without approval\n/.test(plain) && /\n2\. P1 · Resolution accuracy · Taxes included · 1\/3\n   What happened: Tax \(\$4\.38\) was in the base\./.test(plain) && plain.includes(`What ${first} should have done:`) && !/<[a-z]/i.test(plain),
     'the copied ticket is clean plain text: fields, comp check (error and flag), findings with should-have-done');
+  ok(/\nFirst reply: 2\.3 min\n/.test(plain) && /\nTiming\nOpened: Oct 12 · 7:48 PM\nFirst client message: 7:48 PM\nFirst reply: 7:50 PM · 2\.3 min\nClosed: Open\nHandle time: Still open\nStatus: Support's turn 2\.3 min → Waiting on client \(now\)\nSupport's side 2\.3 min · Client's side – · Handoff –\nWIRA doesn't record a time for each message, so only the first reply can be timed\.\n/.test(plain),
+    'the copied ticket carries the timing lines');
   // phone and dark: the ticket stays first, fields stack, nothing overflows
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120); await shot(page, 'ticket-dark.png');
   ok(await page.evaluate(() => getComputedStyle(document.body).backgroundColor) !== 'rgb(253, 248, 244)' && await page.evaluate(() => getComputedStyle(document.querySelector('#cTicket .tkhd')).backgroundColor) !== 'rgb(244, 239, 234)', 'dark: the ticket takes the dark tokens');

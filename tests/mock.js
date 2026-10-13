@@ -48,6 +48,9 @@ const MOCK = ([seed, ld, opts, extra]) => {
     return vals.includes(String(r[k])) })).map(r => Object.fromEntries(keys.map(k => [k, r[k] ?? null])));
   const run = cfg => { const f = parse(cfg.filters.dimensions);
     if (CH && cfg.exploreName === 'wira_project_tasks') return pick(CH.base.concat(CH.rel), f, cfg.dimensions).slice(0, cap(cfg));
+    // status changes: "wira_tasks_state_task_id equals=<ids>" (a Wid has commas, so ldVal quotes it)
+    if (CH && cfg.exploreName === 'wira_tasks_state') { const m = cfg.filters.dimensions.match(/wira_tasks_state_task_id equals=(.*)$/), ids = new Set(m ? [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"|([^,]+)/g)].map(x => x[1] != null ? x[1].replace(/\\(.)/g, '$1') : x[2]) : []);
+      return (CH.states || []).filter(r => ids.has(String(r.wira_tasks_state_task_id))).map(r => Object.fromEntries(cfg.dimensions.map(k => [k, r[k] ?? null]))).slice(0, cap(cfg)) }
     if (CH && cfg.exploreName === 'greendot_orders_analytics_aggregate') return pick(CH.orders, f, cfg.dimensions.concat(cfg.metrics || [])).slice(0, cap(cfg));
     if (CH && cfg.dimensions.includes('asr_transcript_call_transcript') && cfg.dimensions.includes('calls_call_phone_detail')) return pick(CH.calls, f, cfg.dimensions).slice(0, cap(cfg));
     if (cfg.exploreName === 'wira_tasks') { const [a, b] = f.wira_tasks_task_created_at_est_day, field = Object.keys(f).find(k => k !== 'wira_tasks_task_created_at_est_day'), vals = new Set(f[field]);
@@ -131,14 +134,20 @@ function chatWorld(sid) {
   const SA = [realSA, { name: 'Mara Quill', email: 'mara.quill@wondersco.com' }, { name: 'Theo Brandt', email: 'theo.brandt@wondersco.com' }];
   const addD = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
   let n = 0;
-  const mk = (sa, rest, rcode, dayOff, hm, msgs, o) => { n++; const id = String(9900100 + n), at = `${addD(day, dayOff)}T${hm}:00.000Z`, saIdx = msgs.findIndex(m => m[0] === 'sa');
+  // invented status changes per chat: open/pending_reply at the start, waiting on the client from the first reply, closed 10 min later
+  const states = [], plus = (t, m) => new Date(Date.parse(t) + m * 6e4).toISOString();
+  const st = (wid, at, status, sub) => states.push({ wira_tasks_state_task_id: wid, wira_tasks_state_task_status: status, wira_tasks_state_task_sub_status: sub, wira_tasks_state_created_at_est: at });
+  // t: {reply: minutes from the first client message to the first reply, wira: WIRA's own first-response figure}
+  const mk = (sa, rest, rcode, dayOff, hm, msgs, o, t) => { n++; const id = String(9900100 + n), at = `${addD(day, dayOff)}T${hm}:00.000Z`, saIdx = msgs.findIndex(m => m[0] === 'sa');
+    const reply = t && t.reply != null ? t.reply : 1.5 + n, wira = t && t.wira != null ? t.wira : reply, wid = `Wid(0,1,1,0,${id})`;
+    if (saIdx >= 0) { st(wid, at, 'open', 'pending_reply'); st(wid, plus(at, reply), 'blocked', 'waiting_on_client'); st(wid, plus(at, reply + 10), 'closed', null) }
     const who = w => w === 'client' ? 'client-+15550100' + String(n).padStart(2, '0') : w === 'sa' ? sa.email : w;
     return Object.assign({ wira_project_tasks_wira_id: `Wid(0,1,1,0,${id})`, wira_project_tasks_short_wira_id: id, wira_project_tasks_created_at_est: at, wira_project_tasks_closed_at_est: null,
       wira_project_tasks_status: 'closed', wira_project_tasks_sub_status: null, wira_project_tasks_task_title: msgs[0][1].slice(0, 80),
       wira_project_tasks_task_comments: msgs.map(m => m[1]).join(' ## '), wira_project_tasks_task_commentors: msgs.map(m => who(m[0])).join(' ## '),
       wira_project_tasks_conversation_direction: 'inbound', wira_project_tasks_created_by: null, wira_project_tasks_created_by_title: null,
       wira_project_tasks_assigned_user: sa.name, wira_project_tasks_agent_alias: sa.email, wira_project_tasks_client_alias: who('client'),
-      wira_project_tasks_first_response_time_minutes: saIdx < 0 ? null : 1.5 + n, wira_project_tasks_first_client_message_time_est: at, wira_project_tasks_first_agent_reply_time_est: saIdx < 0 ? null : at,
+      wira_project_tasks_first_response_time_minutes: saIdx < 0 ? null : wira, wira_project_tasks_first_client_message_time_est: at, wira_project_tasks_first_agent_reply_time_est: saIdx < 0 ? null : plus(at, reply),
       wira_project_tasks_shape_name: 'general-conversation', wira_project_tasks_rating: null, wira_project_tasks_wira_ticket_url: `https://wira.example.test/tasks/${id}`,
       restaurants_unique_code: rcode, restaurants_english_name: rest }, o || {}) };
   const ask = [['client', 'Hi, a delivery order from earlier never printed in the kitchen. This is Rhea.'], ['sa', 'Hi Rhea, sorry about that. Checking the order and the printer log now.'], ['sa', 'The order reached the tablet at 6:02 PM; the printer was offline. Reconnect it from Settings and it will print again.'], ['client', 'Thanks, it works now.']];
@@ -146,9 +155,9 @@ function chatWorld(sid) {
     mk(SA[0], 'Lantern Slice', 'R90001', 1, '12:10', ask),
     mk(SA[1], 'Oak Street Pies', 'R90002', 0, '10:05', [['client', 'Hello, can you change our closing time to 10 PM tonight? This is Omar.'], ['sa', 'Hi Omar, done. The online menu now closes at 10 PM tonight.']]),
     mk(SA[1], 'Harbor Crust', 'R90003', 0, '13:40', ask),
-    mk(SA[1], 'Harbor Crust', 'R90003', 1, '09:15', [['client', 'A customer says we charged them twice. This is Lena.'], ['sa', 'Hi Lena, checking both charges now.'], ['sa', 'Only one charge settled; the other is a hold that drops off in 3 days.']]),
+    mk(SA[1], 'Harbor Crust', 'R90003', 1, '09:15', [['client', 'A customer says we charged them twice. This is Lena.'], ['sa', 'Hi Lena, checking both charges now.'], ['sa', 'Only one charge settled; the other is a hold that drops off in 3 days.']], null, { reply: 9, wira: 2.1 }),
     mk(SA[1], 'Maple Oven', 'R90004', 2, '18:30', ask),
-    mk(SA[1], 'Maple Oven', 'R90004', 3, '11:00', [['client', 'Need a refund on order 12, wrong pizza. This is Dev.'], ['sa', 'Hi Dev, checking the call recording for order 12.']]),
+    mk(SA[1], 'Maple Oven', 'R90004', 3, '11:00', [['client', 'Need a refund on order 12, wrong pizza. This is Dev.'], ['sa', 'Hi Dev, checking the call recording for order 12.']], null, { reply: 24 }),
     mk(SA[1], 'Oak Street Pies', 'R90002', 4, '16:20', [['client', 'Our menu prices are wrong online. This is Omar.'], ['sa', 'Hi Omar, sending the corrected prices to the menu team now.']]),
     mk(SA[1], 'Lantern Slice', 'R90001', 5, '20:45', [['client', 'Is anyone there? The phones stopped ringing.'], ['client', 'Hello?']]),
     mk(SA[2], 'Copper Kettle Pizza', 'R90005', 2, '14:00', [['dana.lowe@wondersco.com', 'Hi team, opening this for the owner: they want weekend hours added. This is Dana from accounts.'], ['client', 'Yes please, Saturday 11 to 11. This is Ivo.'], ['sa', 'Hi Ivo, Saturday hours are set to 11 AM to 11 PM.']],
@@ -199,7 +208,7 @@ function chatWorld(sid) {
     const calib = { sid: '9900901', wid: menu.wid, agent: 'Mara Quill', restaurant: 'Birch Lane Pizza', code: 'R90011', date: menu.at.slice(0, 10), verdict: 'great', lessons: ['Confirm the change back once it is live'], scores, by: 'u_test', at: at(2, '15:05') };
     return [[P('chats/9900901'), menu], [P('chats/9900902'), silent], [P('audits/9900901'), audit], [P('reviews/9900901'), review], ['chatCalib/9900901', calib], [`chatWeeks/${pw}`, { week: pw, chats: 2, picked: 1 }]] };
   return { fx, realSid: String(sid), realSA, SA, code, sideWeek, synthIds: synth.map(r => r.wira_project_tasks_short_wira_id),
-    chat: { realSid: String(sid), base: [tagBase(real)].concat(synth.map(tagBase)), rel: fx.relRows.map(tagCode), orders: fx.orderRows.map(tagCode), calls: fx.callRows.map(tagCode),
+    chat: { realSid: String(sid), states: (fx.stateRows || []).concat(states), base: [tagBase(real)].concat(synth.map(tagBase)), rel: fx.relRows.map(tagCode), orders: fx.orderRows.map(tagCode), calls: fx.callRows.map(tagCode),
       refs: {}, facts: out('facts'), analysis: out('analysis'), grade: grades[0], grade2: grades[1], gradeSrc: T1 ? 't1' : 'invented',
       synth: { facts: synthFacts, analysis: synthAnalysis, grade: [g({ fr: 3, ev: 3, rs: 3, fa: 3, path: 3, amt: 3, expl: 'na', esc: 'na', tone: 3 }), g({ fr: 2, ev: 2, rs: 3, fa: 2, path: 2, amt: 2, expl: 2, esc: 'na', tone: 3 }), g({ fr: 1, ev: 1, rs: 2, fa: 1, path: 1, amt: 1, expl: 'na', esc: 0, tone: 2 })] } },
     policy: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'policy_pack.json'), 'utf8')), calibration: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'calibration.json'), 'utf8')) };
