@@ -1,11 +1,12 @@
-# Handoff: Pizza Support QA Desk v2.6 (Super Agent audit tool)
+# Handoff: Pizza Support QA Desk v3.0 (Super Agent audit tool)
 
 Paste this whole file into a new chat to continue building the tool. Attach `pizza-support-qa-desk.html` too (the tool's full source). If the new chat can reach claude.ai artifacts, it can update the live tool directly at the URL below; read it with the Artifact tool first.
 
 ## 1. Who and why
 
 - **Owner:** Patrick, Strategic Operations Lead at Tarro (Get Wonders Corp). He runs the Pizza Support Super Agent team.
-- **Goal now:** Audit Super Agent calls by hand every week and refine the scorecard as the audits show where it's wrong.
+- **Goal now (Oct 13):** WIRA chats first. Calls are parked in their own tab, untouched. Claude pre-grades each chat (facts → fault → right solution → grade + coaching) and Patrick reviews, corrects and saves calibration cases so the brain learns his judgement. Spec: `docs/brain-wira-chats.md`.
+- **Goal before:** Audit Super Agent calls by hand every week and refine the scorecard as the audits show where it's wrong.
 - **End state:** Swift Coaching, an AI that grades calls the way Patrick does. Every manual audit is a labelled example for it, so the tool captures the reasoning and the right answer as well as the scores.
 - **Downstream:** Audits feed Disaster Class, Patrick's consolidated Pizza Quality dashboard. Its MVP sheet ("Disasaterclass MVP", Database Structure tab) lists Calls/Chats Handling Scoring (Communication, Investigation, Resolution), Fault Attribution Accuracy and Single Touch Resolution, with "Data team to ingest manual audit scoring".
 - **Super Agents (6):** Brix Estrope, Velka Pasion, Christ Aragon, Cherry Balonio, CJ Domingo, Angel Lacsamana. AEs can be audited too, for the "better than AE" benchmark.
@@ -14,7 +15,7 @@ Paste this whole file into a new chat to continue building the tool. Attach `piz
 
 - **Name:** Pizza Support QA Desk
 - **URL:** https://claude.ai/artifact/W3z5JbqMoDt3PkA1ckjLuq (private to Patrick; share as Contributor for others to save audits)
-- **Version:** v2.5 (artifact Version 8), Oct 2, 2026: MGR-tool look (warm paper, purple = step you're on, green = done), the Score view as numbered steps (Call → Listen → Tasks → Case facts → the three rubric sections → Coaching note) with the answer shown in each step header, the finished Call step and finished criteria folding to one line (click to reopen), and the Missing list removed (Save jumps to the first open item instead). v2.4 (artifact Version 6/7): published Oct 2, 2026: linked WIRA tasks and "What Claude got" case facts (section 4b). Before that, v2.3: Database tab, Play all link and an end-to-end bar for each linked call, and 5 calls per Super Agent even in a quiet week. Earlier the same day: v2.2 (linked calls limited to Super Agents, Pizza CRT and CSRs, graded vs context), v2.1 (weekly Lightdash sample) and v2 (rubric 0–3 + NA).
+- **Version:** v3.0 (artifact Version 15), Oct 14, 2026: Chats is the first tab (Queue · Audit · Brain); Calls (Snapshot · Calls · Facts), Results and Database unchanged. See section 11. Earlier: v2.5 (artifact Version 8), Oct 2, 2026: MGR-tool look (warm paper, purple = step you're on, green = done), the Score view as numbered steps (Call → Listen → Tasks → Case facts → the three rubric sections → Coaching note) with the answer shown in each step header, the finished Call step and finished criteria folding to one line (click to reopen), and the Missing list removed (Save jumps to the first open item instead). v2.4 (artifact Version 6/7): published Oct 2, 2026: linked WIRA tasks and "What Claude got" case facts (section 4b). Before that, v2.3: Database tab, Play all link and an end-to-end bar for each linked call, and 5 calls per Super Agent even in a quiet week. Earlier the same day: v2.2 (linked calls limited to Super Agents, Pizza CRT and CSRs, graded vs context), v2.1 (weekly Lightdash sample) and v2 (rubric 0–3 + NA).
 - **Live data:** the Sep 21–27 sample (30 calls) and its full candidate list were written into the db on Oct 2 from the real Lightdash rows, using the page's own sampling code, so the tool opened with data. Weeks from Sep 28 on are pulled by the page itself.
 - **Capabilities:** `db`, `user`, `downloads`, `sample` (Claude reads the calls, on the viewer's usage), `mcp` (Google Drive `create_file` + `update_file`; Lightdash `run_metric_query` + `get_query_result`)
 - **Spreadsheet builder:** SheetJS 0.18.5, lazy-loaded on export from cdnjs (jsDelivr fallback)
@@ -180,3 +181,16 @@ Fault Attribution Accuracy = share of audits with fault_actual in (tarro, restau
 - **Speaker rules (facts-3).** The agent is the person in the call header even under an alias; reports about store, driver or customer come from the caller; relayed claims keep every layer; "unclear" instead of guessing. Blind-judged on 10 Sep 28 cases: wrong-speaker facts went from 5 to 1, no conclusion leaks either way, misses unchanged (3).
 - **Follow-up calls.** Before pass 1, the page pulls each named agent's outbound calls for 24 hours after the call or case and adds one line per agent to the evidence. Lightdash has no customer numbers, so a listed call may or may not be the callback.
 - **Listen → Transcripts tab:** per call, Claude's bullets on top of the full transcript.
+
+## 11. WIRA chats (v3.0, Oct 13–14)
+
+- **Base:** the Lightdash chart "pizza-wira-inbound-chats-weekly-response-percentiles": pizza, project "conversation", client-initiated (inbound) or created by an Account Executive, assigned to one of the six SAs. Week of Oct 5: 85 chats (70 client, 15 AE). About 7% are compensation cases; most are order checks, menu setup and "contact the customer".
+- **Owners:** the audited SA is matched by roster name (WIRA emails don't always spell the name the same way); `client-…` and POS (`cma-pin-user-…`) authors are the client; workflow bots are "System"; AEs, leads and other SAs by the staff directory. Internal notes have no flag in the data, so they are inferred and marked "inferred".
+- **Context:** child tasks of the chat, the SA's other tasks only when they point at the chat, the order (WIRA's own order tie first, then a ticket or amount named in the chat, same day wins), its recordings and the same caller's calls. The reviewer can change the order (every order of that day is listed) or set none.
+- **Route:** facts (timeline, the SA's claims checked against the evidence, promises) → analysis (case type, fault incl. "none", policy bucket for compensation only, ideal resolution, escalation needed, AE involvement, first response) → money computed in code (30% or 100% of the item subtotal, no tax or fees; delivery fee on self-delivery; over $25 needs Howard) → grade (9 criteria, N/A rules, escalation ladder 0–4) → verdict (Great ≥90, Good ≥80, Okay ≥65, Needs work ≥50, Miss) and coaching (what went well; next time with a model message).
+- **Calibration:** Patrick's Wadsworth Pizza case (Christ, Oct 12) is the first calibration case: Okay. The brain reproduces it blind (Okay 74.2%, right comp $16.42 vs Christ's $17.73 on the full bill). Saved in the live db (`chatCalib/1831362`), with the compensation policy (`settings/chatPolicy`, from Howard's Confluence page).
+- **Storage:** `chatWeeks/<week>/{chats,audits,tx,reviews}/<sid>`, `chatCalib/<sid>`, `settings/chatPolicy`, `settings/staff`.
+- **Cost:** about 12–14k input and 4k output tokens per chat across four Claude passes, on the viewer's usage. Default pre-grade is 5 per SA; "Grade all" does the week.
+- **Data limits:** no per-message times in WIRA chats; no internal-note flag; online orders on the restaurant's own platform (e.g. FoodTec) aren't in Tarro data; transferred call legs and ticket item notes aren't in the data.
+- **Open:** run-to-run spread is still 15–30 points on some chats (grade once vs twice is Patrick's call); 8 non-roster staff accounts need a role in Brain → Staff; more calibration cases from Patrick's reviews.
+
