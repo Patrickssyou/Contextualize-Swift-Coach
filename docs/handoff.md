@@ -172,3 +172,11 @@ Fault Attribution Accuracy = share of audits with fault_actual in (tarro, restau
 14. Task window is 10 min before / 20 min after (Patrick chose the wider after-window). Skipped projects are Claude's choice; confirm.
 15. "Read the calls" runs on the viewer's own Claude usage and asks consent on first use; untested live. The backfilled Sep 21–27 reads came from the same prompt via Claude in this session.
 16. Next natural build: a Claude-agreement KPI in Results (from case_facts_compare), then letting Claude draft scores, not just facts.
+
+## 10. Repo, lanes and the Oct 13 changes (v2.7)
+
+- **Code lives in** `Patrickssyou/Contextualize-Swift-Coach` (public; real data stays in git-ignored `data/`). Build with `npm run build`, test with `npm test`, publish `dist/pizza-support-qa-desk.html` to the live artifact from a session with the Artifact tool. Lanes and file ownership are in `CLAUDE.md` and `.claude/agents/`.
+- **Two passes.** "Read the calls" now runs pass 1 (facts only: timeline F1…, promises P1…, 3–5 bullets per call) then pass 2 (conclusions from the facts only, each citing fact ids; promises marked kept / not kept / can't tell). Version `facts-3`.
+- **Speaker rules (facts-3).** The agent is the person in the call header even under an alias; reports about store, driver or customer come from the caller; relayed claims keep every layer; "unclear" instead of guessing. Blind-judged on 10 Sep 28 cases: wrong-speaker facts went from 5 to 1, no conclusion leaks either way, misses unchanged (3).
+- **Follow-up calls.** Before pass 1, the page pulls each named agent's outbound calls for 24 hours after the call or case and adds one line per agent to the evidence. Lightdash has no customer numbers, so a listed call may or may not be the callback.
+- **Listen → Transcripts tab:** per call, Claude's bullets on top of the full transcript.
