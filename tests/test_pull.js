@@ -62,7 +62,7 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
     await page.locator('#chainWrap').scrollIntoViewIfNeeded();
     await page.locator('#chainWrap').screenshot({ path: path.join(SHOTS, 'p7-context-chain-form.png') });
     log('context graded line:', await page.locator('.chaingraded').innerText());
-    await page.click('#resetBtn'); await page.click('#resetBtn');
+    await page.click('[data-tab="score"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
     await page.click('[data-tab="queue"]'); await page.waitForTimeout(100);
   }
   // ===== 2. score it: chain panel on the form
@@ -72,7 +72,8 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
   log('graded line:', await page.locator('.chaingraded').innerText());
   log('chain panel:', await page.locator('#chainWrap').isVisible(), '|', await page.locator('#chainSum').innerText(), '|', (await page.locator('.chainhead').innerText()).replace(/\s+/g, ' '));
   await page.screenshot({ path: path.join(SHOTS, 'p3-score-chain.png'), fullPage: false });
-  // complete + save the audit
+  // complete + save the audit (Scorecard tab)
+  await page.click('[data-tab="score"]');
   await page.fill('#fReviewer', 'Patrick'); await page.click('#gutChips [data-g="good"]');
   await page.fill('#fRootCause', 'Client called about a wrong item; Angel confirmed with the store manager and called the client back.');
   await page.click('#faultCorrectChips [data-fc="restaurant"]'); await page.click('#faultAgentChips [data-fa="restaurant"]');
@@ -84,7 +85,7 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
   await page.click('#saveBtn'); await page.waitForTimeout(300);
   const aud = await page.evaluate(() => Object.values(window.__data).find(d => d.rubric === 'v2' && d.callId === 'dd2c017b-ab6c-434c-b9df-1a6408ee0ee5'));
   log('saved audit:', aud ? JSON.stringify({ week: aud.week, kind: aud.kind, source: aud.source, name: aud.restaurantName, time: aud.callTime, dur: aud.durationSec, chain: aud.chain && aud.chain.count, total: aud.total, queueId: aud.queueId }) : 'NONE');
-  log('next loaded:', await page.locator('#boardFor').innerText(), '| callId', await page.inputValue('#fCallId'), '| chain shown:', await page.locator('#chainWrap').isVisible(), '|', await page.locator('#chainSum').innerText(), '| toast:', await page.locator('#toast').innerText());
+  log('next loaded:', await page.locator('#boardFor').innerText(), '| callId', await page.inputValue('#fCallId'), '| chain shown:', (await page.locator('#chainWrap').getAttribute('hidden')) === null, '|', await page.locator('#chainSum').innerText(), '| toast:', await page.locator('#toast').innerText());
 
   // ===== 3. remove one Brix call, pull again fills the gap without bringing it back
   await page.click('[data-tab="queue"]'); await page.waitForTimeout(100);

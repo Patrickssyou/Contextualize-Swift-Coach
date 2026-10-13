@@ -33,6 +33,7 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   log('tasks section:', await page.locator('#tasksWrap').isVisible(), '|', await page.locator('#tasksSum').innerText());
   log('task card:', (await page.locator('#tasksPanel .task').first().innerText()).replace(/\s*\n\s*/g, ' | '));
   await page.locator('#tasksWrap').scrollIntoViewIfNeeded(); await page.locator('#tasksWrap').screenshot({ path: path.join(SHOTS, 't1-tasks.png') });
+  await page.click('[data-tab="facts"]');
   log('ai panel before:', (await page.locator('#aiPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
   await page.click('#aiRead'); await page.waitForTimeout(30);
   log('ai running:', (await page.locator('#aiPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
@@ -42,16 +43,19 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   const qa = await page.evaluate(id => window.__data['queue/ld-' + id].aiFacts, ANG);
   log('queue doc aiFacts saved:', !!qa, qa && JSON.stringify({ v: qa.v, calls: qa.calls, withText: qa.withText, tasks: qa.tasks, faultAgent: qa.faultAgent, faultCorrect: qa.faultCorrect }));
   // reviewer fills their own facts; chips auto-match, text rows get marked
+  await page.click('[data-tab="score"]');
   await page.fill('#fReviewer', 'Patrick'); await page.click('#gutChips [data-g="good"]');
   await page.fill('#fRootCause', 'Store stopped receiving orders and card payments; tech (Mohammed) already working on it.');
   await page.click('#faultCorrectChips [data-fc="tarro"]'); await page.click('#faultAgentChips [data-fa="none"]'); await page.click('#errorTypeChips [data-et="product"]');
   await page.click('#singleTouchChips [data-st="no"]'); await page.click('#sourceChips [data-src="call_rec"]'); await page.click('#sourceChips [data-src="wira"]');
   await page.fill('#fAction', 'Called the store, confirmed tech is on it, called the client back');
+  await page.click('[data-tab="facts"]');
   await page.click('[data-m="rootCause"][data-v="same"]'); await page.click('[data-m="actionTaken"][data-v="same"]'); await page.click('[data-m="promised"][data-v="diff"]');
   log('compare rows:'); for (const t of await page.locator('#aiPanel .cmprow:not(.h)').allInnerTexts()) log('   ', t.replace(/\s*\n\s*/g, ' | ').slice(0, 220));
   log('ai head:', (await page.locator('#aiPanel .aihead').innerText()).replace(/\s*\n\s*/g, ' | '));
   await page.locator('#aiPanel').scrollIntoViewIfNeeded(); await page.locator('#aiPanel').screenshot({ path: path.join(SHOTS, 't2-compare.png') });
   // finish scoring + save
+  await page.click('[data-tab="score"]');
   await page.click('#crit-1a .head');
   for (const [k, reason] of [['3'], ['3'], ['3'], ['3'], ['3'], ['3', 'Right: tech outage'], ['3', 'Looped in the store'], ['n', 'Tech owns it'], ['2', 'Task thin'], ['3'], ['n', 'No self-serve'], ['3']]) { await page.keyboard.press(k); if (reason) { await page.waitForTimeout(30); await page.keyboard.type(reason); await page.keyboard.press('Enter') } }
   log('missing:', JSON.stringify(await page.evaluate(() => missingList().map(m => m[0]))));
@@ -61,6 +65,7 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   log('next call loaded:', await page.inputValue('#fCallId'), '| tasks:', await page.locator('#tasksSum').innerText(), '| ai panel:', (await page.locator('#aiPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
 
   // ===== 3. Stop, then an error that hides the feature
+  await page.click('[data-tab="facts"]');
   await page.evaluate(() => { window.__opts.sampleMs = 2000 });
   await page.click('#aiRead'); await page.waitForSelector('#aiStop'); await page.waitForTimeout(150); await page.click('#aiStop'); await page.waitForTimeout(200);
   log('after stop:', (await page.locator('#aiPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
@@ -86,16 +91,18 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   ({ page, ctx, errors } = await openPage(browser, seed.concat([['queue/ld-' + ANG, pre], ['pulls/2026-09-21', { status: 'done', week: '2026-09-21', at: '2026-09-28T15:00:00.000Z', added: 1 }]]), {}));
   await page.goto('http://qa.test/#queue'); await page.waitForTimeout(400);
   await page.locator('[data-q]').first().click(); await page.waitForTimeout(200);
+  log('opened tab:', await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab'), '| read bar:', (await page.locator('#readBar').innerText()).replace(/\s*\n\s*/g, ' | '));
   log('precomputed panel:', (await page.locator('#aiPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
   log('tasks before find:', (await page.locator('#tasksPanel').innerText()).replace(/\s*\n\s*/g, ' | '));
   await page.click('#taskFind'); await page.waitForFunction(() => document.querySelectorAll('#tasksPanel .task').length > 0, null, { timeout: 8000 });
   log('tasks after find:', await page.locator('#tasksSum').innerText(), '| queue doc tasks:', JSON.stringify(await page.evaluate(id => (window.__data['queue/ld-' + id].tasks || []).map(k => k.id), ANG)));
-  await page.click('#aiShow'); await page.waitForTimeout(100);
+  await page.click('[data-tab="facts"]'); await page.click('#aiShow'); await page.waitForTimeout(100);
   log('shown rows:', await page.locator('#aiPanel .cmprow:not(.h)').count(), '| summary:', (await page.locator('.aisum').innerText()).slice(0, 120));
   // mobile + dark
   await page.emulateMedia({ colorScheme: 'dark' }); await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
   log('mobile scrollWidth:', await page.evaluate(() => document.documentElement.scrollWidth));
-  await page.locator('#tasksWrap').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(SHOTS, 't3-mobile-tasks.png') });
+  await page.click('[data-tab="calls"]'); await page.locator('#tasksWrap').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(SHOTS, 't3-mobile-tasks.png') });
+  await page.click('[data-tab="facts"]');
   await page.locator('#aiPanel').scrollIntoViewIfNeeded(); await page.locator('#aiPanel').screenshot({ path: path.join(SHOTS, 't4-mobile-compare.png') });
   log('console errors (5):', JSON.stringify(errors));
   await ctx.close();

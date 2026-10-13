@@ -367,12 +367,115 @@ details.chain .tline{margin:6px 6px 4px}
   .pullbar .btn{width:100%}
 }
 @media (max-width:480px){.opts{grid-template-columns:minmax(0,1fr)}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* tabs as steps: 1–4 are the audit path, Results and Database sit quieter at the end */
+.tabs button{display:inline-flex;align-items:center;gap:7px}
+.tn{flex:none;width:20px;height:20px;border-radius:6px;background:var(--soft);color:var(--muted);display:grid;place-items:center;font-size:11.5px;font-weight:700}
+.tabs button[aria-selected="true"] .tn{background:var(--accent);color:var(--on-fill)}
+.tabs button.done .tn{background:var(--s3);color:var(--on-fill)}
+.tabs button.done .tn span{display:none} .tabs button.done .tn::after{content:"✓"}
+.tst{font-size:12px;font-weight:700;color:var(--accent)} .tst:empty{display:none}
+.tst .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--accent);vertical-align:1px}
+.tabs .quiet{font-weight:500;font-size:13.5px}
+.tabs [data-tab="results"]{margin-left:auto}
+.tabnav{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+.stepcol{display:flex;flex-direction:column;gap:14px}
+/* header: level, XP, streak */
+.hud{display:flex;align-items:center;gap:10px;margin-left:auto}
+.lvl{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;min-width:0}
+.lvbadge{flex:none;width:30px;height:30px;border-radius:999px;background:var(--accent);color:var(--on-fill);display:grid;place-items:center;font-weight:700;font-size:13px}
+.lvtxt{min-width:0;width:150px}
+.lvrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;white-space:nowrap}
+.lvrow b{overflow:hidden;text-overflow:ellipsis}
+.xpbar{height:5px;background:var(--soft);border-radius:99px;overflow:hidden;margin-top:3px}
+.xpbar i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .5s}
+.streak{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px;color:var(--muted)}
+.streak.on{color:var(--s2)} .streak.on .num{color:var(--ink)}
+/* week quest */
+.quest{padding:16px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 20px;align-items:center}
+.qring{position:relative;width:84px;height:84px}
+.qring svg{display:block;transform:rotate(-90deg)}
+.qring circle{fill:none;stroke-width:7}
+.qring .trk{stroke:var(--soft)} .qring .val{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .6s}
+.qring.full .val{stroke:var(--s3)}
+.qring .ctr{position:absolute;inset:0;display:grid;place-items:center;text-align:center;line-height:1.05}
+.qring .ctr b{font-family:var(--f-mono);font-size:20px} .qring .ctr span{font-size:11px;color:var(--muted)}
+.qtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.qtop b{font-size:16px;letter-spacing:-.01em}
+.mbar{position:relative;height:8px;background:var(--soft);border-radius:99px;margin:12px 10px 22px 0}
+.mbar>i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:99px;transition:width .6s}
+.ms{position:absolute;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center}
+.ms i{width:16px;height:16px;border-radius:99px;background:var(--panel);border:2px solid var(--line)}
+.ms b{position:absolute;top:18px;font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:600}
+.ms.on i{background:var(--s3);border-color:var(--s3);box-shadow:0 0 0 3px var(--s3-soft)} .ms.on b{color:var(--s3)}
+.qstats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.qstats b{color:var(--ink);font-family:var(--f-mono);font-weight:600}
+.badges{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:3px 10px 3px 4px;border-radius:999px;border:1px dashed var(--line);color:var(--muted)}
+.badge svg{width:18px;height:18px;flex:none}
+.badge .bg{fill:var(--soft)} .badge .fg{fill:var(--muted)}
+.badge.on{border-style:solid;border-color:color-mix(in srgb,var(--s2) 50%,var(--line));background:var(--s2-soft);color:var(--ink)}
+.badge.on .bg{fill:var(--s2)} .badge.on .fg{fill:var(--on-fill)}
+.pips{display:inline-flex;gap:3px;margin-left:8px;vertical-align:1px}
+.pips i{width:9px;height:9px;border-radius:3px;background:var(--soft);border:1px solid var(--line)}
+.pips i.on{background:var(--s3);border-color:var(--s3)}
+/* calls tab */
+.callhead{padding:14px 16px;margin-bottom:14px}
+.callhead .chainhead{padding:0;font-size:17px;gap:10px}
+.callhead .chainhead a{font-weight:700;text-decoration:none;color:var(--ink)} .callhead .chainhead a:hover{color:var(--accent)}
+.callhead .chainhead .kind{font-size:12px}
+.callhead .cmeta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--muted);margin-top:6px}
+.callhead .cmeta b{color:var(--ink);font-weight:600}
+.callhead .chaingraded{padding:8px 0 0;margin-top:8px;border-top:1px solid var(--line)}
+.readbar{padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px 14px;flex-wrap:wrap;border-color:var(--accent);background:var(--accent-soft)}
+.readbar .step{font-weight:600;color:var(--accent)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:99px;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.txcall.off{opacity:.6}
+.txcall.sampled{box-shadow:inset 0 0 0 1px var(--accent)}
+.txnone{margin-top:8px;font-size:12.5px;color:var(--muted)}
+details.txd{margin-top:8px}
+details.txd>summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.txd>summary::-webkit-details-marker{display:none}
+details.txd>summary::before{content:"▸";transition:transform .15s}
+details.txd[open]>summary::before{transform:rotate(90deg)}
+details.txd>summary:hover{color:var(--ink)}
+details.txd .txtext{margin-top:6px}
+.chainpanel .hidlegs{margin-top:4px}
+/* facts tab */
+.factsbox>.aipanel{border-top:0}
+.factsbox .empty{padding:36px 18px}
+/* save: toast with an action, confetti */
+.toast{display:flex;align-items:center;gap:12px;width:max-content;text-align:center}
+.toast .tact{border:0;background:var(--accent);color:var(--on-accent);border-radius:999px;padding:5px 12px;font-weight:700;font-size:13px;white-space:nowrap}
+.confetti{position:fixed;width:0;height:0;pointer-events:none;z-index:30}
+.confetti i{position:absolute;width:7px;height:11px;border-radius:2px;left:-3px;top:-5px;opacity:0;animation:pop .85s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes pop{0%{opacity:1;transform:translate(0,0) rotate(0)}70%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(var(--r))}}
+@media (max-width:900px){.toast{bottom:calc(env(safe-area-inset-bottom,0px) + 76px)}}
+@media (max-width:700px){
+  .hud{order:3;width:100%;margin-left:0}
+  .lvl{flex:1}.lvtxt{flex:1;width:auto}
+  .weekpick{margin-left:auto}
+  .tabs{gap:0}
+  .tabs button{padding:10px 7px;gap:5px;font-size:14px}
+  .tabs .tn{width:18px;height:18px;font-size:11px}
+  .tabs #qCount{display:none}
+  .tabs .quiet{font-size:13px}
+  .tabs [data-tab="results"]{margin-left:6px}
+  .quest{grid-template-columns:minmax(0,1fr);padding:14px}
+  .qring{display:none}
+  .callhead .chainhead{font-size:15.5px}
+}
+@media (max-width:560px){.tabnav .btn{flex:1}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.confetti{display:none}}
 </style>
 
 <div class="wrap">
   <header class="top">
     <div class="brand"><h1>Pizza Support QA Desk</h1><span>Super Agent audits · Rubric v2 · 0–3 + NA</span></div>
+    <div class="hud" id="hud">
+      <div class="lvl" title="Level"><span class="lvbadge num" id="lvNum">1</span><div class="lvtxt"><div class="lvrow"><b id="lvName">Dough Tosser</b><span class="num hint" id="xpNum">0 XP</span></div><div class="xpbar"><i id="xpBar" style="width:0"></i></div></div></div>
+      <div class="streak" id="streak" title="Days in a row with a saved audit"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.2 1C9 3.6 12.5 5.2 12.5 9.3A4.5 4.5 0 0 1 3.5 9.6c0-2.1 1.1-3.4 2.2-4.3 0 1.6.7 2.7 1.7 2.9C7.3 6 7.2 3.3 8.2 1z" fill="currentColor"/></svg><span class="num" id="streakN">0</span><span class="sr-only">day streak</span></div>
+    </div>
     <div class="weekpick" role="group" aria-label="Audit week">
       <button type="button" id="wkPrev" aria-label="Previous week">‹</button>
       <div class="lbl"><small>Call week</small><span id="wkLabel"></span></div>
@@ -381,15 +484,64 @@ details.chain .tline{margin:6px 6px 4px}
   </header>
   <div id="banner" class="banner" hidden></div>
   <nav class="tabs" role="tablist">
-    <button type="button" role="tab" data-tab="score" aria-selected="true">Score a call</button>
-    <button type="button" role="tab" data-tab="queue" aria-selected="false">Call queue<span class="count" id="qCount"></span></button>
-    <button type="button" role="tab" data-tab="data" aria-selected="false">Database</button>
-    <button type="button" role="tab" data-tab="results" aria-selected="false">Results<span class="count" id="rCount"></span></button>
+    <button type="button" role="tab" data-tab="queue" aria-selected="true"><span class="tn"><span>1</span></span>Snapshot<span class="count" id="qCount"></span></button>
+    <button type="button" role="tab" data-tab="calls" aria-selected="false"><span class="tn"><span>2</span></span>Calls<span class="tst" id="st-calls"></span></button>
+    <button type="button" role="tab" data-tab="score" aria-selected="false"><span class="tn"><span>3</span></span>Scorecard<span class="tst num" id="st-score"></span></button>
+    <button type="button" role="tab" data-tab="facts" aria-selected="false"><span class="tn"><span>4</span></span>Facts<span class="tst" id="st-facts"></span></button>
+    <button type="button" role="tab" class="quiet" data-tab="results" aria-selected="false">Results<span class="count" id="rCount"></span></button>
+    <button type="button" role="tab" class="quiet" data-tab="data" aria-selected="false">Database</button>
   </nav>
 
-  <!-- SCORE -->
-  <section id="view-score">
+  <!-- 1 SNAPSHOT: the week's pool of calls -->
+  <section id="view-queue" hidden>
+    <div class="panel quest" id="quest"></div>
+    <div class="panel pullbar">
+      <div><div class="h2" style="margin:0">Weekly sample</div><div class="hint" id="pullStatus"></div></div>
+      <button type="button" class="btn primary" id="pullBtn" disabled>Pull from Lightdash</button>
+    </div>
+    <details class="panel import" id="importBox">
+      <summary>Add calls by hand</summary>
+      <div class="importbody">
+        <textarea class="big" id="qPaste" placeholder="Brix Estrope (10 of 14)&#10;https://…call link…	Sep 22 10:14	Brix Estrope	4m 12s	CL	Client asking about a missed order…"></textarea>
+        <div class="row">
+          <div class="field" style="min-width:200px"><label for="qAgent">Agent</label><select id="qAgent"></select></div>
+          <div class="field" style="min-width:160px"><label for="qType">Type</label><select id="qType"></select></div>
+          <div class="hint" id="qPreview" style="align-self:flex-end;padding-bottom:9px"></div>
+        </div>
+        <div class="row"><button type="button" class="btn primary" id="qAdd" disabled>Add to this week's queue</button></div>
+      </div>
+    </details>
+    <div class="qgrid" id="qGrid"></div>
+  </section>
+
+  <!-- 2 CALLS: the picked call or case, each linked call with what happened -->
+  <section id="view-calls" hidden>
+    <div class="panel empty" id="callsEmpty" hidden>No call picked.<div style="margin-top:12px"><button type="button" class="btn primary" data-go="queue">Open Snapshot</button></div></div>
+    <div id="callsBody">
+      <div class="panel callhead" id="callHead"></div>
+      <div id="readBar"></div>
+      <div class="stepcol" id="callSteps">
+        <div class="qsec ref" id="chainWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Calls</span><span class="qans" id="chainSum"></span></div>
+          <div class="qbody chainpanel" id="chainPanel"></div>
+        </div>
+        <div class="qsec ref" id="tasksWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Tasks</span><span class="qans" id="tasksSum"></span></div>
+          <div class="qbody flush" id="tasksPanel"></div>
+        </div>
+        <div class="qsec ref" id="slackWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Slack</span><span class="qans" id="slackSum"></span></div>
+          <div class="qbody flush" id="slackPanel"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tabnav"><button type="button" class="btn" data-go="queue">← Snapshot</button><button type="button" class="btn primary" data-go="score">Scorecard →</button></div>
+  </section>
+
+  <!-- 3 SCORECARD -->
+  <section id="view-score" hidden>
     <div class="desk">
+      <div>
       <div id="steps">
         <div class="qsec" id="s-call">
           <div class="qhd"><span class="qnum"></span><span class="qttl">Call</span><span class="qans" id="ans-call"></span><button type="button" class="qchg" id="callChg" hidden>Change</button></div>
@@ -406,21 +558,6 @@ details.chain .tline{margin:6px 6px 4px}
           </div>
         </div>
 
-        <div class="qsec ref" id="chainWrap" hidden>
-          <div class="qhd"><span class="qnum"></span><span class="qttl">Listen</span><span class="qans" id="chainSum"></span></div>
-          <div class="qbody chainpanel" id="chainPanel"></div>
-        </div>
-
-        <div class="qsec ref" id="tasksWrap" hidden>
-          <div class="qhd"><span class="qnum"></span><span class="qttl">Tasks</span><span class="qans" id="tasksSum"></span></div>
-          <div class="qbody flush" id="tasksPanel"></div>
-        </div>
-
-        <div class="qsec ref" id="slackWrap" hidden>
-          <div class="qhd"><span class="qnum"></span><span class="qttl">Slack</span><span class="qans" id="slackSum"></span></div>
-          <div class="qbody flush" id="slackPanel"></div>
-        </div>
-
         <div class="qsec" id="s-facts">
           <div class="qhd"><span class="qnum"></span><span class="qttl">Case facts</span><span class="qans" id="ans-facts"></span></div>
           <div class="qbody facts" id="factsPanel">
@@ -435,7 +572,6 @@ details.chain .tline{margin:6px 6px 4px}
             <div class="field"><label for="fOwner">Follow-up owner</label><input id="fOwner" autocomplete="off"></div>
             <div class="field wide" id="f-sources"><span class="lbl-sm">Checked to know this</span><div class="chips" id="sourceChips"></div><input id="fSourcesOther" class="othersrc" autocomplete="off" placeholder="Other"></div>
           </div>
-          <div class="aipanel" id="aiPanel" hidden></div>
         </div>
 
         <div id="rubric"></div>
@@ -444,6 +580,8 @@ details.chain .tline{margin:6px 6px 4px}
           <div class="qhd"><span class="qnum"></span><span class="qttl">Coaching note</span><span class="qans" id="ans-take"></span></div>
           <div class="qbody"><div class="field"><label for="fTake" class="sr-only">Coaching note</label><textarea id="fTake" rows="3"></textarea></div></div>
         </div>
+      </div>
+      <div class="tabnav"><button type="button" class="btn" data-go="calls">← Calls</button><button type="button" class="btn primary" data-go="facts">Facts →</button></div>
       </div>
 
       <aside class="panel board" aria-live="polite">
@@ -467,30 +605,10 @@ details.chain .tline{margin:6px 6px 4px}
     <div class="mobilebar"><div><div class="lbl-sm" id="mbCount">0 of 12</div><div class="num" id="mbScore">–%</div></div><button type="button" class="btn primary" id="mbSave" disabled>Save audit</button></div>
   </section>
 
-  <!-- QUEUE -->
-  <section id="view-queue" hidden>
-    <div class="panel pullbar">
-      <div><div class="h2" style="margin:0">Weekly sample</div><div class="hint" id="pullStatus"></div></div>
-      <button type="button" class="btn primary" id="pullBtn" disabled>Pull from Lightdash</button>
-    </div>
-    <details class="panel import" id="importBox">
-      <summary>Add calls by hand</summary>
-      <div class="importbody">
-        <textarea class="big" id="qPaste" placeholder="Brix Estrope (10 of 14)&#10;https://…call link…	Sep 22 10:14	Brix Estrope	4m 12s	CL	Client asking about a missed order…"></textarea>
-        <div class="row">
-          <div class="field" style="min-width:200px"><label for="qAgent">Agent</label><select id="qAgent"></select></div>
-          <div class="field" style="min-width:160px"><label for="qType">Type</label><select id="qType"></select></div>
-          <div class="hint" id="qPreview" style="align-self:flex-end;padding-bottom:9px"></div>
-        </div>
-        <div class="row"><button type="button" class="btn primary" id="qAdd" disabled>Add to this week's queue</button></div>
-      </div>
-    </details>
-    <div class="qgrid" id="qGrid"></div>
-  </section>
-
-  <!-- RESULTS -->
-  <section id="view-data" hidden>
-    <div id="dataBody"></div>
+  <!-- 4 FACTS: Claude's read -->
+  <section id="view-facts" hidden>
+    <div class="panel factsbox"><div class="aipanel" id="aiPanel" hidden></div><div class="empty" id="factsEmpty" hidden></div></div>
+    <div class="tabnav"><button type="button" class="btn" data-go="score">← Scorecard</button><button type="button" class="btn" data-go="calls">Calls</button></div>
   </section>
 
   <!-- RESULTS -->
@@ -504,6 +622,11 @@ details.chain .tline{margin:6px 6px 4px}
       </div>
       <div class="hint" id="gsStatus"></div>
     </div>
+  </section>
+
+  <!-- DATABASE -->
+  <section id="view-data" hidden>
+    <div id="dataBody"></div>
   </section>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -719,7 +842,7 @@ function loadDraft(){const d=store.get("qa.draft.v2");const f=Object.assign(blan
   if(!TYPES.some(t=>t.k===f.type))f.type="call";if(!f.scores||typeof f.scores!=="object")f.scores={};if(!f.notes||typeof f.notes!=="object")f.notes={};
   f.chain=validChain(f.chain);f.tasks=validTasks(f.tasks);f.aiFacts=validAi(f.aiFacts);f.factsMatch=validMatch(f.factsMatch);f.aiShown=!!f.aiShown;f.team=validTeam(f.team);f.caseIds=Array.isArray(f.caseIds)?f.caseIds.map(String):[];f.slack=validSlack(f.slack);return f}
 let form = loadDraft();
-let active = 0, openNotes = new Set(), tab = "score", lastParsed = {}, callOpen = true;
+let active = 0, openNotes = new Set(), tab = "queue", lastParsed = {}, callOpen = true;
 function saveDraft(){store.set("qa.draft.v2",form)}
 function agentName(){return form.agent==="__ae"||form.agent==="__other"?form.otherAgent.trim():form.agent}
 function roleOf(){return form.agent==="__ae"?"ae":form.agent==="__other"?"other":"sa"}
@@ -727,13 +850,18 @@ function agentFields(name,role){if(role==="ae")return {agent:"__ae",otherAgent:n
 function isSA(a){return a.type!=="case"&&(a.role?a.role==="sa":AGENTS.includes(a.agent))}
 
 /* ---------- toast & banner ---------- */
-let tt; function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2800)}
+let tt; function toast(m,act){const t=$("#toast");t.textContent=m;
+  if(act){const b=document.createElement("button");b.type="button";b.className="tact";b.textContent=act.label;b.onclick=()=>{t.hidden=true;act.fn()};t.append(b)}
+  t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,act?6000:2800)}
 function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 
 /* ---------- tabs & week ---------- */
-function setTab(t){tab=t;document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
-  ["score","queue","data","results"].forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+t)}catch(e){}
-  if(t==="score")renderForm();renderAll()}
+/* 1 Snapshot (queue) → 2 Calls → 3 Scorecard (score) → 4 Facts, then Results and Database */
+const TABS=["queue","calls","score","facts","results","data"];
+function setTab(t){if(!TABS.includes(t))t="queue";tab=t;document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+  TABS.forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+t)}catch(e){}
+  if(t==="score"||t==="calls"||t==="facts")renderForm();renderAll()}
+document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
 document.querySelectorAll("[role=tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);renderAll()};
 $("#wkNext").onclick=()=>{week=addDays(week,7);renderAll()};
@@ -754,42 +882,57 @@ function renderMeta(){
   paintOpen();renderChain();renderTasks();renderSlack();
 }
 function paintOpen(){const u=safeUrl(form.link);$("#fOpen").hidden=!u;if(u)$("#fOpen").href=u}
-function renderChain(){
-  const c=validChain(form.chain);$("#chainWrap").hidden=!c;
-  if(!c){$("#chainPanel").innerHTML="";$("#chainSum").textContent="";return}
-  $("#chainSum").textContent=chainSummary(c);
-  const head=form.restaurantName||form.kind?`<div class="chainhead">${form.kind?`<span class="kind k-${esc(form.kind)}">${esc(form.kind)}</span>`:""}${form.restaurantName?`<b>${esc(form.restaurantName)}</b>`:""}${form.restaurantId?`<span class="num hint">${esc(form.restaurantId)}</span>`:""}${form.callDate?`<span class="hint">${esc(shortDate(form.callDate))}</span>`:""}</div>`:"";
-  const lc=liveChain(c),g=lc.legs.filter(isGraded),gs=g.reduce((t,l)=>t+(Number(l.sec)||0),0);
-  const who=agentName()||(c.legs.find(isGraded)||{}).who||"";
-  const multi=lc.legs.length>1&&lc.legs.every(l=>l.id),isCase=form.type==="case";
+/* CALLS tab: the pick's header, then every linked call as a card with Claude's bullets, its recording and its transcript */
+function hasPick(){return !!(form.queueId||form.id||validChain(form.chain)||safeUrl(form.link)||form.callId.trim())}
+function renderCallHead(){
+  const has=hasPick();$("#callsEmpty").hidden=has;$("#callsBody").hidden=!has;if(!has){$("#callHead").innerHTML="";return}
+  const c=validChain(form.chain),lc=c&&liveChain(c),isCase=form.type==="case",u=safeUrl(form.link);
+  const who=agentName()||(c&&(c.legs.find(isGraded)||{}).who)||"";
+  const title=form.restaurantName||form.restaurantId||(form.callId?"Call "+form.callId.slice(0,8):"Call");
   const names=isCase?(form.team.length?form.team.map(t=>t.name):[who]):[who];
-  const gl=isCase?`Case: <b>${esc(names.map(shortWho).join(", "))}</b> · ${lc.legs.length} call${lc.legs.length===1?"":"s"} · ${fmtDur(lc.legs.reduce((t,l)=>t+(Number(l.sec)||0),0))} talk`
-    :`Graded: <b>${esc(who)}</b> · ${g.length} of ${lc.legs.length} call${lc.legs.length===1?"":"s"} by ${esc(shortWho(who))} · ${fmtDur(gs)} talk`;
-  const canTx=lc.legs.some(l=>l.id),view=canTx?listenView:"calls";
-  const sw=canTx?`<div class="chips lview" role="group" aria-label="Listen view"><button type="button" class="chip" data-lv="calls" aria-pressed="${view==="calls"}">Calls</button><button type="button" class="chip" data-lv="tx" aria-pressed="${view==="tx"}">Transcripts</button></div>`:"";
-  $("#chainPanel").innerHTML=head+`<div class="chaingraded">${gl}${multi?` · <a class="playall" href="${esc(playAllUrl(lc.legs.map(l=>l.id)))}" target="_blank" rel="noopener">Play all ↗</a>`:""}</div>`+sw+
-    (view==="tx"?txHtml():(multi?timelineHtml(lc):"")+legsHtml(c,showHidden));
-  if(view==="tx")loadTx();
+  const meta=[`<span><b>${esc(isCase?names.map(shortWho).join(", "):who||"No agent")}</b></span>`,`<span>${esc(typeLabel(form.type))}</span>`];
+  if(form.callDate)meta.push(`<span>${esc(shortDate(form.callDate))}${form.callTime?" · "+esc(clock12(form.callTime)):""}</span>`);
+  if(form.restaurantId&&title!==form.restaurantId)meta.push(`<span class="num">${esc(form.restaurantId)}</span>`);
+  if(form.id)meta.push(`<span class="pill ${band(calc(CUR,form.type,form.scores).total)}">Saved</span>`);
+  let gl="";
+  if(lc){const g=lc.legs.filter(isGraded),gs=g.reduce((t,l)=>t+(Number(l.sec)||0),0),multi=lc.legs.length>1&&lc.legs.every(l=>l.id);
+    gl=(isCase?`Case: <b>${esc(names.map(shortWho).join(", "))}</b> · ${lc.legs.length} call${lc.legs.length===1?"":"s"} · ${fmtDur(lc.legs.reduce((t,l)=>t+(Number(l.sec)||0),0))} talk`
+      :`Graded: <b>${esc(who)}</b> · ${g.length} of ${lc.legs.length} call${lc.legs.length===1?"":"s"} by ${esc(shortWho(who))} · ${fmtDur(gs)} talk`)+
+      (multi?` · <a class="playall" href="${esc(playAllUrl(lc.legs.map(l=>l.id)))}" target="_blank" rel="noopener">Play all ↗</a>`:"")}
+  $("#callHead").innerHTML=`<div class="chainhead">${form.kind?`<span class="kind k-${esc(form.kind)}">${esc(form.kind)}</span>`:""}${isCase?`<span class="kind k-case">CASE</span>`:""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(title)} ↗</a>`:`<b>${esc(title)}</b>`}</div>
+    <div class="cmeta">${meta.join("")}</div>${gl?`<div class="chaingraded">${gl}</div>`:""}`;
 }
-/* Transcripts view: every talked call, Claude's bullets on top, the transcript under it */
-let listenView="calls",txRun=null,txNote="";const txCache=new Map();
-function txHtml(){const legs=aiLegs(),A=validAi(form.aiFacts),B=(A&&A.facts&&A.facts.calls)||{};
-  if(!legs.length)return "";
-  const head=txRun?`<div class="txnote">Getting transcripts…</div>`:txNote?`<div class="txnote">${esc(txNote)} <button type="button" class="btn small" data-txretry="1">Try again</button></div>`:"";
-  const noSum=!Object.keys(B).length;
-  return head+(noSum?`<div class="txnote">Summaries appear after "Read the calls" in What Claude got.</div>`:"")+`<ol class="txlist">`+legs.map((l,i)=>{
-    const t=String(l.at||""),dir=l.dir==="in"?"from":l.dir==="out"?"to":"with",b=B[l.id]||[],tx=txCache.get(l.id);
-    return `<li class="txcall${l.graded?" graded":""}" id="tx-${esc(l.id)}"><div class="txhd"><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b><span class="hint">${esc(dir)} ${esc(shortWho(l.party||""))}</span><span class="num hint">${esc(clock12(t.slice(11,16)))} · ${fmtDur(l.sec)}</span><a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">Rec ↗</a></div>
-      ${b.length?`<ul class="txsum">${b.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
-      <div class="txtext">${tx==null?`<span class="hint">${txRun?"Loading…":"Not loaded"}</span>`:tx.trim()?esc(tx):`<span class="hint">No transcript for this call.</span>`}</div></li>`}).join("")+`</ol>`}
+/* the legs to show as cards: the linked call (talked legs, plus the set-aside ones on request), or the single call typed in by hand */
+function cardLegs(){const c=validChain(form.chain);if(!c)return {legs:aiLegs(),hid:0,all:aiLegs()};
+  const lc=liveChain(c);return {legs:showHidden?c.legs:lc.legs,hid:lc.hidden?c.legs.filter(l=>!talked(l)).length:0,all:c.legs,lc}}
+function renderChain(){
+  renderCallHead();renderReadBar();
+  const {legs,hid,lc}=cardLegs();$("#chainWrap").hidden=!legs.length;
+  if(!legs.length){$("#chainPanel").innerHTML="";$("#chainSum").textContent="";return}
+  $("#chainSum").textContent=lc?chainSummary(form.chain):"Single call";
+  const multi=lc&&lc.legs.length>1;
+  $("#chainPanel").innerHTML=(multi?timelineHtml(lc):"")+txHtml(legs)+
+    (hid?`<button type="button" class="hidlegs" data-hidlegs="1">${showHidden?"Hide":"Show"} ${hid} voicemail / no-answer call${hid===1?"":"s"}</button>`:"");
+}
+let txRun=null,txNote="";const txCache=new Map(),txOpen=new Set();
+function txBody(id){const tx=txCache.get(id);
+  if(tx==null)return txRun?`<span class="hint">Loading…</span>`:txNote?`<span class="hint">${esc(txNote)}</span> <button type="button" class="btn small" data-txretry="1">Try again</button>`:`<span class="hint">${mcp?"Not loaded":"Transcripts need Lightdash."}</span>`;
+  return tx.trim()?esc(tx):`<span class="hint">No transcript for this call.</span>`}
+function txHtml(legs){const A=validAi(form.aiFacts),B=(A&&A.facts&&A.facts.calls)||{},anySum=Object.keys(B).length>0;
+  return `<ol class="txlist">`+legs.map((l,i)=>{const id=l.id?String(l.id):"",t=String(l.at||""),g=isGraded(l),off=!talked(l),tag=g?"":GROUP_TAG[l.group]||"",b=id?B[id]||[]:[];
+    const dir=l.dir==="in"?"from":l.dir==="out"?"to":"with";
+    return `<li class="txcall${g?" graded":""}${off?" off":""}${l.sampled?" sampled":""}" id="tx-${esc(id||String(i))}"><div class="txhd"><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b>${tag?`<span class="gtag">${tag}</span>`:""}${off?`<span class="gtag">${esc(TALK_L[l.talk]||"")}</span>`:""}<span class="hint">${esc(dir)} ${esc(shortWho(l.party||""))}</span><span class="num hint">${esc(clock12(t.slice(11,16)))} · ${fmtDur(l.sec)}</span>${id?`<a href="${esc(recUrl(id))}" target="_blank" rel="noopener">Rec ↗</a>`:""}</div>
+      ${b.length?`<ul class="txsum">${b.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:anySum&&!off?`<div class="txnone">No summary for this call.</div>`:""}
+      ${id?`<details class="txd" data-tx="${esc(id)}"${txOpen.has(id)?" open":""}><summary>Transcript</summary><div class="txtext">${txOpen.has(id)?txBody(id):""}</div></details>`:""}</li>`}).join("")+`</ol>`}
 async function fetchTx(legs){const need=legs.filter(l=>l.id&&!txCache.has(l.id));if(!need.length)return;
   const ts=need.map(l=>ldTs(l.at)).filter(x=>!isNaN(x));if(!ts.length){need.forEach(l=>txCache.set(l.id,""));return}
   const from=etDay(Math.min(...ts)),to=etDay(Math.max(...ts));
   const rows=await ldQuery(transcriptConfig(from,to>from?to:from,need.map(l=>l.id)),"QA Desk · transcripts");
   const m=new Map(rows.map(r=>[String(r.calls_conversation_id||""),String(r.asr_transcript_call_transcript||"")]));
   need.forEach(l=>txCache.set(l.id,m.get(l.id)||""))}
-async function loadTx(){const legs=aiLegs();if(txRun||!mcp||!legs.some(l=>!txCache.has(l.id))||txNote)return;
-  txRun=true;try{await fetchTx(legs)}catch(e){txNote=pullErr(e,"Try again")}finally{txRun=null;if(listenView==="tx")renderChain()}}
+/* opening one transcript loads them all for the pick in one query */
+async function loadTx(){const legs=cardLegs().all.filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));if(txRun||!mcp||!legs.some(l=>!txCache.has(l.id))||txNote)return;
+  txRun=true;renderChain();try{await fetchTx(legs)}catch(e){txNote=pullErr(e,"Try again")}finally{txRun=null;renderChain()}}
 $("#agentChips").addEventListener("click",e=>{const b=e.target.closest("[data-a]");if(!b)return;form.agent=form.agent===b.dataset.a?"":b.dataset.a;saveDraft();renderMeta();renderBoard();
   if(form.agent==="__ae"||form.agent==="__other")$("#otherAgent").focus()});
 $("#typeChips").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(!b)return;const t=b.dataset.t;if(form.type===t)return;
@@ -880,8 +1023,9 @@ function renderTasks(){
 $("#tasksPanel").addEventListener("click",e=>{if(e.target.closest("#taskFind"))findTasks()});
 $("#callChg").addEventListener("click",()=>{callOpen=true;renderSteps()});
 $("#chainPanel").addEventListener("click",e=>{if(e.target.closest("[data-hidlegs]")){showHidden=!showHidden;renderChain();return}
-  const v=e.target.closest("[data-lv]");if(v){listenView=v.dataset.lv;renderChain();return}
-  if(e.target.closest("[data-txretry]")){txNote="";renderChain()}});
+  if(e.target.closest("[data-txretry]")){txNote="";loadTx()}});
+$("#chainPanel").addEventListener("toggle",e=>{const d=e.target;if(!(d instanceof HTMLDetailsElement)||!d.dataset.tx)return;
+  if(d.open){txOpen.add(d.dataset.tx);const x=d.querySelector(".txtext");if(x&&!x.innerHTML)x.innerHTML=txBody(d.dataset.tx);loadTx()}else txOpen.delete(d.dataset.tx)},true);
 /* query WIRA for a set of cases [{key, code, legs:[{id,t0,t1}], ag}] → Map key → task docs */
 async function fetchTasks(cases,title){
   const o=TASKS,out=new Map();cases=cases.filter(c=>c.legs&&c.legs.length);if(!cases.length)return out;
@@ -970,7 +1114,7 @@ function renderSlack(){
 $("#slackPanel").addEventListener("click",e=>{if(e.target.closest("#slackFind"))findSlack()});
 
 /* ---------- SCORE: what Claude got ---------- */
-let aiRun=null, aiNote="", sampleOk=true;
+let aiRun=null, aiNote="", sampleOk=true;const fuText=new Map();
 const ET_L=L(ERROR_TYPES), YN_L=L(YESNO), FA_ALL={...FA_L}, FC_ALL={...FC_L};
 const CMP=[["rootCause","Root cause","text"],["faultAgent","Fault · agent said","enum",FA_ALL],["faultCorrect","Fault · actual","enum",FC_ALL],["errorType","Error type","enum",ET_L],
   ["singleTouch","Resolved without another team","enum",YN_L],["actionTaken","Action taken","text"],["promised","Promised to client","text"],["followUpOwner","Follow-up owner","text"]];
@@ -994,7 +1138,9 @@ function factsHtml(A){const F=A.facts;if(!F||!F.timeline)return "";
     <div class="fhd"><span class="lbl-sm">Promises</span></div><ol class="flist">${pr}</ol></div>`}
 function renderAi(){
   const p=$("#aiPanel"),A=validAi(form.aiFacts),run=!!(aiRun&&aiRun.key===caseKey()),can=!!(sampleFn&&sampleOk&&mcp&&aiLegs().length);
-  p.hidden=!A&&!run&&!can&&!aiNote;if(p.hidden){p.innerHTML="";return}
+  renderReadBar();renderTabState();
+  p.hidden=!A&&!run&&!can&&!aiNote;$("#factsEmpty").hidden=!p.hidden;
+  if(p.hidden){p.innerHTML="";$("#factsEmpty").textContent=hasPick()?"Claude hasn't read this call.":"No call picked.";return}
   const meta=A?[A.at?"Read "+stampOf(A.at):"",A.calls?`${A.calls} call${A.calls===1?"":"s"}`:"",A.tasks!=null?`${A.tasks} task${A.tasks===1?"":"s"}`:""].filter(Boolean).join(" · "):"";
   if(run){p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row"><span class="hint">${esc(aiRun.step)}</span><button type="button" class="btn small" id="aiStop">Stop</button></div></div>`;return}
   if(!A){p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row">${aiNote?`<span class="hint">${esc(aiNote)}</span>`:""}${can?`<button type="button" class="btn small primary" id="aiRead">Read the calls</button>`:""}</div></div>`;return}
@@ -1010,8 +1156,17 @@ function renderAi(){
     ${A.summary?`<div class="aisum">${A.facts?`<span class="lbl-sm sumlbl">Conclusions</span>`:""}${esc(A.summary)}</div>`:""}
     <div class="cmprow h"><span></span><span>You</span><span>Claude</span><span></span></div>${rows}
     ${A.gaps?`<div class="aigaps"><span class="lbl-sm">Couldn't tell</span><div>${esc(A.gaps)}</div></div>`:""}
+    ${(()=>{const fu=String(A.followUp||fuText.get(caseKey())||"").trim();return fu?`<div class="aigaps"><span class="lbl-sm">Follow-up calls</span>${fu.split("\n").map(x=>`<div>${esc(x)}</div>`).join("")}</div>`:""})()}
     <div class="aifoot"><span>${esc(meta)}${aiNote?" · "+esc(aiNote):""}</span>${can?`<button type="button" class="btn small" id="aiRead">Read again</button>`:""}</div>`;
 }
+/* Calls tab: one button to get the per-call summaries when there are none yet */
+function renderReadBar(){const el=$("#readBar");if(!el)return;
+  const A=validAi(form.aiFacts),B=A&&A.facts&&A.facts.calls,has=!!(B&&Object.keys(B).length),run=!!(aiRun&&aiRun.key===caseKey()),can=!!(sampleFn&&sampleOk&&mcp&&aiLegs().length);
+  if(!hasPick()){el.innerHTML="";return}
+  if(run){el.innerHTML=`<div class="panel readbar"><span class="step"><span class="spin"></span>${esc(aiRun.step)}</span><button type="button" class="btn small" id="callsStop">Stop</button></div>`;return}
+  if(has||(!can&&!aiNote)){el.innerHTML="";return}
+  el.innerHTML=`<div class="panel readbar"><div><b>No call summaries yet</b>${aiNote?`<div class="hint">${esc(aiNote)}</div>`:""}</div>${can?`<button type="button" class="btn primary" id="callsRead">Read the calls</button>`:""}</div>`}
+$("#readBar").addEventListener("click",e=>{if(e.target.closest("#callsRead")){readCalls();return}if(e.target.closest("#callsStop")&&aiRun&&aiRun.ctl)aiRun.ctl.abort()});
 $("#aiPanel").addEventListener("click",e=>{
   if(e.target.closest("#aiRead")){readCalls();return}
   if(e.target.closest("#aiStop")){if(aiRun&&aiRun.ctl)aiRun.ctl.abort();return}
@@ -1048,12 +1203,11 @@ async function readCalls(){
     const withText=legs.filter(l=>(tx.get(l.id)||"").trim()).length;if(!withText)throw {code:"no_text"};
     const tasks=validTasks(form.tasks)||[];
     aiRun.step="Checking for follow-up calls…";renderAi();
-    const followUp=await followUpText().catch(()=>"");if(ctl.signal.aborted)return;
+    const followUp=await followUpText().catch(()=>"");if(ctl.signal.aborted)return;if(followUp)fuText.set(key,followUp);
     const input={followUp,agent:agentName(),kind:form.kind||(form.type==="mgr"?"MGR":"CL"),restaurant:form.restaurantName,code:form.restaurantId,date:form.callDate,
       legs:legs.map(l=>Object.assign({},l,{text:tx.get(l.id)||""})),tasks,team:form.type==="case"?form.team.map(t=>t.name):[],slack:validSlack(form.slack)||[]};
     aiRun.step="1 of 2 · Writing down the facts…";renderAi();
     const F=cleanFacts(await sampleFn.json(factsPrompt(input),{signal:ctl.signal,modelTier:"default"}),input.legs);if(!F)throw {code:"ai_shape"};
-    if(caseKey()===key&&listenView==="tx")renderChain();
     aiRun.step="2 of 2 · Drawing conclusions from the facts…";renderAi();
     const f=cleanAnalysis(await sampleFn.json(analysisPrompt(input,F),{signal:ctl.signal,modelTier:"default"}),F);if(!f)throw {code:"ai_shape"};
     const ai=Object.assign(f,{v:FACTS2_V,at:new Date().toISOString(),calls:legs.length,withText,tasks:tasks.length,by:myId||null});
@@ -1062,7 +1216,7 @@ async function readCalls(){
     else if(db&&key&&queue.some(q=>q.id===key)){try{await db.collection("queue").doc(key).update({aiFacts:ai})}catch(e){}}
     if(db&&key&&audits.some(a=>a.id===key)){try{await db.collection("audits").doc(key).update({aiFacts:ai})}catch(e){}}
   }catch(e){if(!(e&&e.code==="cancelled"))aiNote=aiErr(e)}
-  finally{aiRun=null;renderAi();if(listenView==="tx")renderChain()}
+  finally{aiRun=null;renderAi();renderChain()}
 }
 
 /* ---------- SCORE: rubric ---------- */
@@ -1169,6 +1323,7 @@ function renderBoard(){
   const sub=[];
   if(form.gut)sub.push(`<span class="pill none">Gut: ${esc(GUT_L[form.gut])}</span>`);
   sub.push(`<span>${c.complete&&c.total!=null?"Final score":"Running score"}</span>`);
+  if(!form.id)sub.push(`<span class="pill none" id="xpHint">+${xpFor({type:form.type,factsMatch:form.factsMatch,notes:form.notes,rubric:CUR})} XP</span>`);
   $("#boardSub").innerHTML=sub.join("");
   $("#scoredCount").textContent=c.done+" of "+c.n+" scored"+(c.na?` · ${c.na} NA`:"");
   $("#progBar").style.width=(c.done/c.n*100)+"%";
@@ -1197,7 +1352,15 @@ function renderSteps(){
   rub(CUR,form.type).forEach((sec,si)=>{const el=document.querySelector(`.rsec[data-sec="${si}"]`);if(!el)return;
     const its=items.filter(it=>sec.items.some(x=>x.id===it.id)),left=its.filter(needsWork).length,p=c.secs[si]&&c.secs[si].pct;
     set(el,!left,left?`${its.length-left} of ${its.length}`+(p!=null?` · ${fmt(p)}%`:""):(p!=null?fmt(p)+"%":"All NA"))});
-  let n=0;document.querySelectorAll("#steps .qsec").forEach(el=>{const q=el.querySelector(".qnum");if(!q)return;if(el.hidden){q.innerHTML="";return}q.innerHTML=`<span>${++n}</span>`});
+  ["#steps .qsec","#callSteps .qsec"].forEach(sel=>{let n=0;document.querySelectorAll(sel).forEach(el=>{const q=el.querySelector(".qnum");if(!q)return;if(el.hidden){q.innerHTML="";return}q.innerHTML=`<span>${++n}</span>`})});
+  renderTabState();
+}
+/* tab labels carry the step state: Calls ✓ once a pick is loaded, Scorecard shows the running %, Facts gets a dot once Claude has read the call */
+function renderTabState(){const tb=k=>document.querySelector(`[role=tab][data-tab="${k}"]`);if(!tb("calls"))return;
+  tb("calls").classList.toggle("done",hasPick());
+  const c=calc(CUR,form.type,form.scores);tb("score").classList.toggle("done",!!form.id||(hasPick()&&!missingList().length));
+  $("#st-score").textContent=c.total!=null&&form.gut?fmt(c.total)+"%":"";
+  const A=validAi(form.aiFacts);tb("facts").classList.toggle("done",!!A&&form.aiShown);$("#st-facts").innerHTML=A&&!form.aiShown?`<i class="dot" title="Ready"></i>`:"";
 }
 function renderForm(){renderMeta();renderFacts();renderRubric();renderBoard()}
 
@@ -1219,16 +1382,20 @@ async function saveAudit(){
     tasks:validTasks(form.tasks),tasksAt:form.tasksAt||null,aiFacts:validAi(form.aiFacts),factsMatch:validMatch(form.factsMatch),
     team:form.type==="case"?validTeam(form.team):[],caseIds:form.type==="case"?form.caseIds.slice():[],slack:validSlack(form.slack),slackAt:form.slackAt||null,
     createdAt:existing?.createdAt||now,updatedAt:now,by:existing?.by||myId||null,updatedBy:myId||null};
+  const before=gameStats(),gained=xpFor(rec)-(existing?xpFor(existing):0);
   $("#saveBtn").disabled=true;$("#mbSave").disabled=true;
   try{
     await db.collection("audits").doc(id).set(rec);
     for(const qid of new Set([form.queueId].concat(rec.caseIds).filter(Boolean)))if(queue.some(x=>x.id===qid)){try{await db.collection("queue").doc(qid).update({auditId:id,score:rec.total})}catch(e){}}
-    const keep={reviewer:form.reviewer,type:form.type};
-    const nextUp=nextQueued(rec.agent,rec.week,rec.queueId);
+    const keep={reviewer:form.reviewer,type:form.type},done=new Set([rec.queueId].concat(rec.caseIds).filter(Boolean));
+    const wkQ=queue.filter(q=>q.week===rec.week),doneN=wkQ.filter(q=>q.auditId||done.has(q.id)).length,lvUp=Math.floor((before.xp+gained)/100)>before.lv;
+    const msg=`Saved ${fmt(rec.total)}% · +${Math.max(0,gained)} XP`+(wkQ.length?` · ${doneN} of ${wkQ.length}`:"")+(lvUp?` · Level up: ${levelName(Math.floor((before.xp+gained)/100))}`:"");
+    const nextUp=nextQueued(rec.agent,rec.week,rec.queueId,done),nextAny=nextUp||nextQueued(null,rec.week,rec.queueId,done);
     form=Object.assign(blankForm(),keep,AGENTS.includes(rec.agent)&&rec.role==="sa"?{agent:rec.agent}:{});openNotes=new Set();active=0;lastParsed={};
-    if(nextUp){loadQueueItem(nextUp,true);toast(`Saved ${fmt(rec.total)}% · next ${rec.agent} call loaded`)}
-    else{callOpen=true;saveDraft();renderForm();toast(`Saved · ${rec.agent} · ${fmt(rec.total)}% · ${weekLabel(rec.week)}`)}
-    renderAll();window.scrollTo({top:0,behavior:"smooth"});
+    const go={label:"Next pick →",fn:()=>{if(nextUp)setTab("calls");else loadQueueItem(nextAny);window.scrollTo({top:0})}};
+    if(nextUp){loadQueueItem(nextUp,true);toast(msg,go)}
+    else{callOpen=true;saveDraft();renderForm();toast(msg,nextAny?go:null)}
+    celebrate();renderAll();window.scrollTo({top:0,behavior:"smooth"});
   }catch(e){
     toast(e&&e.code==="invalid_argument"?"You don't have edit access to this audit log.":e&&e.code==="quota_exceeded"?"The audit log is full. Export, then delete old weeks.":"Couldn't save. Try again.");
     renderBoard();
@@ -1283,7 +1450,7 @@ $("#qAdd").onclick=async()=>{
   }catch(e){toast(n?`Added ${n}, then saving stopped. Try the rest again.`:"Couldn't add calls. Try again.");parsePreview()}
 };
 const qOrder=(a,b)=>(a.pos??1e9)-(b.pos??1e9)||(a.addedAt||"").localeCompare(b.addedAt||"");
-function nextQueued(agent,wk,skip){return queue.filter(q=>q.week===wk&&q.agent===agent&&!q.auditId&&q.id!==skip).sort(qOrder)[0]}
+function nextQueued(agent,wk,skip,done){return queue.filter(q=>q.week===wk&&(agent==null||q.agent===agent)&&!q.auditId&&q.id!==skip&&!(done&&done.has(q.id))).sort(qOrder)[0]}
 /* a case pulls together every sampled call whose talked legs overlap: one set of legs, one team, graded once */
 function caseGroupOf(q){const wk=queue.filter(x=>x.week===q.week&&x.type==="case");for(const g of groupCases(wk).values())if(g.some(x=>x.id===q.id))return g;return [q]}
 function caseFromQueue(q){
@@ -1310,7 +1477,7 @@ function loadQueueItem(q,quiet){
     slack:validSlack(clone(q.slack??null)),slackAt:q.slackAt||null});
   if(q.type==="case")Object.assign(form,caseFromQueue(q));
   lastParsed=p;openNotes=new Set();active=0;taskNote="";aiNote="";slackNote="";callOpen=false;saveDraft();
-  if(quiet){renderForm()}else{setTab("score");window.scrollTo({top:0})}
+  if(quiet){renderForm()}else{setTab("calls");window.scrollTo({top:0})}
 }
 function loadAudit(a){
   form=Object.assign(blankForm(),agentFields(a.agent,a.role),{id:a.id,type:a.type||"call",link:a.link||"",restaurantId:a.restaurantId||"",callId:a.callId||"",callDate:a.callDate||"",
@@ -1329,7 +1496,7 @@ function loadAudit(a){
 function mergeOpen(){const q=form.queueId&&queueAll.find(x=>x.id===form.queueId);if(!q)return;let ch=false;
   if(form.tasks==null&&Array.isArray(q.tasks)){form.tasks=validTasks(clone(q.tasks));form.tasksAt=q.tasksAt||null;ch=true}
   if(!form.aiFacts&&validAi(q.aiFacts)){form.aiFacts=clone(q.aiFacts);ch=true}
-  if(ch){saveDraft();if(tab==="score"){renderTasks();renderAi()}}}
+  if(ch){saveDraft();renderTasks();renderAi();renderChain()}}
 function rescoreV1(a){
   const p=parseLink(a.link||"");
   form=Object.assign(blankForm(),{reviewer:form.reviewer},agentFields(a.agent,a.role),{type:a.type||"call",link:a.link||"",restaurantId:p.restaurantId||"",callId:p.callId||"",
@@ -1382,7 +1549,8 @@ function renderQueue(){
     if(!items.length&&!(pulled&&cnt))return "";
     const done=items.filter(q=>q.auditId).length,few=cnt&&cnt.eligible<PULL.perAgent;
     const sub=[items.length?`${done} of ${items.length} scored`:"",few?`${cnt.eligible} eligible`:""].filter(Boolean).join(" · ");
-    return `<div class="panel qcard"><h3><span>${esc(a)}</span><span class="num hint">${sub}</span></h3><div style="margin-top:8px">`+
+    const pips=items.length?`<span class="pips" aria-hidden="true">${items.map((_,i)=>`<i class="${i<done?"on":""}"></i>`).join("")}</span>`:"";
+    return `<div class="panel qcard"><h3><span>${esc(a)}${pips}</span><span class="num hint">${sub}</span></h3><div style="margin-top:8px">`+
       (items.length?items.map(qItemHtml).join(""):`<div class="qempty">No eligible calls</div>`)+`</div></div>`}).join("");
   const groups=[...groupCases(wk.filter(q=>q.type==="case")).values()].map(g=>g.slice().sort(qOrder));
   const casesHtml=groups.length?`<div class="panel qcard qcases"><h3><span>Cases</span><span class="num hint">${groups.filter(g=>g.every(q=>q.auditId)).length} of ${groups.length} scored · graded once as a team</span></h3><div style="margin-top:8px">`+
@@ -1839,20 +2007,68 @@ $("#xlsxBtn").onclick=async()=>{
     toast(c==="load_failed"?"Couldn't load the spreadsheet builder. Try again.":c==="extension_not_enabled"?".xlsx downloads aren't available here.":c==="rate_limited"?"Another save is still open. Finish it first.":"Couldn't save the file.")}
 };
 
+/* ---------- GAME: XP, levels, streak, week quest and badges, all derived from saved audits (nothing extra is stored) ----------
+   +10 per call audit, +20 per case audit, +2 per conclusion marked Same/Different, +5 when every criterion has a reason. Level every 100 XP. */
+const LEVELS=["Dough Tosser","Line Cook","Sauce Boss","Sous Chef","Head Chef","Pizzaiolo","Maestro"];
+const levelName=lv=>lv<LEVELS.length?LEVELS[lv]:LEVELS[LEVELS.length-1]+" "+(lv-LEVELS.length+2);
+const marksOf=a=>Object.keys(validMatch(a.factsMatch)).length;
+function reasonsAll(a){const items=itemsOf(verOf(a),a.type||"call");return items.length>0&&items.every(it=>String((a.notes||{})[it.id]||"").trim())}
+function xpFor(a){return (a.type==="case"?20:10)+2*marksOf(a)+(reasonsAll(a)?5:0)}
+/* reviewer vs Claude on the case-fact fields: chips match automatically, text fields as the reviewer marked them */
+function cmpCount(a){let n=0,s=0;const ai=validAi(a.aiFacts),F=a.facts||{};if(!ai)return {n,s};
+  CMP.forEach(([k,lab,kind])=>{const you=String(F[k]||"").trim(),cl=String(ai[k]||"").trim();const v=kind==="enum"?(you&&cl?(you===cl?"same":"diff"):""):((a.factsMatch||{})[k]||"");if(v){n++;if(v==="same")s++}});return {n,s}}
+function myAudits(){return audits.filter(a=>!myId||!a.by||a.by===myId)}
+function gameStats(){
+  const A=myAudits(),xp=A.reduce((t,a)=>t+xpFor(a),0),lv=Math.floor(xp/100);
+  const days=new Set(A.map(a=>{const d=new Date(a.createdAt||a.updatedAt||0);return isNaN(d)?"":iso(d)}).filter(Boolean));
+  const d=new Date();if(!days.has(iso(d)))d.setDate(d.getDate()-1);let streak=0;while(days.has(iso(d))){streak++;d.setDate(d.getDate()-1)}
+  const m=A.reduce((t,a)=>{const c=cmpCount(a);t.n+=c.n;t.s+=c.s;return t},{n:0,s:0}),marks=A.reduce((t,a)=>t+marksOf(a),0);
+  const wk=queue.filter(q=>q.week===week),total=wk.length,done=wk.filter(q=>q.auditId).length;
+  const groups=[...groupCases(wk.filter(q=>q.type==="case")).values()],casesDone=groups.filter(g=>g.every(q=>q.auditId)).length;
+  const byAgent=AGENTS.map(ag=>wk.filter(q=>q.agent===ag)).filter(l=>l.length);
+  const wkMine=A.filter(a=>a.week===week&&a.rubric===CUR).length;
+  const badges=[["First audit",A.length>=1],["10 this week",wkMine>=10],["Full week",total>0&&done>=total],
+    ["Case cracker",A.some(a=>a.type==="case")],["Fact checker",marks>=20],["Clean sweep",byAgent.some(l=>l.length>=3&&l.every(q=>q.auditId))]];
+  return {xp,lv,into:xp-lv*100,name:levelName(lv),streak,match:m,marks,total,done,cases:groups.length,casesDone,badges};
+}
+const BADGE_TIP={"First audit":"Save your first audit","10 this week":"Save 10 audits in one week","Full week":"Score every pick in the week","Case cracker":"Score a case","Fact checker":"Mark 20 of Claude's conclusions","Clean sweep":"Score all of one agent's picks"};
+const BADGE_SVG=`<svg viewBox="0 0 18 18" aria-hidden="true"><circle class="bg" cx="9" cy="9" r="9"/><path class="fg" d="M9 3.6l1.6 3.3 3.6.5-2.6 2.5.6 3.6L9 11.8l-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z"/></svg>`;
+function renderGame(){
+  const g=gameStats();
+  $("#lvNum").textContent=String(g.lv+1);$("#lvName").textContent=g.name;$("#xpNum").textContent=g.xp+" XP";$("#xpBar").style.width=g.into+"%";
+  $("#lvNum").closest(".lvl").title=`Level ${g.lv+1} · ${100-g.into} XP to ${levelName(g.lv+1)}`;
+  $("#streakN").textContent=String(g.streak);$("#streak").classList.toggle("on",g.streak>0);
+  const el=$("#quest");if(!el)return;
+  const T=g.total,pct=T?g.done/T:0,C=2*Math.PI*36,ms=T?[Math.round(T/3),Math.round(T*2/3),T]:[10,20,30];
+  el.innerHTML=`<div class="qring${T&&g.done>=T?" full":""}" role="img" aria-label="${g.done} of ${T} picks audited"><svg viewBox="0 0 84 84" width="84" height="84"><circle class="trk" cx="42" cy="42" r="36"/><circle class="val" cx="42" cy="42" r="36" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C*(1-pct)).toFixed(1)}"/></svg><div class="ctr"><div><b>${g.done}</b><br><span>of ${T}</span></div></div></div>
+    <div><div class="qtop"><b>Week quest</b><span class="hint num">${g.done} of ${T} audited</span></div>
+      <div class="mbar"><i style="width:${(pct*100).toFixed(1)}%"></i>${ms.map(m=>`<span class="ms${T&&g.done>=m?" on":""}" style="left:${T?(m/T*100).toFixed(1):m/30*100}%"><i></i><b>${m}</b></span>`).join("")}</div>
+      <div class="qstats"><span>Cases <b>${g.casesDone}/${g.cases}</b></span><span>You vs Claude <b>${g.match.n?fmt(g.match.s/g.match.n*100)+"%":"–"}</b>${g.match.n?` <span class="num">(${g.match.s}/${g.match.n})</span>`:""}</span><span>Streak <b>${g.streak}</b> day${g.streak===1?"":"s"}</span><span>Level <b>${g.lv+1}</b> ${esc(g.name)}</span></div></div>
+    <div class="badges">${g.badges.map(([n,on])=>`<span class="badge${on?" on":""}" title="${esc(BADGE_TIP[n])}">${BADGE_SVG}${esc(n)}</span>`).join("")}</div>`;
+}
+/* a short burst from the save button; skipped when the viewer prefers less motion */
+function celebrate(){try{if(matchMedia("(prefers-reduced-motion: reduce)").matches)return}catch(e){}
+  const b=[$("#saveBtn"),$("#mbSave")].map(x=>x.getBoundingClientRect()).find(r=>r.width>0);if(!b)return;
+  const box=document.createElement("div");box.className="confetti";box.style.left=(b.left+b.width/2)+"px";box.style.top=(b.top+b.height/2)+"px";
+  const cols=["var(--accent)","var(--s3)","var(--s2)","var(--tp)","var(--s1)"];
+  for(let i=0;i<22;i++){const a=Math.random()*Math.PI*2,d=50+Math.random()*90,p=document.createElement("i");
+    p.style.cssText=`background:${cols[i%cols.length]};--dx:${(Math.cos(a)*d).toFixed(0)}px;--dy:${(Math.sin(a)*d-40).toFixed(0)}px;--r:${(Math.random()*540-270).toFixed(0)}deg;animation-delay:${(Math.random()*80).toFixed(0)}ms`;box.append(p)}
+  document.body.append(box);setTimeout(()=>box.remove(),1000)}
+
 /* ---------- render ---------- */
 function renderAll(){
   $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
-  renderBoard();renderQueue();renderData();renderResults();renderExportStatus();
+  renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderGame();
 }
-const h0=(location.hash||"").slice(1);if(["score","queue","data","results"].includes(h0))tab=h0;
+const h0=(location.hash||"").slice(1);tab=TABS.includes(h0)?h0:"queue";
 lastParsed=parseLink(form.link);
-setTab(tab);if(tab!=="score")renderForm();
+setTab(tab);renderForm();
 
 /* ---------- capabilities ---------- */
 (async()=>{
   const c=window.claude;if(!c||!c.use){banner("Open this page in Claude to save audits. Scoring still works here, but nothing is stored.");return}
   const [d,u,m,dl,sm]=await Promise.all(["db","user","mcp","downloads","sample"].map(n=>Promise.resolve().then(()=>c.use(n)).catch(()=>null)));
-  db=d;userCap=u;mcp=m;downloads=dl;sampleFn=typeof sm==="function"?sm:null;if(tab==="score"){renderTasks();renderAi()}
+  db=d;userCap=u;mcp=m;downloads=dl;sampleFn=typeof sm==="function"?sm:null;renderChain();renderTasks();renderAi()
   if(u){try{myId=await u.id()}catch(e){}try{mayAuto=(await u.canEdit())===true}catch(e){}}
   if(!db){banner("Sign in to claude.ai to save audits. You can still score a call, but it won't be logged.");renderAll();return}
   db.collection("audits").onSnapshot(s=>{audits=s.docs.map(x=>({id:x.id,...x.data()}));dbReady=true;renderAll();maybeAutoPull()},()=>banner("Lost the connection to the audit log. Reload the page."));

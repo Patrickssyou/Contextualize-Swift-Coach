@@ -13,8 +13,8 @@ for(const f of fs.readdirSync('data/live3/queue')){const q=JSON.parse(fs.readFil
  await page.locator('.qcases .qitem',{hasText:"Today's Pizza"}).locator('[data-q]').click();await page.waitForTimeout(300);
  log('type:',await page.locator('#typeChips [aria-pressed="true"]').innerText(),'| caseIds:',JSON.stringify(await page.evaluate(()=>form.caseIds)));
  log('listen:',await page.locator('#chainSum').innerText(),'|',(await page.locator('.chaingraded').innerText()));
- log('hidden toggle:',await page.locator('#chainPanel .hidlegs').innerText(),'| legs shown',await page.locator('#chainPanel .leg').count());
- await page.click('#chainPanel .hidlegs');log('after show: legs',await page.locator('#chainPanel .leg').count(),'| off',await page.locator('#chainPanel .leg.off').count());await page.click('#chainPanel .hidlegs');
+ log('hidden toggle:',await page.locator('#chainPanel .hidlegs').innerText(),'| legs shown',await page.locator('#chainPanel .txcall').count());
+ await page.click('#chainPanel .hidlegs');log('after show: legs',await page.locator('#chainPanel .txcall').count(),'| off',await page.locator('#chainPanel .txcall.off').count());await page.click('#chainPanel .hidlegs');
  await page.evaluate(()=>0);log('team rows:',await page.locator('#teamRows .trow').count(),'|',(await page.locator('#teamRows .tname').allInnerTexts()).join(', '));
  log('slack step:',await page.locator('#slackWrap').isVisible(),'|',(await page.locator('#slackPanel').innerText()).replace(/\s*\n\s*/g,' | '));
  await page.click('#slackFind');await page.waitForFunction(()=>document.querySelectorAll('#slackPanel .task').length>0,null,{timeout:8000});
@@ -22,7 +22,8 @@ for(const f of fs.readdirSync('data/live3/queue')){const q=JSON.parse(fs.readFil
  log('slack found:',await page.locator('#slackSum').innerText(),'|',(await page.locator('#slackPanel .task').first().innerText()).replace(/\s*\n\s*/g,' | ').slice(0,300));
  fs.writeFileSync('data/slack_velka.json',JSON.stringify(await page.evaluate(()=>({slack:window.__data['queue/'+form.caseIds[0]].slack,slackAt:window.__data['queue/'+form.caseIds[0]].slackAt}))));log('queue docs slack saved:',JSON.stringify(await page.evaluate(()=>form.caseIds.map(id=>(window.__data['queue/'+id].slack||[]).length))));
  await page.locator('#slackWrap').screenshot({path:path.join(SH,'c2-slack.png')});
- // facts + team + case rubric
+ // facts + team + case rubric (Scorecard tab)
+ await page.click('[data-tab="score"]');
  await page.fill('#fReviewer','Patrick');await page.click('#gutChips [data-g="ok"]');
  await page.fill('#fRootCause','SP driver went to the wrong location and cancelled C9; store would not remake until Tarro agreed to cover it.');
  await page.click('#faultCorrectChips [data-fc="tarro"]');await page.click('#errorTypeChips [data-et="process"]');await page.click('#sourceChips [data-src="call_rec"]');await page.click('#sourceChips [data-src="slack"]');

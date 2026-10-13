@@ -174,7 +174,8 @@ const MOCK = (seed) => {
   await page.waitForTimeout(100);
   log('from queue -> type:', await page.locator('#typeChips [aria-pressed="true"]').innerText(), '| date:', await page.inputValue('#fDate'), '| rid:', await page.inputValue('#fRid'), '| hint:', await txt('#saveHint'));
   log('mgr 3c label:', (await txt('#crit-3c .ttl')).slice(0, 30));
-  await page.click('#resetBtn'); await page.click('#resetBtn');
+  log('opened tab:', await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab'));
+  await page.click('[data-tab="score"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
 
   // ---- downloads
   await page.click('[data-tab="results"]');

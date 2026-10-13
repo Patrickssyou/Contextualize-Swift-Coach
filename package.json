@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "python3 scripts/build.py",
-    "test": "npm run build && node tests/test.js && node tests/test_pull.js && node tests/test_tasks.js && node tests/test_cases.js && node tests/test_tx.js && node tests/test_followups.js"
+    "test": "npm run build && node tests/test.js && node tests/test_pull.js && node tests/test_tasks.js && node tests/test_cases.js && node tests/test_tx.js && node tests/test_followups.js && node tests/test_ui_game.js"
   },
   "keywords": [],
   "author": "",
