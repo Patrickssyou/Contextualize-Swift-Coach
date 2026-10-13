@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build dist/pizza-support-qa-desk.html from src/template.html + src/rubric_v1.json + src/core.js, then syntax-check the script."""
+"""Build dist/pizza-support-qa-desk.html from src/template.html + src/rubric_v1.json + src/core.js + src/chat.js + src/ui/*, then syntax-check the script."""
 import json, re, subprocess, sys, os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +25,17 @@ if "/*__CHAT_CORE__*/" in tpl:
     tpl = tpl.replace("/*__CHAT_CORE__*/", m.group(1).rstrip())
 else:
     print("note: template has no /*__CHAT_CORE__*/ marker yet; chat brain not injected")
+
+# UI modules (owned by the UI lane): src/ui/<name>.css goes in at /*__UI_<NAME>_CSS__*/, src/ui/<name>.js at /*__UI_<NAME>__*/
+ui_dir = src("ui")
+for f in sorted(os.listdir(ui_dir)) if os.path.isdir(ui_dir) else []:
+    name, ext = os.path.splitext(f)
+    if ext not in (".js", ".css"):
+        continue
+    mark = "/*__UI_%s%s__*/" % (name.upper().replace("-", "_"), "_CSS" if ext == ".css" else "")
+    if mark not in tpl:
+        print("note: template has no %s marker; src/ui/%s not injected" % (mark, f)); continue
+    tpl = tpl.replace(mark, open(os.path.join(ui_dir, f), encoding="utf-8").read().rstrip())
 
 os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
 out = os.path.join(ROOT, "dist", "pizza-support-qa-desk.html")
