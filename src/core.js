@@ -355,6 +355,37 @@ function groupCases(docs){
   const byLeg=new Map();docs.forEach(d=>parent.set(d.id,d.id));
   docs.forEach(d=>((d.chain&&d.chain.legs)||[]).filter(talked).forEach(l=>{if(!l.id)return;const o=byLeg.get(l.id);if(o)parent.set(find(d.id),find(o));else byLeg.set(l.id,d.id)}));
   const out=new Map();docs.forEach(d=>{const r=find(d.id);(out.get(r)||out.set(r,[]).get(r)).push(d)});return out}
+/* ---- follow-up calls ----
+   The chain only links calls within 10 minutes of each other, so a callback the agent makes later (or to a different number) is never in it.
+   followUpConfig pulls the agent's OUTBOUND calls for a window; followUps lists the ones after the case's last talked leg. */
+const FOLLOW_DIMS = ["calls_conversation_id","calls_call_started_at_est","calls_call_duration_in_seconds","internal_users_user_login_name","calls_call_phone_detail","restaurants_unique_code","restaurants_english_name"];
+function followUpConfig(logins,fromDay,toDay){return {exploreName:PULL.explore,dimensions:FOLLOW_DIMS,metrics:[],
+  sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
+  filters:{dimensions:`calls_call_started_at_est_day inBetween=${fromDay},${toDay} AND calls_call_type equals=outbound_call AND internal_users_user_login_name equals=${(logins||[]).map(ldVal).join(",")}`}}}
+/* outbound calls by the case's agent that start at or after the last talked leg ended and no later than `hours` after, minus legs already in the chain.
+   rows: Lightdash rows (any agents; only the case agent's logins are kept when they are known). */
+function followUps(doc,rows,hours=24){
+  const legs=((doc&&doc.chain&&doc.chain.legs)||[]),talkedLegs=legs.filter(talked),use=(talkedLegs.length?talkedLegs:legs).filter(l=>!isNaN(ldTs(l.at)));
+  if(!use.length)return [];
+  const end=Math.max(...use.map(l=>ldTs(l.at)+(+l.sec||0)*1000)),limit=end+hours*3600000;
+  const inChain=new Set(legs.map(l=>String(l.id))),ros=ROSTER_DEFAULT.find(r=>r.name===doc.agent);
+  const mine=new Set(legs.filter(l=>l.graded??l.own).map(l=>l.login).concat(ros?ros.logins:[]).filter(Boolean));
+  const seen=new Set(),out=[];
+  (rows||[]).forEach(r=>{
+    if(!r||(r.calls_call_type&&r.calls_call_type!=="outbound_call"))return;
+    const id=String(r.calls_conversation_id||"");if(!id||inChain.has(id)||seen.has(id))return;
+    if(mine.size&&!mine.has(r.internal_users_user_login_name))return;
+    const t=ldTs(r.calls_call_started_at_est);if(isNaN(t)||t<end||t>limit)return;
+    seen.add(id);const code=r.restaurants_unique_code||"";
+    out.push({id,at:new Date(t).toISOString().slice(0,19),sec:+r.calls_call_duration_in_seconds||0,phone:String(r.calls_call_phone_detail||""),code,name:cleanName(r.restaurants_english_name),
+      sameRestaurant:!!code&&code===(doc.restaurantId||""),minutesAfter:Math.round((t-end)/60000),t})});
+  return out.sort((a,b)=>a.t-b.t).map(({t,...o})=>o)}
+function followUpLine(doc,list,hours=24){
+  const who=(doc&&doc.agent)||"The agent",n=(list||[]).length;
+  if(!n)return `No outbound call by ${who} in the ${hours} hours after the last call.`;
+  const item=f=>{const to=f.name||f.phone||"an unknown number",c=f.code?` (${f.code}${f.sameRestaurant?", same restaurant":""})`:"";return `${clock12u(ldTs(f.at))} to ${to}${c}`};
+  const shown=list.slice(0,8).map(item).join(", "),more=n>8?`, and ${n-8} more`:"";
+  return `${who} made ${n} outbound call${n===1?"":"s"} in the ${hours} hours after the last call: ${shown}${more}.`}
 /* PULL-CORE END */
 if(typeof module!=="undefined")module.exports={PULL,GD,ROSTER_DEFAULT,SCOPE_DEFAULT,LD_DIMS,ldTs,etDay,etClock,addDaysU,isPhone,cleanName,cleanAgent,ldVal,fnv,kindOf,normRows,makeRoster,groupOf,scopeRows,whoOf,buildChain,eligibleFor,linkedNumbers,candidatesFor,choosePicks,partyOf,queueDoc,populationOf,ldConfig,
-  legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask};
+  legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask,FOLLOW_DIMS,followUpConfig,followUps,followUpLine};
