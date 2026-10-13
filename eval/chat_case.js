@@ -4,7 +4,8 @@
 //   node eval/chat_case.js <sid> analysis  -> needs facts.out.json; writes the analysis prompt
 //   node eval/chat_case.js <sid> grade     -> needs analysis.out.json; writes the grade prompt
 //   node eval/chat_case.js <sid> report    -> needs grade.out.json; prints the audit
-// Options: --calib=none|all (default all, minus the case itself), --tag=<name> (output prefix, default "run")
+//   node eval/chat_case.js <sid> all --run -> runs every pass blind through the Claude CLI (Sonnet, no tools, no project files), then prints the report
+// Options: --calib=none|all (default all, minus the case itself), --tag=<name> (output prefix, default "run"), --model=<alias> (default sonnet)
 // Case fixtures and outputs live in data/chats/cases/ (git-ignored real data).
 const fs = require('fs'), path = require('path');
 const B = require('../src/chat.js');
@@ -13,6 +14,25 @@ const [sid, step] = process.argv.slice(2);
 const opt = Object.fromEntries(process.argv.slice(4).map(a => a.replace(/^--/, '').split('=')));
 const tag = opt.tag || 'run', F = s => path.join(DIR, `${sid}.${tag}.${s}`);
 const rj = f => JSON.parse(fs.readFileSync(f, 'utf8'));
+/* one blind pass: the prompt file goes to a fresh Claude with no tools and no project context, the JSON reply is saved */
+function blind(pass) {
+  const { execFileSync } = require('child_process'), os = require('os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-eval-'));
+  const txt = execFileSync('claude', ['-p', '--safe-mode', '--model', opt.model || 'sonnet', '--tools', '', '--output-format', 'text',
+    '--system-prompt', 'Follow the instructions in the message exactly. Reply with only the JSON object it asks for.'],
+    { input: fs.readFileSync(F(pass + '.txt')), cwd, maxBuffer: 1e8, timeout: 900000 }).toString();
+  const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+  if (a < 0 || b < a) throw new Error(`${pass}: no JSON in the reply: ${txt.slice(0, 300)}`);
+  fs.writeFileSync(F(pass + '.out.json'), JSON.stringify(JSON.parse(txt.slice(a, b + 1)), null, 1));
+  console.log(`ran ${pass} blind -> ${F(pass + '.out.json')}`);
+}
+if (step === 'all') {
+  if (!('run' in opt)) throw new Error('all needs --run');
+  const self = process.argv.slice(1, 3), rest = process.argv.slice(4).filter(a => a !== '--run');
+  const sub = st => require('child_process').execFileSync(process.execPath, [...self, st, ...rest], { stdio: 'inherit' });
+  sub('refs'); blind('refs'); sub('facts'); blind('facts'); sub('analysis'); blind('analysis'); sub('grade'); blind('grade'); sub('report');
+  process.exit(0);
+}
 const policy = rj(path.join(ROOT, 'data/chats/policy_pack.json'));
 const calAll = fs.existsSync(path.join(ROOT, 'data/chats/calibration.json')) ? rj(path.join(ROOT, 'data/chats/calibration.json')) : [];
 const cal = opt.calib === 'none' ? [] : calAll.filter(c => c.sid !== sid);
