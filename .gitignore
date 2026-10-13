@@ -12,3 +12,6 @@ node_modules
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# data is a symlink inside lane worktrees; a trailing-slash rule would miss it
+data
