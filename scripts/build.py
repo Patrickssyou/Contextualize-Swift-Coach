@@ -17,6 +17,15 @@ m = re.search(r"/\* PULL-CORE START \*/\n(.*?)/\* PULL-CORE END \*/", core, re.S
 assert m and "/*__PULL_CORE__*/" in tpl
 tpl = tpl.replace("/*__PULL_CORE__*/", m.group(1).rstrip())
 
+# chat brain (WIRA chats), also loaded by the node tests
+chat = open(src("chat.js"), encoding="utf-8").read()
+m = re.search(r"/\* CHAT-CORE START \*/\n(.*?)/\* CHAT-CORE END \*/", chat, re.S)
+assert m and "/*__PULL_CORE__*/" not in tpl
+if "/*__CHAT_CORE__*/" in tpl:
+    tpl = tpl.replace("/*__CHAT_CORE__*/", m.group(1).rstrip())
+else:
+    print("note: template has no /*__CHAT_CORE__*/ marker yet; chat brain not injected")
+
 os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
 out = os.path.join(ROOT, "dist", "pizza-support-qa-desk.html")
 open(out, "w", encoding="utf-8").write(tpl)

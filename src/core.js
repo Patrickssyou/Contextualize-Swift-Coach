@@ -400,5 +400,5 @@ function followUpLine(doc,list,hours=24){
   const shown=list.slice(0,8).map(item).join(", "),more=n>8?`, and ${n-8} more`:"";
   return `${who} made ${n} outbound call${n===1?"":"s"} in the ${hours} hours after the last call: ${shown}${more}.`}
 /* PULL-CORE END */
-if(typeof module!=="undefined")module.exports={PULL,GD,ROSTER_DEFAULT,SCOPE_DEFAULT,LD_DIMS,ldTs,etDay,etClock,addDaysU,isPhone,cleanName,cleanAgent,ldVal,fnv,kindOf,normRows,makeRoster,groupOf,scopeRows,whoOf,buildChain,eligibleFor,linkedNumbers,candidatesFor,choosePicks,partyOf,queueDoc,populationOf,ldConfig,
+if(typeof module!=="undefined")module.exports={capText,dur,clock12u,CTX,PULL,GD,ROSTER_DEFAULT,SCOPE_DEFAULT,LD_DIMS,ldTs,etDay,etClock,addDaysU,isPhone,cleanName,cleanAgent,ldVal,fnv,kindOf,normRows,makeRoster,groupOf,scopeRows,whoOf,buildChain,eligibleFor,linkedNumbers,candidatesFor,choosePicks,partyOf,queueDoc,populationOf,ldConfig,
   legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask,FOLLOW_DIMS,followUpConfig,followUps,followUpLine};
