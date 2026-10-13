@@ -34,7 +34,15 @@ const MOCK = ([seed, ld, opts, extra]) => {
     out[m[1]] = m[3].split(',').map(v => v.replace(/^"|"$/g, '')) }); return out };
   const queries = {};
   const cap = cfg => Math.min(cfg.limit || 1e9, window.__opts.cap || 1000);
+  // chats (extra.chat): any number of "field equals=a,b" clauses plus "<field>_day inBetween=a,b" on the field's date, projected to the asked fields
+  const CH = extra.chat;
+  const pick = (rows, f, keys) => rows.filter(r => Object.entries(f).every(([k, vals]) => {
+    if (/_day$/.test(k)) { const d = String(r[k.replace(/_day$/, '')] || '').slice(0, 10); return d >= vals[0] && d <= vals[1] }
+    return vals.includes(String(r[k])) })).map(r => Object.fromEntries(keys.map(k => [k, r[k] ?? null])));
   const run = cfg => { const f = parse(cfg.filters.dimensions);
+    if (CH && cfg.exploreName === 'wira_project_tasks') return pick(CH.base.concat(CH.rel), f, cfg.dimensions).slice(0, cap(cfg));
+    if (CH && cfg.exploreName === 'greendot_orders_analytics_aggregate') return pick(CH.orders, f, cfg.dimensions.concat(cfg.metrics || [])).slice(0, cap(cfg));
+    if (CH && cfg.dimensions.includes('asr_transcript_call_transcript') && cfg.dimensions.includes('calls_call_phone_detail')) return pick(CH.calls, f, cfg.dimensions).slice(0, cap(cfg));
     if (cfg.exploreName === 'wira_tasks') { const [a, b] = f.wira_tasks_task_created_at_est_day, field = Object.keys(f).find(k => k !== 'wira_tasks_task_created_at_est_day'), vals = new Set(f[field]);
       return extra.tasks.filter(r => { const d = r.wira_tasks_task_created_at_est.slice(0, 10); return d >= a && d <= b && vals.has(String(r[field])) }).slice(0, cap(cfg))
         .map(r => Object.fromEntries(cfg.dimensions.map(k => [k, r[k] ?? null]))) }
@@ -64,18 +72,28 @@ const MOCK = ([seed, ld, opts, extra]) => {
         if (q.polls-- > 0) return { content: [], payload: { result: { status: 'running', queryUuid: input.queryUuid, nextPollAfterMs: 20 } } };
         return { content: [], payload: { result: { status: 'done', queryUuid: input.queryUuid, rows: q.rows, fields: {}, exploreUrl: null } } } }
       throw { code: 'bad_request' } } };
+  // chat passes first: the chat facts prompt also says "note-taker". The real case (CH.realSid) gets its saved replies, invented chats a small valid one
+  const chatReply = input => { if (!CH) return null;
+    const sid = (input.match(/CHAT (\S+) ·/) || [])[1] || '', real = sid === String(CH.realSid), S = CH.synth;
+    if (/find the order a support chat is about/.test(input)) return CH.refs || {};
+    if (/auditing one WIRA support chat/.test(input)) return real ? CH.facts : S.facts;
+    if (/You are the analyst for a QA lead/.test(input)) return real ? CH.analysis : S.analysis;
+    if (/You are Swift Coach/.test(input)) return real ? CH.grade : S.grade[Number(sid.slice(-1)) % S.grade.length];
+    return null };
   // sample: records the prompt, answers with a canned case read after a short wait (or fails / waits for Stop)
   const sample = Object.assign(async () => ({ text: '{}', truncated: false, modelTierApplied: 'default' }), {
     json: (input, o) => new Promise((resolve, reject) => { window.__prompts.push({ input, tier: o && o.modelTier });
       const sig = o && o.signal; if (sig) sig.addEventListener('abort', () => reject({ code: 'cancelled', message: 'stopped' }));
-      setTimeout(() => { if (sig && sig.aborted) return; if (window.__opts.sampleFail) reject({ code: window.__opts.sampleFail, message: 'mock' }); else resolve(clone(/note-taker/.test(input) ? (window.__opts.factsReply || extra.factsReply || {calls:[{n:1,bullets:['Store calls about an order','Agent checks and fixes it']}],timeline:[{src:'Call 1',when:'11:37 AM',who:'Store',kind:'said',what:'Says orders are not reaching the store'},{src:'Call 1',when:'11:38 AM',who:'Agent',kind:'did',what:'Escalated to the product team'}],promises:[{src:'Call 1',who:'Agent',to:'Store',what:'Call back once fixed',by:''}]}) : (window.__opts.aiReply || extra.aiReply))) }, window.__opts.sampleMs || 150) }),
+      setTimeout(() => { if (sig && sig.aborted) return; if (window.__opts.sampleFail) { reject({ code: window.__opts.sampleFail, message: 'mock' }); return }
+        const ch = chatReply(input); if (ch) { resolve(clone(ch)); return }
+        resolve(clone(/note-taker/.test(input) ? (window.__opts.factsReply || extra.factsReply || {calls:[{n:1,bullets:['Store calls about an order','Agent checks and fixes it']}],timeline:[{src:'Call 1',when:'11:37 AM',who:'Store',kind:'said',what:'Says orders are not reaching the store'},{src:'Call 1',when:'11:38 AM',who:'Agent',kind:'did',what:'Escalated to the product team'}],promises:[{src:'Call 1',who:'Agent',to:'Store',what:'Call back once fixed',by:''}]}) : (window.__opts.aiReply || extra.aiReply))) }, window.__opts.sampleMs || 150) }),
     limits: async () => ({ maxPromptBytes: 262144 }) });
   window.claude = { use: async n => (window.__opts.noSample && n === 'sample') ? null : ({ db, user, downloads, mcp, sample })[n] ?? null };
 };
 
 async function openPage(browser, seed, opts, viewport, more) {
   const ctx = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
-  const page = await ctx.newPage(); await page.clock.setFixedTime(new Date('2026-10-02T12:00:00Z')); const errors = [];
+  const page = await ctx.newPage(); await page.clock.setFixedTime(new Date((more && more.now) || '2026-10-02T12:00:00Z')); const errors = [];
   page.on('console', m => { if (m.type() === 'error' && !/fonts\.googleapis|ERR_FAILED/.test(m.text())) errors.push(m.text()) });
   page.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
   const html = page_html();
@@ -83,7 +101,56 @@ async function openPage(browser, seed, opts, viewport, more) {
     if (u.startsWith('http://qa.test/')) return route.fulfill({ contentType: 'text/html', body: html });
     if (u.includes('xlsx.full.min.js')) return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(path.join(DIR, 'node_modules/xlsx/dist/xlsx.full.min.js')) });
     return route.abort() });
-  await page.addInitScript(MOCK, [seed, LD, opts || {}, { tasks: TASKS, tx: TX, aiReply: AI['dd2c017b-ab6c-434c-b9df-1a6408ee0ee5'], slack: (more && more.slack) || null }]);
+  await page.addInitScript(MOCK, [seed, LD, opts || {}, { tasks: TASKS, tx: TX, aiReply: AI['dd2c017b-ab6c-434c-b9df-1a6408ee0ee5'], slack: (more && more.slack) || null, chat: (more && more.chat) || null }]);
   return { page, ctx, errors };
 }
-module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR };
+
+/* The chat world for the chat UI tests: the real case in data/chats/cases/<sid>.json (git-ignored) plus invented chats.
+   Invented chats use fake people and restaurants; the real case's SA, restaurant and text are read at run time and never written into this file. */
+const CHAT_DIR = path.join(DIR, 'data/chats');
+function chatWorld(sid) {
+  const file = path.join(CHAT_DIR, `cases/${sid}.json`);
+  if (!fs.existsSync(file)) return null;
+  const fx = JSON.parse(fs.readFileSync(file, 'utf8')), out = p => JSON.parse(fs.readFileSync(path.join(CHAT_DIR, `cases/${sid}.r2.${p}.out.json`), 'utf8'));
+  const real = fx.chatRow, code = real.restaurants_unique_code, day = real.wira_project_tasks_created_at_est.slice(0, 10);
+  const realSA = { name: real.wira_project_tasks_assigned_user, email: real.wira_project_tasks_agent_alias };
+  const SA = [realSA, { name: 'Mara Quill', email: 'mara.quill@wondersco.com' }, { name: 'Theo Brandt', email: 'theo.brandt@wondersco.com' }];
+  const addD = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  let n = 0;
+  const mk = (sa, rest, rcode, dayOff, hm, msgs, o) => { n++; const id = String(9900100 + n), at = `${addD(day, dayOff)}T${hm}:00.000Z`, saIdx = msgs.findIndex(m => m[0] === 'sa');
+    const who = w => w === 'client' ? 'client-+15550100' + String(n).padStart(2, '0') : w === 'sa' ? sa.email : w;
+    return Object.assign({ wira_project_tasks_wira_id: `Wid(0,1,1,0,${id})`, wira_project_tasks_short_wira_id: id, wira_project_tasks_created_at_est: at, wira_project_tasks_closed_at_est: null,
+      wira_project_tasks_status: 'closed', wira_project_tasks_sub_status: null, wira_project_tasks_task_title: msgs[0][1].slice(0, 80),
+      wira_project_tasks_task_comments: msgs.map(m => m[1]).join(' ## '), wira_project_tasks_task_commentors: msgs.map(m => who(m[0])).join(' ## '),
+      wira_project_tasks_conversation_direction: 'inbound', wira_project_tasks_created_by: null, wira_project_tasks_created_by_title: null,
+      wira_project_tasks_assigned_user: sa.name, wira_project_tasks_agent_alias: sa.email, wira_project_tasks_client_alias: who('client'),
+      wira_project_tasks_first_response_time_minutes: saIdx < 0 ? null : 1.5 + n, wira_project_tasks_first_client_message_time_est: at, wira_project_tasks_first_agent_reply_time_est: saIdx < 0 ? null : at,
+      wira_project_tasks_shape_name: 'general-conversation', wira_project_tasks_rating: null, wira_project_tasks_wira_ticket_url: `https://wira.example.test/tasks/${id}`,
+      restaurants_unique_code: rcode, restaurants_english_name: rest }, o || {}) };
+  const ask = [['client', 'Hi, a delivery order from earlier never printed in the kitchen. This is Rhea.'], ['sa', 'Hi Rhea, sorry about that. Checking the order and the printer log now.'], ['sa', 'The order reached the tablet at 6:02 PM; the printer was offline. Reconnect it from Settings and it will print again.'], ['client', 'Thanks, it works now.']];
+  const synth = [
+    mk(SA[0], 'Lantern Slice', 'R90001', 1, '12:10', ask),
+    mk(SA[1], 'Oak Street Pies', 'R90002', 0, '10:05', [['client', 'Hello, can you change our closing time to 10 PM tonight? This is Omar.'], ['sa', 'Hi Omar, done. The online menu now closes at 10 PM tonight.']]),
+    mk(SA[1], 'Harbor Crust', 'R90003', 0, '13:40', ask),
+    mk(SA[1], 'Harbor Crust', 'R90003', 1, '09:15', [['client', 'A customer says we charged them twice. This is Lena.'], ['sa', 'Hi Lena, checking both charges now.'], ['sa', 'Only one charge settled; the other is a hold that drops off in 3 days.']]),
+    mk(SA[1], 'Maple Oven', 'R90004', 2, '18:30', ask),
+    mk(SA[1], 'Maple Oven', 'R90004', 3, '11:00', [['client', 'Need a refund on order 12, wrong pizza. This is Dev.'], ['sa', 'Hi Dev, checking the call recording for order 12.']]),
+    mk(SA[1], 'Oak Street Pies', 'R90002', 4, '16:20', [['client', 'Our menu prices are wrong online. This is Omar.'], ['sa', 'Hi Omar, sending the corrected prices to the menu team now.']]),
+    mk(SA[1], 'Lantern Slice', 'R90001', 5, '20:45', [['client', 'Is anyone there? The phones stopped ringing.'], ['client', 'Hello?']]),
+    mk(SA[2], 'Copper Kettle Pizza', 'R90005', 2, '14:00', [['dana.lowe@wondersco.com', 'Hi team, opening this for the owner: they want weekend hours added. This is Dana from accounts.'], ['client', 'Yes please, Saturday 11 to 11. This is Ivo.'], ['sa', 'Hi Ivo, Saturday hours are set to 11 AM to 11 PM.']],
+      { wira_project_tasks_conversation_direction: 'outbound', wira_project_tasks_created_by: 'Dana Lowe', wira_project_tasks_created_by_title: 'Account Executive' }),
+    mk(SA[2], 'Copper Kettle Pizza', 'R90005', 3, '09:30', ask)];
+  const tagBase = r => Object.assign({ restaurants_cuisine_type: 'pizza', wira_project_tasks_project_name: 'conversation' }, r), tagCode = r => Object.assign({ restaurants_unique_code: code }, r);
+  const synthFacts = { calls: [], timeline: [{ src: 'M1', when: '', who: 'Client', kind: 'said', what: 'Reports a problem with an order' }, { src: 'M2', when: '', who: 'SA', kind: 'said', what: 'Says the order is being checked' }], claims: [{ src: 'M2', claim: 'The order is being checked', check: 'cant_check', evidence: 'No order data linked' }], promises: [] };
+  const synthAnalysis = { summary: 'A routine client request handled in chat.', fault: { who: 'restaurant', why: 'The issue sat with the restaurant setup.', cites: ['F1'] }, bucket: { id: 'none', why: 'Not a Tarro error.', cites: ['F1'] },
+    affectedOrder: '', selfDelivery: false, deliveryFee: null, ideal: { client: 'Fix it in chat and confirm.', customer: '', escalation: { needed: false, why: 'Routine', to: '' } },
+    saOffer: { amount: null, text: 'Nothing offered', cites: [] }, saPath: { match: 'yes', why: 'Fixed in chat.' }, aeInvolvement: { kind: 'none', saCouldPrevent: false, why: '' }, firstResponse: { concludedBeforeEvidence: false, why: 'Checked first.', cites: ['F2'] } };
+  const g = s => ({ scores: s, reasons: Object.fromEntries(Object.keys(s).map(k => [k, 'Cites F1 and F2.'])), route: { facts: { mark: 'right', why: 'Checked.' }, analysis: { mark: 'right', why: 'Right fault.' }, solution: { mark: 'partly', why: 'Close.' }, escalation: { mark: 'right', why: 'Not needed.' } },
+    wentWell: ['Replied fast', 'Checked before answering'], nextTime: [{ what: 'Closed without confirming', why: 'The client may still be stuck', do: 'Ask if it works', model: 'Can you confirm it prints now?' }], verdictWhy: 'Solid.' });
+  return { fx, realSid: String(sid), realSA, SA, code, synthIds: synth.map(r => r.wira_project_tasks_short_wira_id),
+    chat: { realSid: String(sid), base: [tagBase(real)].concat(synth.map(tagBase)), rel: fx.relRows.map(tagCode), orders: fx.orderRows.map(tagCode), calls: fx.callRows.map(tagCode),
+      refs: {}, facts: out('facts'), analysis: out('analysis'), grade: out('grade'),
+      synth: { facts: synthFacts, analysis: synthAnalysis, grade: [g({ fr: 3, ev: 3, rs: 3, fa: 3, path: 3, amt: 3, expl: 'na', esc: 'na', tone: 3 }), g({ fr: 2, ev: 2, rs: 3, fa: 2, path: 2, amt: 2, expl: 2, esc: 'na', tone: 3 }), g({ fr: 1, ev: 1, rs: 2, fa: 1, path: 1, amt: 1, expl: 'na', esc: 0, tone: 2 })] } },
+    policy: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'policy_pack.json'), 'utf8')), calibration: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'calibration.json'), 'utf8')) };
+}
+module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld };

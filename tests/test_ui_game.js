@@ -10,9 +10,13 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
 (async()=>{const b=await chromium.launch();
  const {page,ctx,errors}=await openPage(b,seed,{viewer:true},{width:1280,height:900});
  await page.goto('http://qa.test/');await page.waitForTimeout(300);
- ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='queue','opens on Snapshot');
- const tabs=(await page.locator('[role=tab]').allInnerTexts()).map(t=>t.replace(/\s+/g,' ').trim());
- ok(tabs.length===5&&['Snapshot','Calls','Facts','Results','Database'].every((x,i)=>tabs[i].includes(x)),'tabs: Snapshot, Calls, Facts, Results, Database ('+tabs.join(' / ')+')');
+ ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='chats','opens on Chats › Queue');
+ const areas=(await page.locator('.tabs [data-area]').allInnerTexts()).map(t=>t.replace(/\s+/g,' ').trim());
+ ok(areas.length===4&&['Chats','Calls','Results','Database'].every((x,i)=>areas[i].startsWith(x)),'areas: Chats, Calls, Results, Database ('+areas.join(' / ')+')');
+ await page.click('[data-area="calls"]');await page.waitForTimeout(150);
+ ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='queue','Calls opens on Snapshot');
+ const tabs=(await page.locator('#sub-calls [role=tab]').allInnerTexts()).map(t=>t.replace(/\s+/g,' ').trim());
+ ok(tabs.length===3&&['Snapshot','Calls','Facts'].every((x,i)=>tabs[i].includes(x))&&await page.locator('#sub-chats').isHidden(),'Calls steps: Snapshot, Calls, Facts ('+tabs.join(' / ')+')');
  await page.click('#wkNext');await page.waitForTimeout(300);
  ok(/0\s+of 30 audited/.test(await page.locator('#quest').innerText()),'week quest starts at 0 of 30');
  ok(await page.locator('.qcard:not(.qcases)',{hasText:'CJ Domingo'}).locator('.pips i').count()===5,'CJ card has 5 pips');
@@ -50,7 +54,7 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
  ok(await page.locator('#toast .tact',{hasText:'Next pick'}).count()===1,'toast offers Next pick');
  ok((await page.locator('#xpNum').innerText()).trim()===xp1+' XP','header shows XP');
  ok(await page.locator('#streak.on').count()===1&&(await page.locator('#streakN').innerText())==='1','streak lit at 1 day');
- ok(await page.locator('.badge.on',{hasText:'First audit'}).count()===1,'First audit badge earned');
+ ok(await page.locator('#quest .badge.on',{hasText:'First audit'}).count()===1,'First audit badge earned');
  await page.click('#toast .tact');await page.waitForTimeout(200);
  ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='calls','Next pick goes to Calls');
  const nextQ=await page.evaluate(()=>form.queueId);ok(nextQ&&nextQ!==CJ,'next pick loaded');
