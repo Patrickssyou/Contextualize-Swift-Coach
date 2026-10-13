@@ -216,8 +216,9 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click('#tkCopy'); await page.waitForTimeout(150);
   ok(/Ticket copied|Couldn't copy/.test(await txt(page, '#toast')), 'Copy ticket gives feedback');
   const plain = await page.evaluate(s => chTicketText(chatBy(s), chatAud[s], chatDraft(s)), SID);
-  ok(plain.startsWith(`QA ticket · Chat ${SID} · ${RV} ${RP}% · P1`) && plain.includes('Order: Ticket 65 ($59.10) https://greendot') && plain.includes('Compensation check: Wrong') && plain.includes('- Taxes included:') && /\n1\. P1 · Resolution accuracy/.test(plain) && plain.includes(`What ${first} should have done:`) && !/<[a-z]/i.test(plain),
-    'the copied ticket is clean plain text: fields, comp check, findings with should-have-done');
+  ok(plain.startsWith(`QA ticket · Chat ${SID} · ${RV} ${RP}% · P1`) && plain.includes('Order: Ticket 65 ($59.10) https://greendot') && plain.includes('Compensation check: Wrong') && plain.includes('- Taxes included:') && plain.includes('- Offered on a shared fault without approval:')
+    && /\n1\. P1 · Approval · Offered on a shared fault without approval\n/.test(plain) && /\n2\. P1 · Resolution accuracy · Taxes included · 1\/3\n   What happened: Tax \(\$4\.38\) was in the base\./.test(plain) && plain.includes(`What ${first} should have done:`) && !/<[a-z]/i.test(plain),
+    'the copied ticket is clean plain text: fields, comp check (error and flag), findings with should-have-done');
   // phone and dark: the ticket stays first, fields stack, nothing overflows
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120); await shot(page, 'ticket-dark.png');
   ok(await page.evaluate(() => getComputedStyle(document.body).backgroundColor) !== 'rgb(253, 248, 244)' && await page.evaluate(() => getComputedStyle(document.querySelector('#cTicket .tkhd')).backgroundColor) !== 'rgb(244, 239, 234)', 'dark: the ticket takes the dark tokens');
@@ -242,7 +243,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const note0 = await page.locator('#coachText').inputValue();
   ok(note0.startsWith(`Chat ${SID} · `) && note0.includes(`— ${RV} (${RP}%)`), 'coaching note starts with the chat line and the verdict');
   const items = note0.slice(note0.indexOf('\nNext time\n')).split('\n').filter(l => /^\d+\. /.test(l));
-  ok(items.length === realA.grade.findings.length && items[0].startsWith('1. P1 · Resolution accuracy') && note0.includes(`Do: ${realA.grade.findings[0].should}`) && note0.includes('Why it matters: '), "coaching uses the ticket's findings, P1 first: what happened, why, do, model");
+  ok(items.length === realA.grade.findings.length && items[0].startsWith('1. P1 · Approval') && items[1].startsWith('2. P1 · Resolution accuracy') && note0.includes(`Do: ${realA.grade.findings[0].should}`) && note0.includes('Why it matters: '), "coaching uses the ticket's findings, P1 first: what happened, why, do, model");
   // cite links jump without touching the route
   await page.locator('#cs-an .cite').first().click(); await page.waitForTimeout(200);
   ok(await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, 'cites scroll to the fact and keep the route');
@@ -373,14 +374,9 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(s => openChat(s), SID); await page.waitForTimeout(250);
   const an = await txt(page, '#cs-an');
   ok(/case notes/i.test(an) && an.includes('repeat'), 'unknown analysis fields are shown, not dropped');
-  // an approval flag: a P1 finding with no criterion. Its flag shows as a warning in the comp check; Not a mistake only marks it
-  await page.evaluate(p => window.claude.use('db').then(db => db.doc(p).get().then(d => { const a = d.data();
-    a.check.flags = [{ code: 'over_limit', label: 'Over the limit without approval', detail: 'Above the limit; the lead approves first.' }];
-    a.grade.findings.unshift({ id: 'approval', label: 'Approval', score: null, max: null, priority: 'P1', type: 'Over the limit without approval', what: 'Above the limit; the lead approves first.', why: 'The policy holds the confirmation until the lead approves.', evidence: [], should: 'Hold the confirmation and ask the lead.', model: '', reason: '' });
-    return db.doc(p).set(a) })), P('audits/' + SID));
-  await page.waitForTimeout(250);
+  // the approval flag (offered on a shared fault without approval): a warning in the comp check and a P1 finding with no criterion. Not a mistake only marks it
   const pa = await txt(page, '#tkPct');
-  ok((await txt(page, '#tkComp .rflag')).includes('Over the limit without approval') && await page.locator('#tf-approval .tkscore').count() === 0 && (await txt(page, '#tf-approval .prio')) === 'P1', 'approval flag: a warning in the comp check, a P1 finding with no score');
+  ok((await txt(page, '#tkComp .rflag')).includes('Offered on a shared fault without approval') && await page.locator('#tkComp .rerr:not(.rflag)', { hasText: 'Offered on a shared fault' }).count() === 0 && await page.locator('#tf-approval').count() === 1 && await page.locator('#tf-approval .tkscore').count() === 0 && (await txt(page, '#tf-approval .prio')) === 'P1', 'approval flag: a warning in the comp check, a P1 finding with no score');
   await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
   ok(await page.locator('#tf-approval.not').count() === 1 && (await txt(page, '#tkPct')) === pa && await page.locator('#tkn-approval').isVisible(), 'Not a mistake on approval marks it and leaves the score alone');
   await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
