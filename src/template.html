@@ -1026,6 +1026,16 @@ function aiErr(e){const c=e&&e.code;
     c==="invalid_json"||c==="empty_completion"||c==="ai_shape"?"Claude's answer came back in the wrong shape. Try again.":c==="no_text"?"No transcripts for these calls yet.":
     c==="upstream_error"?"Claude didn't finish. Try again.":
     LD_ACCESS.includes(c)||["tool_error","ld_failed","ld_timeout","ld_text","ld_shape","server_unavailable"].includes(c)?pullErr(e,"Try again"):"Claude didn't finish. Try again."}
+/* outbound calls each named agent on the call or case made in the 24 hours after it, as plain lines for the facts pass */
+async function followUpText(){const c=validChain(form.chain);if(!c||!mcp)return "";
+  const lc=liveChain(c),legs=lc.legs.filter(l=>!isNaN(ldTs(l.at)));if(!legs.length)return "";
+  const names=(form.type==="case"&&form.team.length?form.team.map(t=>t.name):[agentName()]).filter(n=>n&&!/^SA pool/i.test(n));
+  const loginsOf=n=>{const r=ROSTER_DEFAULT.find(x=>x.name===n);return [...new Set((r?r.logins:[]).concat(c.legs.filter(l=>l.who===n&&l.login).map(l=>l.login)))]};
+  const who=names.map(n=>({n,logins:loginsOf(n)})).filter(x=>x.logins.length);if(!who.length)return "";
+  const last=Math.max(...legs.map(l=>ldTs(l.at)+(Number(l.sec)||0)*1000)),from=etDay(last),to=addDaysU(from,1);
+  const rows=await ldQuery(followUpConfig(who.flatMap(x=>x.logins),from,to),"QA Desk · follow-up calls");
+  return who.map(({n,logins})=>{const mine=rows.filter(r=>logins.includes(r.internal_users_user_login_name)),doc={agent:n,chain:{legs:c.legs.map(l=>Object.assign({},l,{graded:false,own:false}))}};
+    return followUpLine(doc,followUps(doc,mine))}).join("\n")}
 async function readCalls(){
   const key=caseKey(),legs=aiLegs();if(aiRun||!sampleFn||!mcp||!legs.length)return;
   const ctl=new AbortController();aiRun={key,ctl,step:"Getting transcripts…"};aiNote="";renderAi();
@@ -1037,7 +1047,9 @@ async function readCalls(){
     const tx=txCache;
     const withText=legs.filter(l=>(tx.get(l.id)||"").trim()).length;if(!withText)throw {code:"no_text"};
     const tasks=validTasks(form.tasks)||[];
-    const input={agent:agentName(),kind:form.kind||(form.type==="mgr"?"MGR":"CL"),restaurant:form.restaurantName,code:form.restaurantId,date:form.callDate,
+    aiRun.step="Checking for follow-up calls…";renderAi();
+    const followUp=await followUpText().catch(()=>"");if(ctl.signal.aborted)return;
+    const input={followUp,agent:agentName(),kind:form.kind||(form.type==="mgr"?"MGR":"CL"),restaurant:form.restaurantName,code:form.restaurantId,date:form.callDate,
       legs:legs.map(l=>Object.assign({},l,{text:tx.get(l.id)||""})),tasks,team:form.type==="case"?form.team.map(t=>t.name):[],slack:validSlack(form.slack)||[]};
     aiRun.step="1 of 2 · Writing down the facts…";renderAi();
     const F=cleanFacts(await sampleFn.json(factsPrompt(input),{signal:ctl.signal,modelTier:"default"}),input.legs);if(!F)throw {code:"ai_shape"};

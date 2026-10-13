@@ -49,7 +49,7 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
   await page.evaluate(() => window.claude.use('db').then(db => db.collection('queue').doc('zz-other-week').set({ week: '2026-01-05', agent: 'x', link: 'https://x.y' })));
   await page.waitForTimeout(150);
   log('chain still open after snapshot:', await card.locator('details.chain[open]').count());
-  await card.screenshot({ path: path.join(SHOTS, 'p2-angel-card.png') });
+  await page.waitForTimeout(300); await card.screenshot({ path: path.join(SHOTS, 'p2-angel-card.png') }).catch(() => {}); // card re-renders when tasks land
 
   // context chain in the queue card and on the score form
   if (ctxQ) {

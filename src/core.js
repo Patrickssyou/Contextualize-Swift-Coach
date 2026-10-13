@@ -265,7 +265,8 @@ function caseEvidence(c){const legs=c.legs||[],tasks=c.tasks||[];
       if(k.comments&&k.comments.length)f.push("Comments:\n"+k.comments.map(x=>`- ${x.who||"someone"}: ${capText(x.text,400)}`).join("\n"));
       return f.join("\n")}).join("\n"):`\nNo WIRA task was found from ${TASKS.beforeMin} minutes before the first call to ${TASKS.afterMin} minutes after the last.`;
   const sl=(c.slack||[]).length?"\n\nSLACK THREADS (where the team coordinated)"+c.slack.map(t=>{const st=ldTs(t.at);return `\n#${t.channel} · ${isNaN(st)?"":"posted "+clock12u(st)+" ET · "}${t.author||"someone"}: ${capText(t.text,600)}`+(t.replies||[]).map(r=>`\n- reply · ${r.who}: ${capText(r.text,300)}`).join("")}).join("\n"):"";
-  return "LINKED CALLS"+calls.join("\n")+"\n\nWIRA TASKS"+tk+sl+"\n";
+  const fu=c.followUp?"\n\nFOLLOW-UP CALLS (outbound calls the agents made after the last linked call; Lightdash has no customer numbers, so a call listed here may or may not be about this order)\n"+c.followUp:"";
+  return "LINKED CALLS"+calls.join("\n")+"\n\nWIRA TASKS"+tk+sl+fu+"\n";
 }
 /* ---- Two passes. Pass 1 (facts): what was said and done, per call and in one timeline, plus explicit promises. No conclusions.
    Pass 2 (analysis): reads only the pass-1 facts, never the transcripts, and concludes; every conclusion cites fact ids. ---- */
