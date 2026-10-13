@@ -2,7 +2,7 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:2, lessonMax:20};
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:2, lessonMax:20, slowReplyMin:15};
 const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
@@ -64,6 +64,7 @@ function chatRow(x,ctx){const g=k=>x["wira_project_tasks_"+k];const s=v=>v==null
   c.initiator=c.direction==="inbound"?"client":c.createdByTitle==="Account Executive"?"ae":c.direction||"";
   c.msgs=chatMessages(g("task_comments"),g("task_commentors"),Object.assign({saEmail:c.saEmail,sa:c.sa},ctx||{}));
   c.clientName=(c.msgs.find(m=>m.role==="client"&&m.name!=="Client")||{}).name||"";
+  c.timing=chatTiming(c,[]);
   return c}
 
 /* ---------- 1. Messages with owners ---------- */
@@ -145,6 +146,41 @@ function chatMessages(comments,commentors,ctx){ctx=ctx||{};
     m.inferred=m.internal;delete m.raw});
   return out}
 function chatTranscript(c){return (c.msgs||[]).map(m=>`M${m.n} · ${ROLE_L[m.role]||m.role}${m.role==="client"?"":" — "+m.name}${m.role==="sa"?" (audited)":""}${m.internal?" [internal note, inferred]":""}: ${capText(m.text,1600)}`).join("\n")}
+
+/* ---------- 1b. Timing ----------
+   WIRA keeps NO time per message. Checked in Lightdash (Oct 14): wira_project_tasks, rt_wira_tasks and wira_tasks carry only the ' ## '-joined comment text and authors;
+   wira_tasks_state, escalations and chats_with_internal_pending_handoff carry task-level times only. What exists: the chat's own times (opened, first client message,
+   first Support reply, closed) and its status changes (wira_tasks_state, one row per change). The status does NOT follow the conversation: it flips on the first Support reply,
+   on a handoff and on close, never on each client message (no chat of the week of Oct 5 has a second pending_reply). So these times say how long the first reply took
+   and how long the chat sat in each status, never how long any later reply took. timing.perMessage is false until that changes. */
+const rnd1 = n => Math.round(Number(n)*10)/10;
+const minBetween = (a,b) => {const x=ldTs(a),y=ldTs(b);return isNaN(x)||isNaN(y)?null:rnd1((y-x)/6e4)};
+const chatStatesConfig = wid => ({exploreName:"wira_tasks_state",dimensions:["wira_tasks_state_task_id","wira_tasks_state_task_status","wira_tasks_state_task_sub_status","wira_tasks_state_created_at_est"],
+  metrics:[],sorts:[{fieldId:"wira_tasks_state_task_id",descending:false},{fieldId:"wira_tasks_state_created_at_est",descending:false}],limit:PULL.cap,
+  /* no day window: a chat's later status changes (a close, a re-open) can come days after it opened. wid may be one id or a list (a week at a time) */
+  filters:{dimensions:`wira_tasks_state_task_id equals=${[].concat(wid).map(ldVal).join(",")}`}});
+const stateRow = x => {const s=v=>v==null||v==="None"?"":String(v);return {wid:s(x.wira_tasks_state_task_id),at:s(x.wira_tasks_state_created_at_est).slice(0,19),status:s(x.wira_tasks_state_task_status),sub:s(x.wira_tasks_state_task_sub_status)}};
+/* whose turn WIRA's status says it is */
+const stateOn = (status,sub) => status==="closed"?"closed":sub==="waiting_on_client"?"client":sub==="pending_internal_handoff"?"handoff":status==="open"||status==="in_progress"?"support":"";
+function chatTiming(c,rows){
+  const sts=(rows||[]).map(stateRow).filter(s=>s.at&&(!s.wid||!c.wid||s.wid===c.wid)).sort((a,b)=>ldTs(a.at)-ldTs(b.at));
+  const states=sts.map((s,i)=>({at:s.at,status:s.status,sub:s.sub,on:stateOn(s.status,s.sub),min:sts[i+1]?minBetween(s.at,sts[i+1].at):null}));
+  const last=states[states.length-1];if(last&&last.on!=="closed")last.ongoing=true;
+  const sum=on=>states.length?rnd1(states.filter(s=>s.on===on).reduce((t,s)=>t+(s.min||0),0)):null;
+  const closedAt=c.closedAt||((states.find(s=>s.on==="closed")||{}).at)||"";
+  /* the two times, which the status change confirms; WIRA's first_response_time_minutes (c.frt) is kept beside it because it disagrees on about 1 chat in 80 (chat 1814251: 2.1 min against 23.2 between the times and the status change) */
+  const fromTimes=minBetween(c.firstClientAt,c.firstReplyAt),wira=c.frt!=null&&!isNaN(c.frt)?rnd1(c.frt):null,firstReplyMin=fromTimes!=null?fromTimes:wira;
+  return {perMessage:false,opened:c.at||"",firstClientAt:c.firstClientAt||"",firstReplyAt:c.firstReplyAt||"",firstReplyMin,wiraFirstReplyMin:wira,slowFirstReply:firstReplyMin!=null&&firstReplyMin>CHAT.slowReplyMin,
+    closedAt,handleMin:closedAt?minBetween(c.at,closedAt):null,states,
+    waitingOnSupportMin:sum("support"),waitingOnClientMin:sum("client"),waitingOnHandoffMin:sum("handoff")}}
+const STATE_ON_L = {support:"Support's turn",client:"waiting on the client",handoff:"waiting on an internal handoff",closed:"closed","":""};
+/* the timing lines the facts pass and the grader read */
+function chatTimingLines(t,c){if(!t)return [];const day=String(t.opened||"").slice(0,10),at=v=>!v?"–":(String(v).slice(0,10)===day?"":String(v).slice(5,10)+" ")+String(v).slice(11,16),mn=v=>v==null?"–":v+" min";
+  const L=[`TIMING (WIRA status times, Eastern, 24-hour clock)`,
+    `Opened ${at(t.opened)} · first client message ${at(t.firstClientAt)} · first Support reply ${at(t.firstReplyAt)}${t.firstReplyMin!=null?` (${mn(t.firstReplyMin)} after the first client message${t.wiraFirstReplyMin!=null&&Math.abs(t.wiraFirstReplyMin-t.firstReplyMin)>=1?`; WIRA's own first-response figure says ${mn(t.wiraFirstReplyMin)}, which the times do not support`:""})`:""} · closed ${at(t.closedAt)}${t.handleMin!=null?` (open ${mn(t.handleMin)})`:""}`];
+  if(t.states.length)L.push(`Status changes: `+t.states.map(s=>`${s.status}${s.sub?"/"+s.sub:""} at ${at(s.at)}${s.ongoing?" (still the status when this data was pulled)":s.min!=null?` (${mn(s.min)})`:""}${STATE_ON_L[s.on]?`, ${STATE_ON_L[s.on]}`:""}`).join(" → "));
+  L.push(`WIRA does not time each message and its status does not change with every client message: do not work out how long any reply after the first took, and do not fault the SA on reply speed beyond the first reply and these status times.`);
+  return L}
 
 /* ---------- 2. Context: tasks, orders, recordings ---------- */
 function relatedTasksConfig(code,from,to){return {exploreName:CHAT.explore,dimensions:REL_DIMS,metrics:[],sorts:[{fieldId:"wira_project_tasks_created_at_est",descending:false}],limit:PULL.cap,
@@ -351,6 +387,7 @@ function chatEvidence(k){const c=k.chat,L=[];
   L.push(`CHAT ${c.sid} · ${c.restaurant}${c.code?` (${c.code})`:""} · opened ${c.at.replace("T"," ")} ET · ${c.initiator==="client"?"started by the client (M1 is the client's message)":c.initiator==="ae"?`created by AE ${c.createdBy}`:"started by "+(c.createdBy||"staff")}`);
   L.push(`Audited SA: ${c.sa}${c.frt!=null?` · first reply ${c.frt} min after the first client message`:""} · status ${c.status}${c.sub?" / "+c.sub:""}`);
   L.push(`Messages are in order; WIRA keeps no per-message times. Internal notes are inferred from the text (an @mention, or staff talking about the client); if one clearly reads as written to the client, treat it as client-visible.`);
+  chatTimingLines(k.timing||c.timing,c).forEach((x,i)=>L.push(...(i?[x]:["",x])));
   L.push("",chatTranscript(c));
   if((k.tasks||[]).length){L.push("","LINKED TASKS");k.tasks.forEach(t=>{L.push(`\nTASK ${t.sid}${t.parent===c.wid?" (child of this chat)":" (the SA's other task at this restaurant; may be another case)"} · created ${t.at.replace("T"," ")} ET by ${t.by||"unknown"} · assigned ${t.assigned||"nobody"} · ${t.intent||t.project} · status ${t.status}`);
     L.push(`Title: ${t.title}`);if(t.desc)L.push(`Description: ${t.desc}`);if(t.fields&&t.fields!=="{}")L.push(`Fields: ${capText(muUsd(t.fields),300)}`);
@@ -634,6 +671,10 @@ async function askPass(deps,prompt,pass,opts){try{return await deps.ask(prompt,p
    deps: {query(cfg,title) -> rows, ask(prompt,pass) -> parsed JSON, slack(chat,k) -> threads (optional), orderIds (reviewer's pick, optional), step(id,state,note)} */
 async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),day=String(c.at).slice(0,10),from=addDaysU(day,-1),T=`QA Desk · chat ${c.sid}`;
   const k={chat:c,tasks:[],orders:[],allOrders:[],ranked:[],refs:mergeRefs({},{}),calls:[],slack:[],notFound:[],orderNote:""};
+  /* the chat's status changes: a failed query leaves the times WIRA gave on the chat row */
+  k.timing=c.timing||chatTiming(c,[]);
+  if(c.wid){try{k.timing=c.timing=chatTiming(c,await q(chatStatesConfig(c.wid),T+" · states"))}
+    catch(e){if(deps.isStop&&deps.isStop(e))throw e;k.notFound.push("WIRA status times (the query didn't run)")}}
   step("tasks","run");
   if(c.code)k.tasks=pickRelated(c,await q(relatedTasksConfig(c.code,from,addDaysU(day,2)),T+" · tasks"));
   step("tasks","done",k.tasks.length?`${k.tasks.length} linked`:"none");
@@ -710,7 +751,7 @@ function chatQueueDoc(c,picked){return Object.assign({v:CHAT_V,week:chatWeek(c.a
   {msgs:(c.msgs||[]).map(m=>Object.assign({},m,{text:capText(m.text,4000)}))})}
 /* chatAudits/<sid>: the context, the passes, the score. Transcripts go in chatTx/<sid> to keep this doc small */
 function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
-  return {v:CHAT_V,sid:c.sid,wid:c.wid,url:c.url,week:chatWeek(c.at),at:c.at,sa:c.sa,restaurant:c.restaurant,code:c.code,initiator:c.initiator,title:c.title,frt:c.frt,clientName:c.clientName,
+  return {v:CHAT_V,sid:c.sid,wid:c.wid,url:c.url,week:chatWeek(c.at),at:c.at,sa:c.sa,restaurant:c.restaurant,code:c.code,initiator:c.initiator,title:c.title,frt:c.frt,timing:k.timing||c.timing||null,clientName:c.clientName,
     tasks:k.tasks.map(t=>({sid:t.sid,wid:t.wid,parent:t.parent===c.wid,at:t.at,project:t.project,intent:t.intent,title:t.title,desc:capText(t.desc,800),status:t.status,by:t.by,assigned:t.assigned,url:t.url,comments:t.comments.slice(0,12)})),
     orders:k.orders.map(o=>({label:o.label,id:o.id,ticket:o.ticket,at:o.at,source:o.source,type:o.type,coupon:o.coupon,items:o.items,tax:o.tax,tip:o.tip,other:o.other,total:o.total,callIds:o.callIds})),
     candidates:k.ranked.map(r=>({id:r.order.id,ticket:r.order.ticket,at:r.order.at,type:r.order.type,source:r.order.source,items:r.order.items,total:r.order.total,score:r.score,why:r.why})),
@@ -729,4 +770,4 @@ if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(gl
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
-    rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}
+    chatStatesConfig,stateRow,stateOn,chatTiming,chatTimingLines,minBetween,rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}
