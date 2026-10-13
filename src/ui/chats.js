@@ -36,6 +36,22 @@ const CH_ROLES=[["ae","AE/CSM"],["lead","Lead"],["crt","CRT"],["staff","Staff"]]
 const chFirst=s=>String(s||"").trim().split(/\s+/)[0]||"";
 const chLower=s=>s&&/^[A-Z][a-z]/.test(s)?s[0].toLowerCase()+s.slice(1):s;
 function chFrt(m){if(m==null||isNaN(m))return "–";m=Number(m);return m<60?(Math.round(m*10)/10)+" min":Math.floor(m/60)+" h "+Math.round(m%60)+" min"}
+/* ---------- timing. WIRA keeps no time per message: only the first reply and the status changes (timing.states) are timed. An audit's timing has the states; a queue doc's may not ---------- */
+const chTim=(c,a)=>(a&&a.timing)||(c&&c.timing)||null;
+const chNum=v=>v==null||v===""||isNaN(v)?null:Number(v);
+function chFirstMin(c,a){const t=chTim(c,a),m=t&&chNum(t.firstReplyMin);return m!=null?m:chNum(c&&c.frt)!=null?chNum(c.frt):chNum(a&&a.frt)}
+function chSlow(c,a){const t=chTim(c,a);if(t&&typeof t.slowFirstReply==="boolean"&&chNum(t.firstReplyMin)!=null)return t.slowFirstReply;const m=chFirstMin(c,a);return m!=null&&m>(CHAT.slowReplyMin||15)}
+/* WIRA's own first-response figure, when it is 1 min or more off the times */
+function chWiraSays(c,a){const t=chTim(c,a),w=t&&chNum(t.wiraFirstReplyMin),f=t&&chNum(t.firstReplyMin);return w!=null&&f!=null&&Math.abs(w-f)>=1?w:null}
+/* a duration: 2.3 min, 1 h 5 min, 2 d 3 h */
+function chHm(m){m=chNum(m);if(m==null)return "–";if(m<60)return (Math.round(m*10)/10)+" min";const t=Math.round(m);if(t<1440)return Math.floor(t/60)+" h"+(t%60?" "+(t%60)+" min":"");
+  const h=Math.round(t/60);return Math.floor(h/24)+" d"+(h%24?" "+(h%24)+" h":"")}
+/* a time on the day the chat opened shows the clock only */
+const chClock=(v,day)=>!v?"–":String(v).slice(0,10)===day?clock12(String(v).slice(11,16)):when(v);
+const CH_ON={support:"Support's turn",client:"Waiting on client",handoff:"Handoff",closed:"Closed"};
+/* the first reply: minutes (red when slow), a Slow badge, and WIRA's figure when it differs */
+function chFrHtml(c,a,o){const m=chFirstMin(c,a);if(m==null)return `<span class="tkmut">–</span>`;const slow=chSlow(c,a),w=chWiraSays(c,a);
+  return `<span class="num frm${slow?" t-bad":""}">${esc(chFrt(m))}</span>${slow&&!(o&&o.noBadge)?`<span class="slowb">Slow</span>`:""}${w!=null?`<span class="wsays num">WIRA says ${esc(chFrt(w))}</span>`:""}`}
 const chMarkL=v=>v==="na"?"N/A":v==null?"–":Number(v)%1?`${Math.floor(v)}–${Math.ceil(v)}`:String(v);
 function chMarkCls(v,max){if(v==="na"||v==null)return "na";const p=Number(v)/max;return p>=1?"s3":p>=.5?"s2":p>0?"s1":"s0"}
 /* a doc's content fingerprint (cached per snapshot object): what the audit view and the review draft key on, so a re-grade always shows */
@@ -258,11 +274,13 @@ function chStatusPill(c){const a=chatAud[c.sid],r=chatRev[c.sid];
   if(c.gradeError)return `<span class="pill bad">Error</span>`;
   if(c.picked)return `<span class="pill pk">Picked</span>`;
   return ""}
+function chQueueFr(c){const a=chatAud[c.sid],m=chFirstMin(c,a);if(m==null)return `<span class="num">Reply –</span>`;const slow=chSlow(c,a),w=chWiraSays(c,a);
+  return `<span class="num cfr${slow?" t-bad":""}"${slow?` title="Slower than ${CHAT.slowReplyMin||15} min"`:""}>Reply ${esc(chFrt(m))}</span>${w!=null?`<span class="wsays num">WIRA ${esc(chFrt(w))}</span>`:""}`}
 function chRowHtml(c){const n=(c.msgs||[]).length,g=chCanGrade(c);
   return `<div class="crow${c.picked?" picked":""}${String(chatSel)===String(c.sid)?" sel":""}" data-open="${esc(c.sid)}">
     <span class="ctime num">${esc(when(c.at))}</span>
     <div class="cmain"><button type="button" class="clink" data-open="${esc(c.sid)}">${esc(c.restaurant||c.code||"No restaurant")}</button><div class="cfirst">${esc(chFirstLine(c))}</div>${c.gradeError&&!chatAud[c.sid]?`<div class="cerr">${esc(c.gradeError)}</div>`:""}</div>
-    <div class="cmeta"><span class="itag${c.initiator==="ae"?" ae":""}">${c.initiator==="ae"?"AE":"Client"}</span><span class="num">${n} msg${n===1?"":"s"}</span><span class="num">Reply ${esc(chFrt(c.frt))}</span></div>
+    <div class="cmeta"><span class="itag${c.initiator==="ae"?" ae":""}">${c.initiator==="ae"?"AE":"Client"}</span><span class="num">${n} msg${n===1?"":"s"}</span>${chQueueFr(c)}</div>
     <span class="cfl">${chFlags(c)}</span>
     <span class="cstat">${chStatusPill(c)}</span>
     <button type="button" class="cpick" data-pick="${esc(c.sid)}" aria-pressed="${!!c.picked}" aria-label="Pick ${esc(c.restaurant||c.sid)}"${g?"":" disabled"}>✓</button></div>`}
@@ -283,9 +301,10 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
     chatNote?esc(chatNote.text):!db?"Sign in to claude.ai to pull chats.":!mcp?"Lightdash isn't available in this view.":
     !wk.length?(ready?"Not pulled yet":"Loading…"):esc(`${wk.length} chats · ${picked} picked · ${graded} graded · ${reviewed} reviewed`+(chatPolicyDoc?"":" · No compensation policy saved"));
   const sas=chSaOrder(wk.map(c=>c.sa));
-  $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l);
+  $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l),fr=avg(l.map(c=>chFirstMin(c,chatAud[c.sid])).filter(x=>x!=null));
     return `<button type="button" class="sacard" data-sajump="${i}"><span class="satop"><b>${esc(sa)}</b><span class="saavg num t-${chVB(av)}">${av==null?"–":fmt(av)+"%"}</span></span>
       <span class="sanums">${[["chats",l.length],["picked",l.filter(c=>c.picked).length],["graded",l.filter(c=>chatAud[c.sid]).length],["reviewed",rv.length]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span>
+      ${fr!=null?`<span class="safr">Avg first reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b></span>`:""}
       ${ct.n?`<span class="sacomp t-${ct.right===ct.n?"good":"bad"}">Comp right <b class="num">${ct.right} of ${ct.n}</b></span>`:""}</button>`}).join("");
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";
@@ -351,7 +370,7 @@ function chBoard(c,a,rv,d){
     ${route}
     ${a?"":`<dl class="vmeta"><dt>SA</dt><dd>${esc(c.sa||"–")}</dd><dt>Restaurant</dt><dd>${esc(c.restaurant||"–")}${c.code?` <span class="num hint">${esc(c.code)}</span>`:""}</dd>
       <dt>WIRA</dt><dd>${safeUrl(c.url)?`<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc(c.sid)} ↗</a>`:esc(c.sid)}</dd><dt>Opened</dt><dd class="num">${esc(when(c.at))}</dd>
-      <dt>First reply</dt><dd class="num">${esc(chFrt(c.frt))}</dd><dt>Started by</dt><dd>${esc(init)}</dd></dl>`}
+      <dt>First reply</dt><dd class="vfr">${chFrHtml(c,null)}</dd><dt>Started by</dt><dd>${esc(init)}</dd></dl>`}
     ${run?`<div id="chatSteps">${chStepsHtml(chatRun.steps)}</div>`:""}
     ${note?`<div class="cvnote">${esc(note)}</div>`:""}
     <div class="row">${run?`<button type="button" class="btn danger" id="cvStop">Stop</button>`:`<button type="button" class="btn${a?"":" primary"}" id="cvGrade"${can&&g?"":" disabled"}>${a?"Re-grade":"Grade"}</button>`}
@@ -427,23 +446,27 @@ function chAnalysis(c,a){const A=a.analysis||{},comp=a.comp||{},off=a.offer||{},
   const nonComp=!!A.caseType&&A.caseType!=="compensation";
   if(A.caseType)rows.push(["Case type",`<b>${esc(chCaseL(A.caseType))}</b>`]);
   if(A.request)rows.push(["Request",esc(A.request)]);
-  if(A.summary)rows.push(["Summary",esc(A.summary)]);
+  if(A.summary)rows.push(["Summary",esc(A.summary),"wide"]);
   if(A.fault)rows.push(["Fault",`<span class="pill ${f.who==="tarro"||f.who==="shared_tarro"?"bad":f.who==="unclear"||f.who==="none"?"none":"ok"}">${esc(CH_FAULT[f.who]||f.who||"–")}</span> ${esc(f.why||"")}${chCites(f.cites)}`]);
   if(nonComp)rows.push(["Compensation","Not a compensation case","line"]);
   if(!nonComp&&A.bucket)rows.push(["Policy",`<b>${esc(comp.label||((P.buckets||[]).find(x=>x.id===b.id)||{}).label||b.id||"No bucket")}</b> ${esc(b.why||"")}${chCites(b.cites)}`]);
   const ck=a.check&&a.check.applies?a.check:null;
   if(!nonComp&&ck){const due=ck.due||{},g=ck.given||{},gl=g.amount!=null?`${sa} gave ${money(g.amount)}${ck.computed?": "+ck.computed:""}`:g.given?`${sa} gave an amount recorded nowhere`:`${sa} gave nothing`;
-    rows.push(["Compensation",`<div class="cline right">Due: ${esc(due.formula||"–")}</div><div class="cline ${ck.status==="right"?"right":g.amount==null&&!CH_COMP_BAD.includes(ck.status)?"none":"off"}">${esc(gl)}</div>${(A.saOffer||{}).text?`<div class="hint">${esc(A.saOffer.text)}${chCites(A.saOffer.cites)}</div>`:""}<a href="#" class="cite" data-jump="tkComp">Compensation check</a>`])}
+    rows.push(["Compensation",`<div class="cline right">Due: ${esc(due.formula||"–")}</div><div class="cline ${ck.status==="right"?"right":g.amount==null&&!CH_COMP_BAD.includes(ck.status)?"none":"off"}">${esc(gl)}</div>${(A.saOffer||{}).text?`<div class="hint">${esc(A.saOffer.text)}${chCites(A.saOffer.cites)}</div>`:""}<a href="#" class="cite" data-jump="tkComp">Compensation check</a>`,"wide"])}
   else if(!nonComp&&(a.comp||a.offer)){const offLine=off.amount==null?`${sa} offered no amount`:`${sa} offered ${money(off.amount)}${off.note?": "+chLower(off.note):""}`;
     const appr=comp.needsApproval?`<div class="cline appr">Needs ${esc(P.approver?chFirst(P.approver)+"'s":"a lead's")} approval</div>`:"";
-    rows.push(["Compensation",`<div class="cline right">Right: ${esc(comp.formula||"–")}</div><div class="cline ${off.match==="right"?"right":off.amount==null?"none":"off"}">${esc(offLine)}</div>${appr}${(A.saOffer||{}).text?`<div class="hint">${esc(A.saOffer.text)}${chCites(A.saOffer.cites)}</div>`:""}`])}
+    rows.push(["Compensation",`<div class="cline right">Right: ${esc(comp.formula||"–")}</div><div class="cline ${off.match==="right"?"right":off.amount==null?"none":"off"}">${esc(offLine)}</div>${appr}${(A.saOffer||{}).text?`<div class="hint">${esc(A.saOffer.text)}${chCites(A.saOffer.cites)}</div>`:""}`,"wide"])}
   if(A.saPath)rows.push(["SA's path",`<span class="pill ${sp.match==="yes"?"good":sp.match==="no"?"bad":"ok"}">${esc(CH_PATH[sp.match]||sp.match||"–")}</span> ${esc(sp.why||"")}`]);
   if(A.aeInvolvement)rows.push(["AE/CSM",`<b>${esc(CH_AE[ae.kind]||ae.kind||"None")}</b>${ae.kind&&ae.kind!=="none"?` · ${ae.saCouldPrevent?"SA could have prevented it":"SA couldn't have prevented it"}`:""}${ae.why?`<div class="hint">${esc(ae.why)}</div>`:""}`]);
-  if(A.firstResponse)rows.push(["First response",`<b>${fr.concludedBeforeEvidence?"Concluded before checking the evidence":"Checked before concluding"}</b>${fr.why?` ${esc(fr.why)}`:""}${chCites(fr.cites)}`]);
-  if(A.ideal)rows.push(["Ideal resolution",`${esc(id.client||"–")}${id.customer?`<div><span class="lbl-sm">Customer</span> ${esc(id.customer)}</div>`:""}`]);
+  const frm=chFirstMin(c,a);
+  if(A.firstResponse)rows.push(["First response",`${frm!=null?`<div class="afr">First reply ${chFrHtml(c,a)}</div>`:""}<b>${fr.concludedBeforeEvidence?"Concluded before checking the evidence":"Checked before concluding"}</b>${fr.why?` ${esc(fr.why)}`:""}${chCites(fr.cites)}`]);
   if(A.ideal)rows.push(["Escalation",`<b>${es.needed?"Needed":"Not needed"}</b>${es.to?` · ${esc(es.to)}`:""}${es.why?` ${esc(es.why)}`:""}`]);
+  if(A.ideal)rows.push(["Ideal resolution",`${esc(id.client||"–")}${id.customer?`<div><span class="lbl-sm">Customer</span> ${esc(id.customer)}</div>`:""}`,"wide"]);
   Object.keys(A).filter(k=>!CH_KNOWN.includes(k)).forEach(k=>rows.push([chLabel(k),chAny(A[k])]));
-  return `<dl class="adl">${rows.map(([k,v,line])=>line?`<dt class="sr-only">${esc(k)}</dt><dd class="aline">${esc(v)}</dd>`:`<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`}
+  /* two rows side by side where there's room; long rows take the full width, and a half row left alone before one does too */
+  const span=rows.map(r=>r[2]==="line"||r[2]==="wide");let open=-1;
+  rows.forEach((r,i)=>{if(span[i]){if(open>=0)span[open]=true;open=-1}else open=open>=0?-1:i});if(open>=0)span[open]=true;
+  return `<dl class="adl">${rows.map(([k,v,kind],i)=>`<div class="arow${span[i]?" wide":""}${kind==="line"?" line":""}">${kind==="line"?`<dt class="sr-only">${esc(k)}</dt><dd class="aline">${esc(v)}</dd>`:`<dt>${esc(k)}</dt><dd>${v}</dd>`}</div>`).join("")}</dl>`}
 function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
   return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0,con=C[r.id],box=!!(B&&B.crit===r.id&&B.where==="row");
     const reads=runs&&String(runs[0][r.id])!==String(runs[1][r.id])?`<span class="reads num">Reads ${chMarkL(runs[0][r.id])} · ${chMarkL(runs[1][r.id])}</span>`:"";
@@ -507,11 +530,40 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
     ["Case type",A.caseType?`<span class="ctype">${esc(chCaseL(A.caseType))}</span>`:`<span class="tkmut">–</span>`],
     ["Fault",A.fault?`<span class="pill ${chFaultCls(f.who)}">${esc(CH_FAULT[f.who]||f.who||"–")}</span>`:`<span class="tkmut">–</span>`],
     ["Opened",`<span class="num">${esc(when(c.at)||"–")}</span>`],
-    ["First reply",`<span class="num">${esc(chFrt(c.frt))}</span>`],
+    ["First reply",chFrHtml(c,a)],
     ["Closed",c.closedAt?`<span class="num">${esc(when(c.closedAt))}</span>`:`<span class="tkmut">Not closed${c.status?" · "+esc(chStatusL(c)):""}</span>`],
     ["Started by",esc(chInit(c))],
     ["Recordings",recs.length?`<span class="tkrecs">${recs.map((l,i)=>link(recUrl(l.id),"Rec"+(recs.length>1?" "+(i+1):""),[l.agent,when(l.at)].filter(Boolean).join(" · "))).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
   return `<dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`}
+/* the Timing block: the chat's times, a strip of its status changes sized by minutes, the totals per side, and why there is no time per reply */
+const CH_TM_NOTE="WIRA doesn't record a time for each message, so only the first reply can be timed.";
+function chTimingHtml(c,a){const t=chTim(c,a);if(!t)return "";
+  const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a);
+  const cell=(k,v,cls)=>`<div class="tmc${cls?" "+cls:""}"><dt>${k}</dt><dd>${v}</dd></div>`;
+  const fr=t.firstReplyAt||m!=null?`<span class="num">${esc(chClock(t.firstReplyAt,day))}</span>${m!=null?chFrHtml(c,a):""}`:`<span class="tkmut">No reply</span>`;
+  const stats=`<dl class="tmstats">${cell("Opened",`<span class="num">${esc(chClock(t.opened||c.at,""))}</span>`)}${cell("First client message",`<span class="num">${esc(chClock(t.firstClientAt,day))}</span>`)}
+    ${cell("First reply",fr,"tmfr")}${cell("Closed",t.closedAt?`<span class="num">${esc(chClock(t.closedAt,day))}</span>`:`<span class="tkopen">Open</span>`)}
+    ${cell("Handle time",t.handleMin!=null?`<span class="num">${esc(chHm(t.handleMin))}</span>`:`<span class="tkmut">Still open</span>`)}</dl>`;
+  let strip="";
+  if(S.length){const done=S.reduce((x,s)=>x+(chNum(s.min)||0),0)||1;
+    /* a finished segment grows with its minutes; the ongoing one gets a fixed share and reads "now"; a close is a thin end cap */
+    const grow=s=>s.ongoing?Math.max(done*.18,.5):s.on==="closed"&&chNum(s.min)==null?0:Math.max(chNum(s.min)||0,done*.01);
+    const lab=s=>CH_ON[s.on]||capFirst(String(s.sub||s.status||"").replace(/_/g," "))||"Status",mins=s=>s.ongoing?"now":s.on==="closed"&&chNum(s.min)==null?"":chHm(s.min);
+    strip=`<div class="tmstrip" role="img" aria-label="${esc(S.map(s=>[lab(s),mins(s)].filter(Boolean).join(" ")).join(", then "))}">${S.map(s=>`<span class="tmseg on-${esc(s.on||"x")}${s.ongoing?" now":""}" style="flex-grow:${grow(s)}" title="${esc(lab(s)+" · "+chClock(s.at,day)+(mins(s)?" · "+mins(s):""))}"></span>`).join("")}</div>
+      <ol class="tmlegend">${S.map(s=>`<li class="tmst on-${esc(s.on||"x")}${s.ongoing?" now":""}"><i aria-hidden="true"></i><b>${esc(lab(s))}</b><span class="num tmmin">${esc(mins(s))}</span><span class="num tmat">${esc(chClock(s.at,day))}</span></li>`).join("")}</ol>
+      <dl class="tmtot">${[["On Support's side",t.waitingOnSupportMin,"support"],["On the client's side",t.waitingOnClientMin,"client"],["In handoff",t.waitingOnHandoffMin,"handoff"]].map(([k,v,on])=>`<div class="tmtc on-${on}"><dt>${k}</dt><dd class="num">${chNum(v)?esc(chHm(v)):"–"}</dd></div>`).join("")}</dl>`}
+  return `<section class="tksec tktiming" id="tkTiming"><div class="tkch"><h3 class="tkh">Timing</h3>${chSlow(c,a)?`<span class="slowb">Slow first reply</span>`:""}</div>${stats}${strip}<p class="tmnote">${CH_TM_NOTE}</p></section>`}
+function chTimingText(c,a){const t=chTim(c,a);if(!t)return [];const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a),w=chWiraSays(c,a);
+  const L=["","Timing",`Opened: ${chClock(t.opened||c.at,"")}`,`First client message: ${chClock(t.firstClientAt,day)}`,
+    `First reply: ${chClock(t.firstReplyAt,day)}${m!=null?` · ${chFrt(m)}`:""}${chSlow(c,a)?" (slow)":""}${w!=null?` · WIRA says ${chFrt(w)}`:""}`,
+    `Closed: ${t.closedAt?chClock(t.closedAt,day):"Open"}`,`Handle time: ${t.handleMin!=null?chHm(t.handleMin):"Still open"}`];
+  if(S.length){L.push("Status: "+S.map(s=>`${CH_ON[s.on]||s.sub||s.status||"Status"} ${s.ongoing?"(now)":chNum(s.min)!=null?chHm(s.min):""}`.trim()).join(" → "));
+    L.push(`Support's side ${chNum(t.waitingOnSupportMin)?chHm(t.waitingOnSupportMin):"–"} · Client's side ${chNum(t.waitingOnClientMin)?chHm(t.waitingOnClientMin):"–"} · Handoff ${chNum(t.waitingOnHandoffMin)?chHm(t.waitingOnHandoffMin):"–"}`)}
+  L.push(CH_TM_NOTE);return L}
+/* What happened, with the request and the fault reason beside it when there's room */
+function chWhatHtml(a){const A=a.analysis||{},f=A.fault||{};if(!A.summary)return "";
+  const side=[A.request?`<div class="tkblk"><h5>Request</h5><p>${esc(A.request)}</p></div>`:"",f.why?`<div class="tkblk"><h5>Fault · ${esc(CH_FAULT[f.who]||f.who||"–")}</h5><p>${esc(f.why)}</p></div>`:""].filter(Boolean);
+  return `<section class="tksec tkwhat" id="tkWhat"><h3 class="tkh">What happened</h3><div class="tkwh${side.length?" has-side":""}"><p class="tkp">${esc(A.summary)}</p>${side.length?`<div class="tkside">${side.join("")}</div>`:""}</div></section>`}
 function chCompHtml(c,a){const k=a.check;if(!k||!k.applies)return "";
   const due=k.due||{},g=k.given||{},st=CH_COMP_ST[k.status]||CH_COMP_ST.unknown,sa=chFirst(a.sa||c.sa)||"The SA",errs=k.errors||[],flags=k.flags||[],codes=errs.map(e=>e.code);
   const P=(chatPolicyDoc&&chatPolicyDoc.comp)||{},lim=due.limit!=null?due.limit:P.approvalLimit,ap=(a.analysis&&a.analysis.approval)||{},bad=CH_COMP_BAD.includes(k.status);
@@ -554,7 +606,8 @@ function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(
   return `<header class="tkhd"><div class="tkttl"><span class="tkkind">QA ticket</span><span class="tkid">Chat <span class="num">${esc(c.sid)}</span></span></div>
       <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"–")}</span><span class="tkpct num" id="tkPct">${pct==null?"–":fmt(pct)+"%"}</span><span id="tkPrio" class="tkprio">${chPrio(pr)}</span></div></header>
     <div class="tkbody">${chTkFields(c,a)}
-      ${A.summary?`<section class="tksec"><h3 class="tkh">What happened</h3><p class="tkp">${esc(A.summary)}</p></section>`:""}
+      ${chWhatHtml(a)}
+      ${chTimingHtml(c,a)}
       ${chCompHtml(c,a)}
       <section class="tksec" id="tkFinds"><div class="tkch"><h3 class="tkh">Findings</h3><span class="tkn num">${F.length}</span></div>${F.length?`<div class="tkfinds">${F.map(f=>chFindHtml(c,a,d,f)).join("")}</div>`:`<p class="tkp tkmut">No findings.</p>`}</section></div>
     <footer class="tkfoot"><p>Filed by Swift Coach. Disagree with a mark? Contest it. Every contest teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
@@ -585,9 +638,10 @@ function chTicketText(c,a,d){const A=a.analysis||{},F=chFindings(c,a),M=d.findin
   const L=[`QA ticket · Chat ${c.sid} · ${v?v.label:"–"} ${pct==null?"–":fmt(pct)+"%"}${pr?" · "+pr:""}`,""];
   [["Restaurant",`${c.restaurant||a.restaurant||"–"}${code?` (${code})`:""}`],["SA",a.sa||c.sa||"–"],["Chat",safeUrl(c.url||a.url)||wiraUrl(c.sid)],
    ["Order",(a.orders||[]).map(o=>`Ticket ${o.ticket||"?"} (${money(o.total)}) ${chGdOrder(code,o.id)}`).join("; ")||"No order linked"],
-   ["Case type",A.caseType?chCaseL(A.caseType):"–"],["Fault",A.fault?(CH_FAULT[A.fault.who]||A.fault.who||"–"):"–"],["Opened",when(c.at)||"–"],["First reply",chFrt(c.frt)],
+   ["Case type",A.caseType?chCaseL(A.caseType):"–"],["Fault",A.fault?(CH_FAULT[A.fault.who]||A.fault.who||"–"):"–"],["Opened",when(c.at)||"–"],["First reply",chFrt(chFirstMin(c,a))+(chSlow(c,a)?" (slow)":"")],
    ["Closed",c.closedAt?when(c.closedAt):"Not closed"+(c.status?` (${chStatusL(c)})`:"")],["Started by",chInit(c)],["Recordings",(a.calls||[]).filter(l=>l.id).map(l=>recUrl(l.id)).join(" ")||"None linked"]].forEach(([k,x])=>L.push(`${k}: ${x}`));
   if(A.summary)L.push("","What happened",A.summary);
+  L.push(...chTimingText(c,a));
   const k=a.check;
   if(k&&k.applies){const due=k.due||{},g=k.given||{},st=CH_COMP_ST[k.status]||CH_COMP_ST.unknown;
     L.push("",`Compensation check: ${st[0]}`,`Due: ${[due.label,due.formula].filter(Boolean).join(": ")||"–"}`);
