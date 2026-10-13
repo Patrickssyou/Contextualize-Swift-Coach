@@ -172,7 +172,7 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   ok(cc({ given: true, amount: null }).status === 'not_recorded' && cc({ given: true, amount: null }).score === 0, 'amount recorded nowhere = 0');
   ok(cc({}).status === 'missing' && cc({}).score === 0, 'due but not given = 0');
   ok(cc({}, { fault: { who: 'shared_tarro' } }).status === 'held' && cc({}, { fault: { who: 'shared_tarro' } }).score === 'na', 'shared fault, nothing offered: held (N/A)');
-  ok(cc({ amount: 16.42 }, { fault: { who: 'shared_tarro' } }).errors[0].code === 'shared', 'shared fault, offered without approval');
+  ok(cc({ amount: 16.42 }, { fault: { who: "shared_tarro" } }).flags[0].code === "shared", 'shared fault, offered without approval');
   ok(cc({ amount: 5 }, { bucket: { id: 'none' } }).status === 'not_due' && cc({}, { bucket: { id: 'none' } }).score === 'na', 'not due: given = 0, nothing given = N/A');
   ok(cc({ amount: 5 }).errors[0].code === 'math', 'an amount no formula explains is a math error');
   ok(!B.compCheck({ caseType: 'menu_setup' }, kc, policy).applies, 'non-compensation chats are not checked');
@@ -188,7 +188,7 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   ok(ff.evidence[0].ok === true && ff.evidence[1].swapped === true && ff.type === 'Defended before checking', 'finding evidence verified or swapped');
   ok(Gf.findings.find(f => f.id === 'amt').type === 'Taxes included' && Gf.nextTime.length > 0, 'the amount finding carries the check');
   const gpt = B.chatGradePrompt(k2, R.F, R.A, R.comp, R.offer, [], R.check, [{ crit: 'fr', label: 'First response', type: 'Defended before checking', what: 'said the call was fine', note: 'checking took a minute' }]);
-  ok(/COMPENSATION CHECK \(system, final\): wrong/.test(gpt) && /score it 1/.test(gpt) && /marked it not a mistake: checking took a minute/.test(gpt) && /"findings"/.test(gpt), 'grade prompt carries the check, the lead\'s corrections and asks for findings');
+  ok(/COMPENSATION CHECK \(system, final\): wrong/.test(gpt) && /score it 1/.test(gpt) && /not a mistake: checking took a minute/.test(gpt) && /"findings"/.test(gpt), 'grade prompt carries the check, the lead\'s corrections and asks for findings');
   ok(R.check.applies && doc.check && doc.priority === 'P1', 'the audit doc keeps the check and the ticket priority');
   console.log(`chat brain: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });

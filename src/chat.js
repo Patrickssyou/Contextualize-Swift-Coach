@@ -302,7 +302,8 @@ function compCheck(A,k,policy){policy=policy||CHAT_POLICY_EMPTY;const P=policy.c
   const shared=["shared_tarro","shared_other","unclear"].includes(A.fault&&A.fault.who);
   if(!gave&&(shared||due.needsApproval)){out.status="held";out.score="na";out.summary=shared?"Shared or unclear fault: compensation isn't offered unless a lead approves it.":`Above the ${money(lim)} limit: compensation waits for ${P.approver||"the lead"}'s approval.`;return out}
   if(!gave){out.status="missing";out.score=0;err("not_given",`Compensation was due${due.amount!=null?` (${money(due.amount)})`:""} and none was given or promised.`);out.summary=out.errors[0].detail;return out}
-  if(shared&&ap.approved!==true){err("shared",`The fault is shared or unclear, and ${sa} offered compensation without ${P.approver||"the lead"}'s approval.`)}
+  /* offering on a shared fault without approval is a process miss (Escalation / Resolution path), flagged here, not an amount error */
+  if(shared&&ap.approved!==true)out.flags.push({code:"shared",label:COMP_ERR.shared,detail:`The fault is shared or unclear, and ${sa} offered compensation without ${P.approver||"the lead"}'s approval.`});
   if(g==null){out.status="not_recorded";out.score=0;err("not_recorded","Compensation was given or promised, but its amount is written nowhere: not in the chat, a note or a WIRA ticket.");
     out.summary=`${out.errors[0].detail}${due.amount!=null?` Due: ${due.formula}.`:""}`;return out}
   if(due.amount==null){out.summary=`${sa} gave ${money(g)}. The affected order isn't linked, so the amount can't be checked.`;return out}
@@ -395,7 +396,9 @@ function chatFactLines(F){return F.timeline.map(t=>`${t.id} · ${[t.when,t.src].
   "\n\nPROMISES\n"+(F.promises.length?F.promises.map(p=>`${p.id} · ${p.src} · ${p.who} to ${p.to}: ${p.what}`).join("\n"):"None.")}
 function calibLines(cal){return (cal||[]).slice(0,CHAT.calibMax).map((c,i)=>`CASE ${i+1} · ${c.agent||"SA"} · ${c.restaurant||""} · ${c.date||""} · QA lead's verdict: ${String(c.verdict||"").toUpperCase()}\n`+(c.lessons||[]).map(l=>"- "+l).join("\n")).join("\n\n")}
 /* the QA lead's corrections: findings marked "not a mistake" (newest first) */
-function lessonLines(ls){return (ls||[]).slice(0,CHAT.lessonMax).map(l=>`- ${l.label||l.crit||"Finding"}${l.type?` · ${l.type}`:""}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${l.note?`: ${capText(l.note,200)}`:"."}`).join("\n")}
+function lessonLines(ls){return (ls||[]).slice(0,CHAT.lessonMax).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.type?` · ${l.type}`:""}`,why=l.note||l.reason;
+  if(l.kind==="contest")return `- ${c}${l.caseType?` (${l.caseType} case)`:""}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
+  return `- ${c}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${why?`: ${capText(why,200)}`:"."}`}).join("\n")}
 /* what the client asked for; only "compensation" uses the policy buckets and the money */
 const CASE_TYPES = [
   ["compensation","the client reports an order problem that may be Tarro's mistake, or compensation was asked for, offered or promised"],
@@ -422,7 +425,7 @@ function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA"
     `  "shared_tarro": the customer or restaurant caused it, and a Tarro agent could have caught it but didn't.`,
     `  "shared_other": Tarro followed process; the error came from ambiguous input or the restaurant's action.`,
     `  "unclear": the evidence conflicts or nobody could know. "none": nothing went wrong (a plain request).`,
-    `  A client's claim is not proof; the recording is. Fault is about who caused it, not how sure we are: when the recording confirms a Tarro agent's own miss and the rest is the client's word about what Tarro can't see, it is "tarro".`,
+    `  A customer or restaurant acting on a Tarro agent's instruction (told to order online, told to call back) is not their fault: the instruction is Tarro's. A client's claim is not proof; the recording is. Fault is about who caused it, not how sure we are: when the recording confirms a Tarro agent's own miss and the rest is the client's word about what Tarro can't see, it is "tarro".`,
     `- Compensation policy applies only to the compensation type. There, pick the bucket that fits the facts and the affected order (O#); pick the bucket even when no order is linked. "none" is only for a fault that isn't Tarro's. Do NOT calculate money; the system does it from the bucket and the order's item subtotal. For any other type, set bucket.id and affectedOrder to "" and saOffer.amount to null. A credit or refund the restaurant gives its own customer is not Tarro compensation.`,
     `- Say what the ideal SA would have done for the client (and the customer, if relevant), whether escalation to a lead was needed, and why.`,
     `- Record what ${sa} offered or recorded: given (compensation given or promised by ${sa}: true or false), the amount exactly as written (null if written nowhere), where it is written (chat, note or ticket), and whether ${sa}'s path matches the ideal. Copy the amount; never compute it.`,
@@ -492,7 +495,7 @@ function chatGradePrompt(k,F,A,comp,offer,cal,check,lessons){const sa=k.chat.sa|
     ` "findings": [{"criterion": "${CHAT_RUBRIC.map(r=>r.id).join(" | ")}", "type": "under 6 words", "what": "under 30 words", "why": "why it matters, under 25 words", "evidence": [{"src": "M8 | Call 2 | O1 | Task 1234567", "quote": "exact words from that source, under 25 words"}], "should": "under 30 words", "model": "a message ${first} could have sent"}],`,
     ` "verdictWhy": "two sentences on the overall grade"}`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
-    ``,`QA LEAD'S CORRECTIONS (findings the lead marked "not a mistake"; don't repeat them)`,lessonLines(lessons)||"None yet.",
+    ``,`QA LEAD'S CORRECTIONS (marks the lead contested and findings marked "not a mistake"; grade the same way)`,lessonLines(lessons)||"None yet.",
     ``,`ANALYSIS`,JSON.stringify({caseType:A.caseType,request:A.request,summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,approval:A.approval,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
     A.caseType&&A.caseType!=="compensation"?`COMPENSATION: not a compensation case (${A.caseType}); the policy amount does not apply.`:
     check&&check.applies?`COMPENSATION CHECK (system, final): ${check.status}. ${check.summary}${check.errors.length?` Errors: ${check.errors.map(e=>`${e.label} (${e.detail})`).join("; ")}.`:""}${check.flags.length?` Flags: ${check.flags.map(f=>f.detail).join("; ")}`:""}`:
@@ -578,7 +581,7 @@ function buildFindings(G,A,check,k,F,G2){const raw=arr(G&&G.findings).concat(arr
     return t?{src:t.src||id,quote:t.what||t.claim,ok:null,fact:id}:null}).filter(Boolean);
   CHAT_RUBRIC.forEach(r=>{const sc=G.scores[r.id];if(sc==="na"||sc==null||Number(sc)>=r.max)return;
     const f=raw.find(x=>x.criterion===r.id)||{};let type=f.type||"",what=f.what||G.reasons[r.id]||"";
-    if(r.id==="amt"&&check&&check.applies&&check.errors.length){type=check.errors.map(e=>e.label).join(" · ");what=check.summary}
+    if(r.id==="amt"&&check&&check.applies&&check.errors.length){type=check.errors.map(e=>e.label).join(" · ");what=check.errors.map(e=>e.detail).join(" ")}
     let ev=arr(f.evidence).map(e=>{const v=quoteCheck(k,e.src,e.quote);return {src:e.src,quote:v.ok===false&&v.text?v.text:e.quote,ok:v.ok===false&&v.text?true:v.ok,swapped:v.ok===false&&!!v.text}});
     if(!ev.length)ev=factEv(r.id==="amt"&&check&&check.applies?arr(check.given.cites).join(" ")+" "+(G.reasons[r.id]||""):G.reasons[r.id]);
     out.push({id:r.id,label:r.label,score:sc,max:r.max,priority:findingPriority(r,sc,A,check),type:chS(type,80),what:chS(what,500),why:f.why||"",evidence:ev,should:f.should||"",model:f.model||"",reason:G.reasons[r.id]||""})});
@@ -701,7 +704,7 @@ async function gradeChat(k,deps){const step=deps.step||(()=>{}),policy=deps.poli
   return {F,A,comp,offer,check,G,pct,verdict}}
 /* where chat data lives in the artifact db. Each week is its own small set of collections, so the page only ever reads one week */
 const CHAT_PATHS = {chats:w=>`chatWeeks/${w}/chats`, audits:w=>`chatWeeks/${w}/audits`, tx:w=>`chatWeeks/${w}/tx`, reviews:w=>`chatWeeks/${w}/reviews`,
-  calib:"chatCalib", policy:"settings/chatPolicy", staff:"settings/staff"};
+  calib:"chatCalib", lessons:"chatLessons", policy:"settings/chatPolicy", staff:"settings/staff"};
 /* what goes in the db. chats/<sid>: the queue row (the chat itself, so grading needs no re-query) */
 function chatQueueDoc(c,picked){return Object.assign({v:CHAT_V,week:chatWeek(c.at),picked:!!picked,gradable:chatGradable(c)},c,
   {msgs:(c.msgs||[]).map(m=>Object.assign({},m,{text:capText(m.text,4000)}))})}
