@@ -2,18 +2,19 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6};
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2};
 const CHAT_V = "chat-1";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
   "wira_project_tasks_conversation_direction","wira_project_tasks_created_by","wira_project_tasks_created_by_title","wira_project_tasks_assigned_user",
   "wira_project_tasks_agent_alias","wira_project_tasks_client_alias","wira_project_tasks_first_response_time_minutes","wira_project_tasks_first_client_message_time_est",
   "wira_project_tasks_first_agent_reply_time_est","wira_project_tasks_shape_name","wira_project_tasks_rating","wira_project_tasks_wira_ticket_url",
+  "wira_project_tasks_shape_fields","wira_project_tasks_caller_id","wira_project_tasks_order2_root_wids_array",
   "restaurants_unique_code","restaurants_english_name"];
 const REL_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_parent_wid","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_project_name","wira_project_tasks_shape_name","wira_project_tasks_shape_fields","wira_project_tasks_task_title","wira_project_tasks_description",
   "wira_project_tasks_status","wira_project_tasks_assigned_user","wira_project_tasks_created_by","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
-  "wira_project_tasks_wira_ticket_url"];
+  "wira_project_tasks_wira_ticket_url","wira_project_tasks_order2_root_wids_array"];
 const OA = "greendot_orders_analytics_aggregate_";
 const ORDER_DIMS = ["order_id","order_ticket_number","order_created_at_est","order_source","order_type","list_coupon_name","call_id","list_call_ids"].map(x=>OA+x);
 const ORDER_METRICS = ["total_sub_total_sales","total_sales_amount","total_tax_amount","total_tip_amount"].map(x=>OA+x);
@@ -22,7 +23,7 @@ const CALL_DIMS = ["calls_conversation_id","calls_call_started_at_est","calls_ca
 const SKIP_PROJECTS = ["real-time-audits-pizza","customer-feedback"];
 /* who's who beyond the SA roster, keyed by the email prefix WIRA uses as the commentor */
 const STAFF_DEFAULT = {"howard.ho":{name:"Howard Ho",role:"lead"},"patrick.evangelista":{name:"Patrick Evangelista",role:"lead"},"weijie.chiew":{name:"CJ Chiew",role:"ae"}};
-const ROLE_L = {client:"Client",sa:"Support",sa_other:"Support (other SA)",ae:"AE/CSM",crt:"CRT",lead:"Lead",staff:"Staff"};
+const ROLE_L = {client:"Client",sa:"Support",sa_other:"Support (other SA)",ae:"AE/CSM",crt:"CRT",lead:"Lead",staff:"Staff",bot:"System"};
 
 const r2 = n => Math.round((Number(n)||0)*100)/100;
 const money = n => n==null||isNaN(n)?"–":"$"+r2(n).toFixed(2);
@@ -38,13 +39,28 @@ function chatBaseConfig(from,to,assignees){
 const isBaseChat = r => r && (r.direction==="inbound" || r.createdByTitle==="Account Executive");
 const prefixOf = e => String(e||"").trim().toLowerCase().split("@")[0];
 
+/* WIRA's shape fields (a JSON object) and the order WIDs a task worked on ("Wid(0,1,2,0,3)", the same text as the order's id) */
+function parseFields(v){let o=v;if(typeof v==="string"){try{o=JSON.parse(v)}catch(e){return {}}}
+  if(!o||typeof o!=="object"||Array.isArray(o))return {};const out={};
+  Object.keys(o).slice(0,30).forEach(k=>{if(/^[A-Za-z0-9_-]{1,40}$/.test(k)&&o[k]!=null&&typeof o[k]!=="object")out[k]=String(o[k]).slice(0,200)});return out}
+const parseWids = v => [...new Set((Array.isArray(v)?v.map(String):[String(v==null?"":v)]).join(" ").match(/Wid\([0-9,\s]+\)/g)||[])].map(w=>w.replace(/\s+/g,""));
+/* order clues a chat's own fields give: ticket, phone and order id by field name */
+function fieldClues(fields){const t=[],p=[],w=[],d=[];
+  Object.entries(fields||{}).forEach(([k,v])=>{const s=String(v);
+    if(/ticket/i.test(k)){const n=s.replace(/\D/g,"");if(n&&n.length<=4)t.push(String(Number(n)))}
+    else if(/phone|caller/i.test(k)){const n=s.replace(/\D/g,"");if(n.length>=7)p.push(n)}
+    else if(/order/i.test(k))parseWids(s).forEach(x=>w.push(x));
+    if(/time|date|when/i.test(k))datesIn(s).forEach(x=>d.push(x))});
+  return {tickets:t,phones:p,wids:w,dates:d}}
+
 /* one normalized chat from a wira_project_tasks row */
 function chatRow(x,ctx){const g=k=>x["wira_project_tasks_"+k];const s=v=>v==null?"":String(v);
   const c={wid:s(g("wira_id")),sid:s(g("short_wira_id")),url:s(g("wira_ticket_url")),at:s(g("created_at_est")).slice(0,19),closedAt:s(g("closed_at_est")).slice(0,19),
     status:s(g("status")),sub:s(g("sub_status")),title:s(g("task_title")),direction:s(g("conversation_direction")),createdBy:s(g("created_by")),createdByTitle:s(g("created_by_title")),
     sa:s(g("assigned_user")),saEmail:s(g("agent_alias")),clientId:s(g("client_alias")),frt:g("first_response_time_minutes")==null?null:Number(g("first_response_time_minutes")),
     firstClientAt:s(g("first_client_message_time_est")).slice(0,19),firstReplyAt:s(g("first_agent_reply_time_est")).slice(0,19),intent:s(g("shape_name")),rating:s(g("rating")),
-    code:s(x.restaurants_unique_code).toUpperCase(),restaurant:cleanName(x.restaurants_english_name)};
+    code:s(x.restaurants_unique_code).toUpperCase(),restaurant:cleanName(x.restaurants_english_name),
+    fields:parseFields(g("shape_fields")),callerId:s(g("caller_id")),orderWids:parseWids(g("order2_root_wids_array"))};
   c.initiator=c.direction==="inbound"?"client":c.createdByTitle==="Account Executive"?"ae":c.direction||"";
   c.msgs=chatMessages(g("task_comments"),g("task_commentors"),Object.assign({saEmail:c.saEmail,sa:c.sa},ctx||{}));
   c.clientName=(c.msgs.find(m=>m.role==="client"&&m.name!=="Client")||{}).name||"";
@@ -54,26 +70,78 @@ function chatRow(x,ctx){const g=k=>x["wira_project_tasks_"+k];const s=v=>v==null
 const MENTION_RE = /\[@[^\]]+\]\(|(^|\s)@[A-Z][a-z]+/;
 const THIRD_RE = /\b(client|cl|customer|cx|he|she|him|her|they)\b[^.?!]{0,40}\b(called|yelled|said|says|wants|asked|is asking|demanded|refused|agreed|insists)\b/i;
 const GREET_RE = /^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks for)\b/i;
+/* how an SA writes to a colleague, never to the restaurant: "CL"/"CX" for client and customer, "the client" in the third person, "po" (Filipino politeness to a colleague) */
+const STAFF_TALK_RE = /\b(?:cl|cx)\b|\b(?:the|this|that)\s+client\b|\b(?:call|message|inform|tell|ask|update|notify|text|email|contact|remind)\s+client\b|^\s*client\b|\b(?:po|opo)\b(?![-'])/i;
+/* authors that are not people at Tarro: the restaurant's POS app (the client typing on their terminal) and Tarro's own automation */
+const POS_RE = /^(cma|pos)-(pin-)?user/i, BOT_RE = /^(sa|bot|system|wira)[-_]|[-_](bot|workflow|wonka|automation)([-_]|$)/i;
+/* names: tokens of an email prefix or a full name, matched on the last name (one typo allowed) and the first name */
+const nameToks = s => String(s||"").toLowerCase().replace(/[^a-z\s._-]/g,"").split(/[\s._-]+/).filter(Boolean);
+function editDist(a,b){if(a===b)return 0;if(Math.abs(a.length-b.length)>1)return 2;
+  const m=a.length,n=b.length;let prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){const cur=[i];for(let j=1;j<=n;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));prev=cur}
+  return prev[n]}
+/* the roster entry (or null) that an email prefix or a name belongs to. The roster may carry logins and creators (core.js ROSTER_DEFAULT); names alone also work */
+function rosterOf(who,roster){const t=nameToks(who);if(!t.length)return null;const joined=t.join(""),f=t[0],l=t[t.length-1];
+  const dflt=typeof ROSTER_DEFAULT!=="undefined"?ROSTER_DEFAULT:[];
+  for(const r of roster||[]){const rt=nameToks(r.name);if(!rt.length)continue;
+    if(t.join(" ")===rt.join(" "))return r;
+    const rf=rt[0],rl=rt[rt.length-1];
+    if(t.length>=2&&rt.length>=2){
+      const lastOk=l===rl||(l.length>=5&&rl.length>=5&&editDist(l,rl)<=1);
+      const firstOk=f===rf||(f.length>=3&&rf.length>=3&&(f.includes(rf)||rf.includes(f)))||(f.length>=4&&rf.length>=4&&editDist(f,rf)<=1);
+      if(lastOk&&firstOk)return r}
+    const d=dflt.find(x=>x.name===r.name)||{},lg=[].concat(r.logins||[],d.logins||[]).map(x=>String(x).toLowerCase().replace(/^zz/,"").replace(/(gd|cb|online)$/,"")),
+      cr=[].concat(r.creators||[],d.creators||[]).map(x=>String(x).toLowerCase().replace(/wondersco(com)?$/,"").replace(/[^a-z]/g,"")),
+      keys=new Set(lg.concat(cr).filter(x=>x.length>=6)),cands=[joined.replace(/^zz/,""),f.replace(/^zz/,"")[0]+l];
+    if(cands.some(k=>k.length>=6&&[...keys].some(x=>x===k||(x.length>=7&&editDist(x,k)<=1))))return r}
+  return null}
+const esc_re = s => String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+/* WIRA joins comments with " ## " and authors the same way, one author per comment. An empty first comment leaves the string starting with " ## " (or "## " once something trims it):
+   split without trimming, pair by position, and only then drop the empty ones */
+function pairComments(comments,commentors){
+  const C=String(comments==null?"":comments).split(" ## "),W=String(commentors==null?"":commentors).split(" ## ");
+  if(C.length<W.length&&/^##(\s|$)/.test(C[0])){C[0]=C[0].replace(/^##\s*/,"");C.unshift("")}
+  while(C.length<W.length)C.push("");
+  return C.map((t,i)=>({who:String(W[i]==null?"":W[i]).trim(),raw:String(t)}))}
 function chatMessages(comments,commentors,ctx){ctx=ctx||{};
-  const text=String(comments||"").trim();if(!text)return [];
-  const C=text.split(" ## "),W=String(commentors||"").split(" ## "),saP=prefixOf(ctx.saEmail),staff=Object.assign({},STAFF_DEFAULT,ctx.staff||{});
-  const rosterNames=(ctx.roster||[]).map(r=>r.name.toLowerCase());
-  const out=C.map((t,i)=>{const w=String(W[i]||"").trim(),p=prefixOf(w);let role="staff",name=titleCase(p)||"Unknown";
+  const raw=String(comments==null?"":comments);if(!raw.trim())return [];
+  const pairs=pairComments(comments,commentors),staff=Object.assign({},STAFF_DEFAULT,ctx.staff||{});
+  const roster=(ctx.roster&&ctx.roster.length?ctx.roster:typeof ROSTER_DEFAULT!=="undefined"?ROSTER_DEFAULT:[]);
+  /* the audited SA is who WIRA assigned the chat to. agent_alias is only a last resort for an SA missing from the roster: it is empty on AE-created chats and someone else's on about 1 chat in 25 */
+  const meR=rosterOf(ctx.sa,roster),me=meR||(ctx.sa?{name:ctx.sa}:null),R=meR||!me?roster:roster.concat([me]),aliasP=meR?"":prefixOf(ctx.saEmail);
+  const kept=[];let blank=0;
+  pairs.forEach(({who:w,raw:t})=>{const p=prefixOf(w),text=mdPlain(t).trim(),at=w.includes("@");
+    if(!text&&!String(t).trim()){blank++;return}
+    let role="staff",name=titleCase(p)||"Unknown",via="";
     if(/^client-/i.test(w)){role="client";name="Client"}
-    else if(saP&&p===saP){role="sa";name=ctx.sa||titleCase(p)}
-    else if(staff[p]){role=staff[p].role||"staff";name=staff[p].name||titleCase(p)}
-    else if(rosterNames.includes(titleCase(p).toLowerCase())){role="sa_other";name=titleCase(p)}
-    else if(!w){role="staff";name="Unknown"}
-    return {n:i+1,author:w,role,name,raw:String(t).trim(),text:mdPlain(t).trim(),internal:false,inferred:false}});
+    else if(!at&&POS_RE.test(w)){role="client";name="Client";via="pos"}
+    else if(!at&&BOT_RE.test(w)){role="bot";name="Automation";via="bot"}
+    else if(staff[p]){const st=staff[p];
+      if(st.role==="sa"){const sm=rosterOf(st.name||p,roster),mine=!!me&&(sm?sm.name===me.name:nameToks(st.name).join(" ")===nameToks(me.name).join(" "));role=mine?"sa":"sa_other";name=(sm&&sm.name)||st.name||titleCase(p)}
+      else{role=st.role||"staff";name=st.name||titleCase(p)}}
+    else{const ro=p?rosterOf(p,R):null;
+      if(ro){role=me&&ro.name===me.name?"sa":"sa_other";name=ro.name}
+      else if(aliasP&&p===aliasP){role="sa";name=ctx.sa||titleCase(p)}}
+    const m={n:0,author:w,role,name,raw:String(t).trim(),text,internal:false,inferred:false};if(via)m.via=via;if(blank){m.blankBefore=blank;blank=0}
+    kept.push(m)});
+  const out=kept.map((m,i)=>Object.assign(m,{n:i+1}));
   /* the client's sign-off names them ("This is Sam") */
   const sign=out.filter(m=>m.role==="client").map(m=>(m.text.match(/\b(?:[Tt]his is|[Ii]t'?s|[Rr]egards,?|[Tt]hanks,?|[Ff]rom|-)\s+([A-Z][a-z]{1,20})\b/)||[])[1]).find(Boolean);
   if(sign)out.forEach(m=>{if(m.role==="client")m.name=sign});
+  /* first names of the people at Tarro in this chat: "Hi <a staff first name>" is to staff, "Hi <the client's sign-off name>" is to the client. A speaker's own first name never counts */
+  const first=new Map();const addFirst=full=>{const f=nameToks(full)[0];if(f){if(!first.has(f))first.set(f,new Set());first.get(f).add(nameToks(full).join(" "))}};
+  roster.forEach(r=>addFirst(r.name));Object.values(staff).forEach(v=>addFirst(v&&v.name));out.forEach(m=>{if(!["client","bot"].includes(m.role)&&m.name!=="Unknown")addFirst(m.name)});
+  if(sign)first.delete(sign.toLowerCase());
+  const reFor=(own,ownFull)=>{const names=[...first].filter(([f,who])=>f.length>=2&&!(f===own&&who.size===1&&who.has(ownFull))).map(([f])=>esc_re(f));
+    return names.length?new RegExp("^\\s*(?:(?:hi|hello|hey|good (?:morning|afternoon|evening)|got it|thanks?|thank you|sure|okay|ok|noted|alright|yes|yep)\\b[\\s,!.]*)?@?(?:"+names.join("|")+")\\b","i"):null},cache={};
   /* internal notes are inferred: WIRA has no flag */
-  out.forEach(m=>{if(m.role==="client")return;
-    const toClient=GREET_RE.test(m.text)||(sign&&new RegExp("\\b"+sign+"\\b").test(m.text));
+  out.forEach(m=>{if(m.role==="client"||m.role==="bot"){delete m.raw;return}
+    const own=nameToks(m.name)[0],ownFull=nameToks(m.name).join(" "),re=cache[ownFull]||(cache[ownFull]=reFor(own,ownFull)),greets=GREET_RE.test(m.text)||(sign&&new RegExp("\\b"+sign+"\\b").test(m.text)),
+      toClient=!!sign&&new RegExp("^\\s*(?:(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\\b[\\s,!.]*)?@?"+esc_re(sign)+"\\b","i").test(m.text);
     if(MENTION_RE.test(m.raw)||MENTION_RE.test(m.text))m.internal=true;
-    else if(m.role!=="sa"&&!toClient)m.internal=true;
-    else if(m.role!=="sa"&&THIRD_RE.test(m.text))m.internal=true;
+    else if(re&&re.test(m.text))m.internal=true;
+    else if(m.role==="sa"&&!toClient&&STAFF_TALK_RE.test(m.text))m.internal=true;
+    else if(m.role!=="sa"&&!greets)m.internal=true;
     m.inferred=m.internal;delete m.raw});
   return out}
 function chatTranscript(c){return (c.msgs||[]).map(m=>`M${m.n} · ${ROLE_L[m.role]||m.role}${m.role==="client"?"":" — "+m.name}${m.role==="sa"?" (audited)":""}${m.internal?" [internal note, inferred]":""}: ${capText(m.text,1600)}`).join("\n")}
@@ -84,45 +152,89 @@ function relatedTasksConfig(code,from,to){return {exploreName:CHAT.explore,dimen
 function relTask(x){const g=k=>x["wira_project_tasks_"+k];const s=v=>v==null?"":String(v);
   return {wid:s(g("wira_id")),sid:s(g("short_wira_id")),parent:s(g("parent_wid")),at:s(g("created_at_est")).slice(0,19),closedAt:s(g("closed_at_est")).slice(0,19),
     project:s(g("project_name")),intent:s(g("shape_name")),fields:s(g("shape_fields")),title:capText(g("task_title"),300),desc:capText(g("description"),2000),status:s(g("status")),
-    assigned:s(g("assigned_user")),by:s(g("created_by")),url:s(g("wira_ticket_url")),
-    comments:String(g("task_comments")||"").split(" ## ").map((t,i)=>({who:String(g("task_commentors")||"").split(" ## ")[i]||"",text:capText(t,600)})).filter(c=>c.text)}}
-/* the chat's own children, plus tasks the SA made or took at the same restaurant around the chat */
+    assigned:s(g("assigned_user")),by:s(g("created_by")),url:s(g("wira_ticket_url")),orderWids:parseWids(g("order2_root_wids_array")),
+    comments:pairComments(g("task_comments"),g("task_commentors")).map(p=>({who:p.who,text:capText(p.raw,600)})).filter(c=>c.text)}}
+/* person names a text gives: a capitalised word after "customer", "cx", "from", "Mr"… */
+const NAME_CUE_RE=/\b(?:customer|cust|cx|mr\.?|mrs\.?|ms\.?|miss|named|name is|from)\s+([A-Za-z][a-z]{2,15})\b/gi;
+const NOT_NAMES=new Set("doordash uber ubereats grubhub adyen stripe greendot wira slack toast square clover google yelp facebook instagram tarro wonka last now before here there earlier later again home work store shop the this that our your his her their client customer tarro menu order orders ticket phone call calls agent team store resto restaurant pizza delivery pickup card credit debit cash today yesterday tomorrow monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december".split(" "));
+function personNames(text){const out=new Set();
+  String(text||"").replace(NAME_CUE_RE,(m,n)=>{if(/^[A-Z]/.test(n)&&!NOT_NAMES.has(n.toLowerCase()))out.add(n.toLowerCase());return m});return out}
+/* does an SA's other task clearly point at this chat? Its sid or wid, the same associated order, the same ticket or phone, or the same customer name. Time and SA alone are not enough */
+function refersToChat(c,t,chatCtx){
+  const body=[t.title,t.desc,t.fields].concat(t.comments.map(x=>x.text)).join("\n");
+  if(c.sid&&new RegExp("\\b"+esc_re(c.sid)+"\\b").test(body))return true;if(c.wid&&body.includes(c.wid))return true;
+  if(t.sid&&new RegExp("\\b"+esc_re(t.sid)+"\\b").test(chatCtx.all))return true;
+  if((t.orderWids||[]).some(w=>(c.orderWids||[]).includes(w)))return true;
+  const tr=textRefs([body]);
+  if(tr.tickets.some(x=>chatCtx.cr.tickets.includes(x))||tr.phones.some(x=>chatCtx.cr.phones.includes(x)))return true;
+  const tn=personNames(body);return [...tn].some(n=>chatCtx.names.has(n))||[...chatCtx.names].some(n=>new RegExp("\\b"+esc_re(n)+"\\b","i").test(body))}
+/* the chat's own children, plus the SA's other tasks at the same restaurant around the chat that clearly point at this chat. Tasks from the SA's other cases are dropped */
 function pickRelated(c,rows){const t0=ldTs(c.at),lo=t0-CHAT.relBeforeH*36e5,hi=t0+CHAT.relAfterH*36e5;
+  const texts=(c.msgs||[]).map(m=>m.text),all=texts.join("\n"),names=personNames(all);
+  const ctx={all,cr:textRefs(texts),names};
   return (rows||[]).map(relTask).filter(t=>t.wid&&t.wid!==c.wid&&!SKIP_PROJECTS.includes(t.project)).filter(t=>{
     if(t.parent&&t.parent===c.wid)return true;if(t.project==="conversation")return false;
     const at=ldTs(t.at);if(isNaN(at)||at<lo||at>hi)return false;
-    return !!c.sa&&(t.by===c.sa||t.assigned===c.sa)}).slice(0,8)}
+    return !!c.sa&&(t.by===c.sa||t.assigned===c.sa)&&refersToChat(c,t,ctx)}).slice(0,8)}
 function orderConfig(code,from,to){return {exploreName:"greendot_orders_analytics_aggregate",dimensions:ORDER_DIMS,metrics:ORDER_METRICS,
   sorts:[{fieldId:OA+"order_created_at_est",descending:false}],limit:PULL.cap,
   filters:{dimensions:`restaurants_unique_code equals=${ldVal(code)} AND ${OA}order_created_at_est_day inBetween=${from},${to}`}}}
+/* orders WIRA ties to the chat that are older than the day window */
+function ordersByIdsConfig(code,ids,from,to){return {exploreName:"greendot_orders_analytics_aggregate",dimensions:ORDER_DIMS,metrics:ORDER_METRICS,
+  sorts:[{fieldId:OA+"order_created_at_est",descending:false}],limit:PULL.cap,
+  filters:{dimensions:`restaurants_unique_code equals=${ldVal(code)} AND ${OA}order_created_at_est_day inBetween=${from},${to} AND ${OA}order_id equals=${ids.map(ldVal).join(",")}`}}}
 const UUID_RE=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 function orderRow(x){const g=k=>x[OA+k];const ids=new Set([String(g("call_id")||"")].concat(String(g("list_call_ids")||"").match(UUID_RE)||[]).filter(Boolean));
   const items=r2(g("total_sub_total_sales")),tax=r2(g("total_tax_amount")),tip=r2(g("total_tip_amount")),total=g("total_sales_amount")==null?r2(items+tax+tip):r2(g("total_sales_amount"));
   return {id:String(g("order_id")||""),ticket:g("order_ticket_number")==null?"":String(g("order_ticket_number")),at:String(g("order_created_at_est")||"").slice(0,19),
     source:String(g("order_source")||""),type:String(g("order_type")||""),coupon:String(g("list_coupon_name")||""),callIds:[...ids],items,tax,tip,total,
     other:r2(total-items-tax-tip)}}
-/* references the chat and its tasks make to an order: ticket numbers, dollar amounts, phone numbers */
-function textRefs(texts){const all=texts.filter(Boolean).join("\n"),amounts=new Set(),tickets=new Set(),phones=new Set();
+/* references the chat and its tasks make to an order: ticket numbers, dollar amounts, phone numbers, and whether it is about money or about yesterday */
+const MIN_AMT = 5;  /* amounts of $5 or less are fees, tips and credits, not order totals */
+const YESTERDAY_RE = /\b(?:yesterday|ytd|last night|previous day)\b/i, COMP_RE = /\b(?:comp|compensat\w*|credit(?:ed|s)?|refund\w*|cogs|remake\w*|redeliver\w*)\b|\b30\s?%/i;
+const MONTH_ABBR = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+function datesIn(text){const out=new Set(),t=String(text||""),pad=n=>String(n).padStart(2,"0");
+  for(const m of t.matchAll(/\b(1[0-2]|0?[1-9])[\/-](3[01]|[12]\d|0?[1-9])(?!\d)/g))out.add(pad(m[1])+"-"+pad(m[2]));
+  for(const m of t.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/gi))out.add(pad(MONTH_ABBR.indexOf(m[1].toLowerCase())+1)+"-"+pad(m[2]));
+  return [...out]}
+function textRefs(texts){const all=(texts||[]).filter(Boolean).join("\n"),amounts=new Set(),tickets=new Set(),phones=new Set();
   (all.match(/\$\s?\d{1,4}(?:,\d{3})*(?:\.\d{1,2})?|\b\d{1,4}\.\d{2}\b/g)||[]).forEach(a=>{const v=Number(a.replace(/[$,\s]/g,""));if(v>0&&v<5000)amounts.add(r2(v))});
-  (all.match(/\b(?:C|#|ticket\s*#?|order\s*#?|tkt\s*#?)\s?(\d{1,4})\b/gi)||[]).forEach(t=>tickets.add(String(Number(t.replace(/\D/g,"")))));
+  for(const m of all.matchAll(/(?:#|\bC(?=\d)|\b(?:ticket|tkt)\s*(?:#|number|no\.?)?|\border\s*(?:#|number|no\.?))\s?(\d{1,4})\b/gi))tickets.add(String(Number(m[1])));
   (all.match(/\b\d{3}[-. ]?\d{3}[-. ]?\d{4}\b/g)||[]).forEach(p=>phones.add(p.replace(/\D/g,"")));
-  return {amounts:[...amounts],tickets:[...tickets],phones:[...phones]}}
-function mergeRefs(a,b){const u=(x,y)=>[...new Set([].concat(x||[],y||[]).map(String))];b=b||{};
+  return {amounts:[...amounts],tickets:[...tickets],phones:[...phones],yesterday:YESTERDAY_RE.test(all),dates:datesIn(all),comp:COMP_RE.test(all)}}
+function mergeRefs(a,b){const u=(x,y)=>[...new Set([].concat(x||[],y||[]).map(String))];a=a||{};b=b||{};
   return {amounts:u(a.amounts,(b.amounts||[]).map(Number).filter(n=>n>0).map(r2)).map(Number),tickets:u(a.tickets,(b.tickets||[]).map(t=>String(t).replace(/\D/g,"")).filter(Boolean)),
-    phones:u(a.phones,(b.phones||[]).map(p=>String(p).replace(/\D/g,"")).filter(p=>p.length>=7)),names:u([],b.customerNames),items:u([],b.items),orderType:b.orderType||""}}
-/* rank the restaurant's orders against the references; a clear winner is linked, close calls are left for the reviewer */
-function rankOrders(orders,refs,chatAt){const t0=ldTs(chatAt);
-  return (orders||[]).map(o=>{let score=0;const why=[];
-    if(o.ticket&&refs.tickets.includes(o.ticket)){score+=5;why.push(`ticket ${o.ticket} mentioned`)}
-    refs.amounts.forEach(a=>{
-      if(Math.abs(a-o.total)<=0.01){score+=4;why.push(`total ${money(o.total)} mentioned`)}
-      else if(Math.abs(a-o.items)<=0.01&&o.items>0){score+=4;why.push(`item subtotal ${money(o.items)} mentioned`)}
-      else if(o.total>0&&(Math.abs(a/0.3-o.total)<=0.05||Math.abs(a/0.3-o.items)<=0.05)){score+=3;why.push(`${money(a)} is 30% of this order`)}});
+    phones:u(a.phones,(b.phones||[]).map(p=>String(p).replace(/\D/g,"")).filter(p=>p.length>=7)),names:u([],b.customerNames),items:u([],b.items),orderType:b.orderType||"",
+    wids:u(a.wids,[]),yesterday:!!a.yesterday||(b.times||[]).some(t=>YESTERDAY_RE.test(String(t))),dates:u(a.dates,(b.times||[]).flatMap(datesIn)),comp:!!a.comp}}
+/* rank the restaurant's orders against the references; a clear winner is linked, close calls are left for the reviewer.
+   An order WIRA itself ties to the chat (refs.wids) comes first. A ticket number repeats every day, so the chat's own day wins unless the chat says yesterday or names the date.
+   An amount counts as much as it is rare: one order that day with exactly that total (5) counts more than its item subtotal or "30% of the order" (3, and the 30% only on a money chat), because a menu price equals the subtotal of a one-item order; a round dollar amount counts half */
+function rankOrders(orders,refs,chatAt){const t0=ldTs(chatAt),day0=String(chatAt||"").slice(0,10),prev=day0?addDaysU(day0,-1):"",dayOf=o=>String(o.at||"").slice(0,10);
+  const O=(orders||[]).filter(o=>o.ticket||o.total>0||o.items>0),tix=refs.tickets||[],wids=refs.wids||[],amts=(refs.amounts||[]).filter(a=>a>MIN_AMT);
+  const named=d=>!!d&&((refs.yesterday&&d===prev)||(refs.dates||[]).includes(d.slice(5)));
+  const todayTicket=new Set(O.filter(o=>o.ticket&&tix.includes(o.ticket)&&dayOf(o)===day0).map(o=>o.ticket)),namedTicket=new Set(O.filter(o=>o.ticket&&tix.includes(o.ticket)&&dayOf(o)!==day0&&named(dayOf(o))).map(o=>o.ticket));
+  const how=(a,o)=>Math.abs(a-o.total)<=0.01?"total":o.items>0&&Math.abs(a-o.items)<=0.01?"items":refs.comp&&o.total>0&&(Math.abs(a/0.3-o.total)<=0.05||(o.items>0&&Math.abs(a/0.3-o.items)<=0.05))?"pct":"";
+  const seen=new Map(),key=(a,k,o)=>a+"|"+(k==="pct"?"pct":"x")+"|"+dayOf(o);
+  amts.forEach(a=>O.forEach(o=>{const k=how(a,o);if(k)seen.set(key(a,k,o),(seen.get(key(a,k,o))||0)+1)}));
+  return O.map(o=>{let score=0,strong=false,assoc=false;const why=[];
+    if(wids.includes(o.id)){score+=10;strong=assoc=true;why.push("WIRA ties this order to the chat")}
+    if(o.ticket&&tix.includes(o.ticket)){const d=dayOf(o);
+      if(d&&!named(d)&&namedTicket.has(o.ticket)){score+=2;why.push(`ticket ${o.ticket} mentioned, but the chat names another day`)}
+      else if(d&&d!==day0&&todayTicket.has(o.ticket)&&!named(d)){score+=2;why.push(`ticket ${o.ticket} mentioned, but the chat's own day has one too`)}
+      else if(d&&d!==day0&&d!==prev&&!named(d)){score+=2;why.push(`ticket ${o.ticket} mentioned, but on another day than the chat`)}
+      else{score+=5;strong=true;why.push(`ticket ${o.ticket} mentioned`)}}
+    amts.forEach(a=>{const k=how(a,o);if(!k)return;
+      const n=seen.get(key(a,k,o))||1,base=k==="total"?5:3,w=Math.round(base*(n===1?1:n===2?0.5:0)*(a===Math.round(a)?0.5:1)*10)/10;
+      if(w>0){score+=w;why.push(k==="total"?`total ${money(o.total)} mentioned`:k==="items"?`item subtotal ${money(o.items)} mentioned`:`${money(a)} is 30% of this order`)}});
     if(refs.orderType&&o.type&&refs.orderType===o.type)score+=1;
     const at=ldTs(o.at);if(!isNaN(at)&&!isNaN(t0)){if(at<=t0&&t0-at<=12*36e5)score+=1;else if(at>t0)score-=2}
-    return {order:o,score,why}}).filter(r=>r.score>0).sort((a,b)=>b.score-a.score||String(b.order.at).localeCompare(String(a.order.at))).slice(0,5)}
-function linkedOrders(ranked){if(!ranked.length)return [];const top=ranked[0];
-  if(top.score<4)return [];if(ranked[1]&&ranked[1].score>=top.score-1)return [];return [top.order]}
+    return {order:o,score,why,strong,assoc}}).filter(r=>r.score>0).sort((a,b)=>b.score-a.score||String(b.order.at).localeCompare(String(a.order.at))).slice(0,5)}
+/* WIRA's own tie is linked (up to 3 orders), with any other order the chat names by ticket. Otherwise one order: a ticket match needs a score of 5, amounts alone need 6 (a unique total that came just before the chat, or two amounts that agree).
+   A close second leaves it to the reviewer */
+function linkedOrders(ranked){if(!ranked.length)return [];
+  const wira=ranked.filter(r=>r.assoc);
+  if(wira.length)return wira.concat(ranked.filter(r=>!r.assoc&&r.strong&&r.score>=5)).slice(0,3).map(r=>r.order);  /* plus an order the text names that WIRA did not tie: a wrong bag, a swapped order */
+  const top=ranked[0];if(top.score<(top.strong?5:6))return [];if(ranked[1]&&ranked[1].score>=top.score-1)return [];return [top.order]}
 function callsByIdsConfig(ids,from,to){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
   filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_conversation_id equals=${ids.map(ldVal).join(",")}`}}}
 function phoneCallsConfig(phones,from,to,code){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
@@ -404,26 +516,45 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
   if(c.code)k.tasks=pickRelated(c,await q(relatedTasksConfig(c.code,from,addDaysU(day,2)),T+" · tasks"));
   step("tasks","done",k.tasks.length?`${k.tasks.length} linked`:"none");
   step("refs","run");
-  let refs=textRefs(c.msgs.map(m=>m.text).concat(k.tasks.flatMap(t=>[t.title,t.desc])));
-  k.refs=mergeRefs(refs,deps.ask?cleanChatRefs(await askPass(deps,chatRefsPrompt(k),"refs")):{});
+  /* order clues come from the chat, its shape fields and its own child tasks, never from the SA's other tasks */
+  const kids=k.tasks.filter(t=>t.parent&&t.parent===c.wid),fc=[c.fields].concat(kids.map(t=>parseFields(t.fields))).map(fieldClues);
+  const cat=key=>[].concat(...fc.map(x=>x[key]));
+  const refs=textRefs(c.msgs.map(m=>m.text).concat(kids.flatMap(t=>[t.title,t.desc])));
+  const U=(...xs)=>[...new Set([].concat(...xs))];
+  refs.tickets=U(refs.tickets,cat("tickets"));refs.phones=U(refs.phones,cat("phones"));refs.dates=U(refs.dates,cat("dates"));
+  refs.wids=U(c.orderWids||[],...kids.map(t=>t.orderWids||[]),cat("wids"));
+  k.refs=mergeRefs(refs,deps.ask?cleanChatRefs(await askPass(deps,chatRefsPrompt(Object.assign({},k,{tasks:kids})),"refs")):{});
   step("refs","done");
   step("orders","run");
-  const orders=c.code?(await q(orderConfig(c.code,from,day),T+" · orders")).map(orderRow):[];k.allOrders=orders;
+  /* a date the chat names (up to a week back) widens the order window to that day */
+  const dated=(k.refs.dates||[]).map(md=>{const y=Number(day.slice(0,4)),d=`${y}-${md}`;return d>day?`${y-1}-${md}`:d}).filter(d=>d<from&&d>=addDaysU(day,-7)).sort();
+  let orders=c.code?(await q(orderConfig(c.code,dated[0]||from,day),T+" · orders")).map(orderRow):[];
+  /* an order WIRA ties to the chat can be older than the day window */
+  const gone=k.refs.wids.filter(w=>!orders.some(o=>o.id===w));
+  if(gone.length&&c.code)(await q(ordersByIdsConfig(c.code,gone,addDaysU(day,-30),day),T+" · orders")).map(orderRow).forEach(o=>{if(o.id&&!orders.some(x=>x.id===o.id))orders.push(o)});
+  k.allOrders=orders;
   k.ranked=rankOrders(orders,k.refs,c.at);
   const pick=Array.isArray(deps.orderIds)?orders.filter(o=>deps.orderIds.includes(o.id)):linkedOrders(k.ranked);
-  k.orders=pick.map((o,i)=>Object.assign({},o,{label:"O"+(i+1)}));
-  const close=k.ranked.filter(r=>r.score>=3);
+  k.orders=pick.map((o,i)=>{const r=k.ranked.find(x=>x.order.id===o.id);return Object.assign({},o,{label:"O"+(i+1),tie:Array.isArray(deps.orderIds)?"reviewer":r&&r.assoc?"wira":r&&r.strong?"ticket":"amount"})});
+  const close=k.ranked.filter(r=>r.score>=5);
   if(!k.orders.length&&close.length)k.orderNote=`Possible orders, none clear enough to link: ${close.slice(0,3).map(r=>`ticket ${r.order.ticket||"?"} (total ${money(r.order.total)}; ${r.why.join(", ")})`).join("; ")}.`;
   step("orders","done",k.orders.length?k.orders.map(o=>`ticket ${o.ticket||"?"}`).join(", "):close.length?"not clear":"none");
   step("calls","run");
   const ids=[...new Set(k.orders.flatMap(o=>o.callIds))];let calls=[];
   if(ids.length)calls=(await q(callsByIdsConfig(ids,from,day),T+" · order recordings")).map(callRow);
-  const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone))];
-  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,from,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id))calls.push(l)});
+  /* the caller is the order's customer. A phone in the chat text can be the restaurant's own (the client's WIRA author id carries it), and a regular customer's earlier orders are other cases:
+     calls from the same number count from 2 hours before the linked order (12 hours before the chat when no order is linked) */
+  const own10=new Set(c.msgs.filter(m=>m.role==="client").map(m=>String(m.author||"").replace(/\D/g,"").slice(-10)).filter(x=>x.length===10));
+  const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone).filter(ph=>!own10.has(String(ph).replace(/\D/g,"").slice(-10))))];
+  const lo=k.orders.length?ldTs(k.orders[0].at)-2*36e5:ldTs(c.at)-12*36e5;
+  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,from,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(l)});
   const t0=k.orders.length?ldTs(k.orders[0].at):ldTs(c.at);
-  k.calls=calls.filter(l=>l.id).map(l=>({l,own:ids.includes(l.id)?1:0,d:Math.abs(ldTs(l.at)-t0)||0})).sort((a,b)=>b.own-a.own||a.d-b.d)
-    .slice(0,CHAT.maxCalls).map(x=>x.l).sort((a,b)=>a.at.localeCompare(b.at));
-  k.calls.forEach(l=>{const o=k.orders.find(x=>x.callIds.includes(l.id));if(o)l.orders=`${o.label} (ticket ${o.ticket||"?"})`;l.talk=legTalk(l.text)});
+  /* silent and voicemail legs never take one of the slots for calls with talk: they follow the talked ones, at most CHAT.quietCalls of them */
+  const near=ls=>ls.filter(l=>l.id).map(l=>({l,own:ids.includes(l.id)?1:0,d:Math.abs(ldTs(l.at)-t0)||0})).sort((a,b)=>b.own-a.own||a.d-b.d),byTime=ls=>ls.sort((a,b)=>a.at.localeCompare(b.at));
+  calls.forEach(l=>{l.talk=legTalk(l.text)});
+  const talk=byTime(near(calls.filter(l=>l.talk==="talk")).slice(0,CHAT.maxCalls).map(x=>x.l)),quiet=byTime(near(calls.filter(l=>l.talk!=="talk")).slice(0,CHAT.quietCalls).map(x=>x.l));
+  k.calls=talk.concat(quiet);
+  k.calls.forEach(l=>{const o=k.orders.find(x=>x.callIds.includes(l.id));if(o)l.orders=`${o.label} (ticket ${o.ticket||"?"})`});
   step("calls","done",k.calls.length?`${k.calls.length} call${k.calls.length===1?"":"s"}`:"none");
   if(deps.slack){step("slack","run");try{k.slack=(await deps.slack(c,k))||[];step("slack","done",k.slack.length?`${k.slack.length} thread${k.slack.length===1?"":"s"}`:"none")}
     catch(e){if(deps.isStop&&deps.isStop(e))throw e;k.notFound.push("Slack (the search didn't run)");step("slack","error")}}
@@ -465,4 +596,5 @@ if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(gl
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
-    CHAT_STEPS,CHAT_PATHS,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc}}
+    CHAT_STEPS,CHAT_PATHS,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
+    rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}
