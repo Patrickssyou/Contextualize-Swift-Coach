@@ -269,7 +269,7 @@ function caseEvidence(c){const legs=c.legs||[],tasks=c.tasks||[];
 }
 /* ---- Two passes. Pass 1 (facts): what was said and done, per call and in one timeline, plus explicit promises. No conclusions.
    Pass 2 (analysis): reads only the pass-1 facts, never the transcripts, and concludes; every conclusion cites fact ids. ---- */
-const FACTS2_V = "facts-2";
+const FACTS2_V = "facts-3";
 const CTX = "Tarro answers the phones and runs the POS, online ordering and delivery for pizza restaurants. Super Agents handle escalated calls from restaurant clients (store owners and managers) and their customers.";
 function caseLine(c){return `Restaurant: ${c.restaurant?`${c.restaurant}${c.code?` (${c.code})`:""}`:(c.code||"not on record")}${c.date?" · "+c.date:""}`}
 function factsPrompt(c){
@@ -280,12 +280,23 @@ function factsPrompt(c){
     `- Record only what was said or done. Do NOT interpret, explain, judge or conclude: no fault, no root cause, no "should have", no opinion on how well anyone did.`,
     `- Attribute every statement to the person who said it: "Store manager says the customer paid by card", not "the customer paid by card". A claim stays a claim.`,
     `- Record actions actually taken: tickets reprinted, orders remade or refunded, drivers reassigned, transfers, tasks created or closed (with their status), Slack posts.`,
-    `- Transcripts are machine speech-to-text with no speaker labels: work out who is talking from context. "Darrow", "Tauro", "Taro" or "Tyro" usually means Tarro. Agents introduce themselves with an alias, so call the Tarro agent by the name in the call header.`,
     `- If something isn't in the evidence, leave it out. Never guess or fill in.`,
-    `- Refer to people by name or role (the store manager, the customer, the driver, ${first}), never as he or she.`,
+    `- Refer to people by name or role (the store, the customer, the driver, ${first}), never as he or she.`,
+    `- Don't use cause or judgement words ("failed to", "correctly", "poorly", "because", "the issue was") in your own voice. If a person said it, it is their claim: attribute it.`,
+    `- "did" is for actions done or stated as done (a task created, a call placed, "I already updated it"). Offers and future actions ("I'll call the driver") are "said"; explicit commitments also go in "promises".`,
+    ``,`Who said it (the hardest part; get it right):`,
+    `- Transcripts are machine speech-to-text with NO speaker labels; both sides run together. "Darrow", "Tauro", "Taro", "Tiro" or "Tyro" usually means Tarro.`,
+    `- The Tarro agent is the person named in the call header. Agents use an alias and may speak as the restaurant: "This is Sam from Tarro", "This is Sam, the manager", "<restaurant name>, how can I help?", or on an outbound call "Calling from <restaurant name>". That greeting is the agent, not a store manager. Always write the agent's header name.`,
+    `- Work out who the other side is from what they say: restaurant staff ("This is <name> from <restaurant>", "my driver", "we voided it"), a customer ("my order never came") or a driver. Name the role (the store, the customer, the driver) and keep it the same through the call.`,
+    `- The agent's own turns are mostly the greeting, short acknowledgements ("Okay", "Got it", "Thank you"), questions, read-backs, and the agent's own actions or offers ("Let me check", "I'll update the ticket", "I can add a credit"). Reports of what happened at the store, on the road, with a driver or with a customer almost always come from the caller, not the agent.`,
+    `- A question or read-back is not a claim. "So the order never left?" is someone asking; the answer belongs to whoever gave it.`,
+    `- Callers relay other people. Keep every layer: "Store says the driver says the customer claims the order was prepaid". Never move a relayed claim onto the agent or onto the person it is about.`,
+    `- If a line can't be placed on one speaker with confidence, set "who" to "unclear". An "unclear" fact is fine; a fact on the wrong person is a serious error. A line is not the agent's just because it follows the agent's line.`,
+    `- For transfers and hand-offs, record who handed the phone to whom ("Store hands the phone to the owner").`,
+    `- The call bullets follow the same rules.`,
     ``,`Reply with only a JSON object:`,
     `{"calls": [{"n": 1, "bullets": ["3 to 5 bullets for this call, each under 15 words, in order: who called and why, what was reported, what the agent did, how the call ended"]}],`,
-    ` "timeline": [{"src": "Call 1 | Task T123 | Slack", "when": "5:04 PM", "who": "who said or did it", "kind": "said | did", "what": "the fact, under 20 words"}],`,
+    ` "timeline": [{"src": "Call 1 | Task T123 | Slack", "when": "5:04 PM", "who": "who said or did it, or unclear", "kind": "said | did", "what": "the fact, under 20 words"}],`,
     ` "promises": [{"src": "Call 2", "who": "who promised", "to": "who it was promised to", "what": "what was promised, under 12 words", "by": "deadline if one was given, else empty"}]}`,
     ``,`"when" is the clock time in the call, task or post header; Slack replies take their post's time. "calls" has one entry for every call that has a transcript, using the call numbers below. "timeline" is in time order and covers calls, tasks and Slack. "promises" lists only explicit commitments (a callback, a refund, a remake, a fix by a time) and is empty if there were none.`,
     ``,`CASE`,`Audited agent: ${c.agent||"unknown"}`,caseLine(c)].concat(c.team&&c.team.length>1?[`Agents who worked it: ${c.team.join(", ")}`]:[]);
@@ -309,6 +320,7 @@ function analysisPrompt(c,F){
     ``,`Rules:`,
     `- Every conclusion cites the fact ids it rests on. If the facts don't support a conclusion, answer "unclear" (or leave the text empty) rather than guess.`,
     `- A claim made by one party is not proof. Weigh who said what.`,
+    `- A fact whose speaker is "unclear" can't show what a particular person said; don't use it for "faultAgent" or "promised".`,
     `- A promise is "kept" only if a later fact shows it was done; "not_kept" if the record covers the time it was due and it wasn't done; otherwise "cant_tell".`,
     `- Write plainly and briefly, the way a QA lead fills in a form. Refer to people by name or role, never as he or she.`].concat(team?[`- This is a team case (${c.team.join(", ")}). In "actionTaken" say briefly who did what. "faultAgent" is what ${first} told the caller; if others told the caller something different, say so in "faultWhy".`]:[]).concat([
     ``,`Reply with only a JSON object with exactly these keys:`,
