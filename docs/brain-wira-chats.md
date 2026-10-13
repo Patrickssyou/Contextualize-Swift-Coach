@@ -108,7 +108,7 @@ Fault can also be **none**: nothing went wrong (a plain request). Fault is about
 | 2b | Restated the case correctly | 10 | Told the client what happened, or confirmed the request back, accurately and plainly. | – |
 | 3 | Fault attribution | 15 | Correct fault, owned clearly when it's Tarro's, pushed back when it isn't. | nothing went wrong (a plain request) |
 | 4a | Resolution path | 15 | The right path for the case type: the policy path for compensation; the right action, team or ticket for a request; the restaurant's decision carried out for a customer credit. | – |
-| 4b | Resolution accuracy | 10 | The amount and terms are exactly right (right base, right %, fees handled; or exactly what the restaurant approved). | no compensation, credit, refund or fee was due, or its amount appears nowhere in the record |
+| 4b | Resolution accuracy | 10 | The amount and terms are exactly right wherever the SA recorded them (right base, right %, fees handled; or exactly what the restaurant approved). Recorded nowhere: 0. | no compensation, credit, refund or fee was given, promised or due |
 | 4c | Solution explained | 5 | The client understands what they get, why, and when. Explains the math when challenged. | nothing to explain beyond confirming it was done |
 | 5 | Escalation (0–4) | 15 | Level 4 (see below). | no escalation was needed |
 | 6 | Reply quality | 5 | Clear, warm, professional, owns mistakes, no over-promising. | – |
@@ -131,6 +131,13 @@ Marks: 3 right · 2 right with a small gap · 1 attempted but wrong in a way tha
 | Okay | 65–79 |
 | Needs work | 50–64 |
 | Miss | < 50 |
+
+### The QA lead's standing decisions (Oct 14)
+
+- **Two reads.** The grade pass runs twice (the second asked fresh) and the marks are averaged per criterion. A half mark means the two reads differed by one; N/A stands only when both reads say so. When the two reads are 15+ points apart the audit shows both.
+- **Shared chat.** Grade only what the audited SA wrote or did. If another SA answered the client in the chat, credit the audited SA for a clean handoff and mark down only their own gaps.
+- **Compensation amount.** It counts wherever the SA recorded it: in the chat, an internal note or a WIRA ticket. The SA doesn't have to tell the client the amount unless the client asks; if asked, the SA must give and explain it. Given or promised but recorded nowhere: Resolution accuracy 0.
+- **An earlier agent's promise.** When the SA didn't keep a promise an earlier Tarro agent made, judge how the SA read the situation (noticed it; had a sound reason, such as the restaurant's decision, the policy or a lead's call) under Resolution path, and how the SA managed it with the client under Reply quality.
 
 ## 5. The coaching note (Swift Coach)
 

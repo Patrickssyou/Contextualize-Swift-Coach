@@ -3,7 +3,7 @@
 //   node eval/chat_case.js <sid> facts     -> links orders/calls, writes the facts prompt
 //   node eval/chat_case.js <sid> analysis  -> needs facts.out.json; writes the analysis prompt
 //   node eval/chat_case.js <sid> grade     -> needs analysis.out.json; writes the grade prompt
-//   node eval/chat_case.js <sid> report    -> needs grade.out.json; prints the audit
+//   node eval/chat_case.js <sid> report    -> needs grade.out.json (and grade2.out.json for the second read); prints the audit
 //   node eval/chat_case.js <sid> all --run -> runs every pass blind through the Claude CLI (Sonnet, no tools, no project files), then prints the report
 //   node eval/chat_case.js <sid> <pass> --run -> writes that pass's prompt and runs it blind (refs | facts | analysis | grade)
 // Options: --calib=none|all (default all, minus the case itself), --tag=<name> (output prefix, default "run"), --model=<alias> (default sonnet),
@@ -27,7 +27,7 @@ function closeJson(t) {
 }
 /* one blind pass: the prompt file goes to a fresh Claude with no tools and no project context, the JSON reply is saved.
    A reply that isn't valid JSON is retried once (the page's retry does the same); the bad reply is kept as <pass>.bad.txt */
-function blind(pass, attempt = 1) {
+function blind(pass, attempt = 1, as = pass) {
   const { execFileSync } = require('child_process'), os = require('os');
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-eval-'));
   const txt = execFileSync('claude', ['-p', '--safe-mode', '--model', opt.model || 'sonnet', '--tools', '', '--output-format', 'text',
@@ -36,10 +36,10 @@ function blind(pass, attempt = 1) {
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
   let out = null; try { if (a >= 0 && b > a) out = JSON.parse(txt.slice(a, b + 1)); } catch (e) { out = null; }
   if (!out && a >= 0) try { out = JSON.parse(closeJson(txt.slice(a, b + 1))); if (out) console.log(`${pass}: closed unbalanced JSON`); } catch (e) { out = null; }
-  if (!out) { fs.writeFileSync(F(pass + '.bad.txt'), txt); if (attempt < 2) { console.log(`${pass}: reply was not valid JSON, retrying once`); return blind(pass, attempt + 1); }
+  if (!out) { fs.writeFileSync(F(pass + '.bad.txt'), txt); if (attempt < 2) { console.log(`${pass}: reply was not valid JSON, retrying once`); return blind(pass, attempt + 1, as); }
     throw new Error(`${pass}: no valid JSON in the reply: ${txt.slice(0, 300)}`); }
-  fs.writeFileSync(F(pass + '.out.json'), JSON.stringify(out, null, 1));
-  console.log(`ran ${pass} blind -> ${F(pass + '.out.json')}${attempt > 1 ? ' (after a retry)' : ''}`);
+  fs.writeFileSync(F(as + '.out.json'), JSON.stringify(out, null, 1));
+  console.log(`ran ${pass} blind -> ${F(as + '.out.json')}${attempt > 1 ? ' (after a retry)' : ''}`);
 }
 if (step === 'all' || ('run' in opt && ['refs', 'facts', 'analysis', 'grade'].includes(step))) {
   const self = process.argv.slice(1, 3), rest = process.argv.slice(4).filter(a => a !== '--run');
@@ -50,7 +50,7 @@ if (step === 'all') {
   if (!('run' in opt)) throw new Error('all needs --run');
   const self = process.argv.slice(1, 3), rest = process.argv.slice(4).filter(a => a !== '--run');
   const sub = st => require('child_process').execFileSync(process.execPath, [...self, st, ...rest], { stdio: 'inherit' });
-  sub('refs'); blind('refs'); sub('facts'); blind('facts'); sub('analysis'); blind('analysis'); sub('grade'); blind('grade'); sub('report');
+  sub('refs'); blind('refs'); sub('facts'); blind('facts'); sub('analysis'); blind('analysis'); sub('grade'); blind('grade'); if (opt.reads !== '1') blind('grade', 1, 'grade2'); sub('report');
   process.exit(0);
 }
 const policy = rj(path.join(ROOT, 'data/chats/policy_pack.json'));
@@ -98,11 +98,12 @@ if (['grade', 'report'].includes(step)) {
 }
 if (step === 'grade') { fs.writeFileSync(F('grade.txt'), B.chatGradePrompt(k, Fx, A, comp, offer, cal)); console.log('comp', comp, 'offer', offer); console.log('wrote', F('grade.txt')); }
 if (step === 'report') {
-  const G = B.cleanChatGrade(rj(F('grade.out.json'))), pct = B.chatScore(G.scores), v = B.chatVerdict(pct);
+  /* two reads, averaged like the page (gradeChat), when grade2.out.json exists */
+  const G1 = B.cleanChatGrade(rj(F('grade.out.json'))), G = fs.existsSync(F('grade2.out.json')) ? B.mergeGrades(G1, B.cleanChatGrade(rj(F('grade2.out.json')))) : G1, pct = B.chatScore(G.scores), v = B.chatVerdict(pct);
   const out = { sid, verdict: v, pct, reviewer: k.review, caseType: A.caseType || '', request: A.request || '', fault: A.fault, bucket: A.bucket, comp, offer, saPath: A.saPath, ae: A.aeInvolvement, firstResponse: A.firstResponse, ideal: A.ideal,
     claims: Fx.claims, scores: G.scores, reasons: G.reasons, route: G.route, wentWell: G.wentWell, nextTime: G.nextTime, verdictWhy: G.verdictWhy };
   fs.writeFileSync(F('audit.json'), JSON.stringify(out, null, 1));
-  console.log(`VERDICT ${v && v.label} ${pct}%  (reviewer: ${k.review && k.review.verdict})`);
+  console.log(`VERDICT ${v && v.label} ${pct}%${G.runPcts ? `  (reads ${G.runPcts.join(' / ')})` : ''}  (reviewer: ${k.review && k.review.verdict})`);
   console.log('type', A.caseType || '-', '|', A.request || ''); console.log('fault', A.fault.who, '|', A.fault.why); console.log('bucket', A.bucket.id, '|', comp.formula, '| SA offered', offer.amount, offer.match, offer.note);
   console.log('path', A.saPath.match, A.saPath.why); console.log('AE', A.aeInvolvement.kind, A.aeInvolvement.saCouldPrevent, A.aeInvolvement.why);
   console.log('first response', A.firstResponse.concludedBeforeEvidence, A.firstResponse.why);

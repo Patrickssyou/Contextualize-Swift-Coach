@@ -102,7 +102,8 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
     throw new Error('unexpected query ' + title); };
   const out = p => JSON.parse(fs.readFileSync(path.join(D, `cases/1831362.r2.${p}.out.json`), 'utf8'));
   const asked = [];
-  const ask = async (prompt, pass) => { asked.push(pass); return pass === 'refs' ? { amounts: [17.73], orderType: 'pickup' } : out(pass); };
+  const prompts = {};
+  const ask = async (prompt, pass, o) => { asked.push(pass + (o && o.fresh ? '*' : '')); prompts[pass] = prompt; return pass === 'refs' ? { amounts: [17.73], orderType: 'pickup' } : out(pass); };
   const steps = [];
   const deps = { query, ask, policy, cal: JSON.parse(fs.readFileSync(path.join(D, 'calibration.json'), 'utf8')), step: (id, st, note) => steps.push(`${id}:${st}${note ? ':' + note : ''}`) };
   const k2 = await B.chatContext(chat, deps);
@@ -111,7 +112,24 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   ok(titles.some(t => / · same caller$/.test(t)), 'looks for the same caller');
   ok(!k2.notFound.length, 'nothing missing');
   const R = await B.gradeChat(k2, deps);
-  ok(asked.join(',') === 'refs,facts,analysis,grade', 'four passes in route order');
+  ok(asked.join(',') === 'refs,facts,analysis,grade,grade*', 'passes in route order; the grade is read twice, the second fresh');
+  ok(R.G.runs && R.G.runs.length === 2 && R.G.spread === 0, 'two identical reads merge to the same marks');
+  // the QA lead's standing decisions reach the analysis and grade passes
+  ok(/clean handoff/.test(prompts.analysis) && /clean handoff/.test(prompts.grade), 'shared chat: grade the SA\'s own messages, credit a handoff');
+  ok(/recorded nowhere is a failed Resolution accuracy/.test(prompts.grade) && /internal note or a WIRA ticket/.test(prompts.grade), 'comp amount checked wherever recorded; nowhere = 0');
+  ok(/promise an earlier Tarro agent made/.test(prompts.grade), 'an earlier agent\'s promise: judge the decision and the handling');
+  ok(/\$59\.10/.test(prompts.facts) && !/mu usd/.test(prompts.facts), 'WIRA minor-unit amounts read as dollars');
+  // two reads that differ: half marks, N/A only when both reads say so
+  const m = B.mergeGrades({ scores: { fr: 1, ev: 3, rs: 3, fa: 3, path: 3, amt: 1, expl: 1, esc: 2, tone: 2 } }, { scores: { fr: 2, ev: 3, rs: 2, fa: 'na', path: 3, amt: 1, expl: 'na', esc: 3, tone: 2 } });
+  ok(m.scores.fr === 1.5 && m.scores.fa === 3 && m.scores.esc === 2.5 && m.scores.expl === 1 && m.runPcts.length === 2 && m.spread > 0, 'reads averaged per mark');
+  ok(B.mergeGrades({ scores: { fr: 'na' } }, { scores: { fr: 'na' } }).scores.fr === 'na', 'N/A when both reads agree');
+  // a second read that fails keeps the first; a stop error still stops
+  let n2 = 0; const quiet = Object.assign({}, deps, { step: () => {} }); const k4 = await B.chatContext(chat, quiet);
+  const R2 = await B.gradeChat(k4, Object.assign({}, quiet, { ask: async (p, pass, o) => { if (o && o.fresh) { n2++; throw { code: 'upstream_error' }; } return pass === 'refs' ? {} : out(pass); }, isStop: e => e.code === 'rate_limited' }));
+  ok(n2 === 1 && R2.pct === 74.2 && !R2.G.runs, 'a failed second read keeps the first');
+  let stopped = null; try { await B.gradeChat(k4, Object.assign({}, quiet, { ask: async (p, pass, o) => { if (o && o.fresh) throw { code: 'rate_limited' }; return out(pass); }, isStop: e => e.code === 'rate_limited' })); } catch (e) { stopped = e.code; }
+  ok(stopped === 'rate_limited', 'a stop error on the second read stops the batch');
+  ok(B.CHAT_RUBRIC.find(r => r.id === 'amt').naWhen === 'no compensation, credit, refund or fee was given, promised or due', 'amount is N/A only when nothing was due');
   ok(R.comp.amount === 16.42 && R.offer.match === 'wrong_base', 'money from code');
   ok(R.verdict.id === 'okay' && R.pct === 74.2, `end-to-end verdict Okay 74.2 (got ${R.verdict && R.verdict.id} ${R.pct})`);
   ok(steps.includes('grade:done:Okay 74.2%') && steps.filter(x => /:run$/.test(x)).length === 7, 'steps reported (no Slack hook)');

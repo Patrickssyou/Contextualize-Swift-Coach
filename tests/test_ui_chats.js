@@ -124,7 +124,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(true, 'progress line: Grading N of 9 · SA · restaurant · step');
   await page.waitForFunction(`${nIn(P('audits'))} === 9 && !document.querySelector('#chatStatus .spin') && [...document.querySelectorAll('.crow .pill')].filter(p => /^Graded/.test(p.textContent)).length === 9`, null, { timeout: 60000 });
   ok(await count(page, P('audits')) === 9 && await count(page, P('tx')) === 9, "Grade picks writes the week's audits and tx for the 9 picks");
-  ok(await page.evaluate(() => window.__prompts.length >= 36 && window.__prompts.every(p => p.cache === undefined)), 'first grades use the default sample cache');
+  ok(await page.evaluate(() => { const P = window.__prompts, g = P.filter(p => /You are Swift Coach/.test(p.input)); return P.length >= 45 && P.every(p => p.cache === undefined || (p.cache === false && /You are Swift Coach/.test(p.input))) && g.filter(p => p.cache === false).length * 2 === g.length }), 'first grades use the default sample cache; only the second grade read is fresh');
   ok(await weekSubN(page) === nSub, 'pulling and grading open no new subscriptions');
   ok(/Graded 9 chats/.test(await txt(page, '#chatStatus')) && await page.locator('.crow .pill', { hasText: 'Graded' }).count() === 9, 'queue shows Graded pills and the summary');
   const realA = await page.evaluate(p => window.__data[p], P('audits/' + SID));
@@ -211,7 +211,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click(`#ordList .orow[data-oid="${tgt.id}"]`);
   await page.waitForFunction(([p, id]) => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && a.orders.length === 1 && a.orders[0].id === id && !document.querySelector('#chatSteps') }, [P('audits/' + SID), tgt.id], { timeout: 20000 }); await page.waitForTimeout(150);
   let cs = await caches(page, pq);
-  ok(cs.length === 4 && cs.every(c => c === false), 'picking an order re-grades with cache:false on every pass (refs, facts, analysis, grade)');
+  ok(cs.length === 5 && cs.every(c => c === false), 'picking an order re-grades with cache:false on every pass (refs, facts, analysis, two grade reads)');
   ok((await txt(page, '.ordcard')).includes('Ticket ' + tgt.ticket) && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'the picked order is linked as your pick');
   // → No order: re-grade without the order, money card gone
   await page.click('#ordChange'); await page.waitForTimeout(100);
@@ -224,7 +224,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(() => { window.__opts.sampleMs = 30 });
   await page.waitForFunction(p => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && !a.orders.length && !document.querySelector('#chatSteps') }, P('audits/' + SID), { timeout: 20000 }); await page.waitForTimeout(150);
   ok(await page.locator('.ordcard').count() === 0 && (await txt(page, '#cs-ctx')).includes('No order linked') && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'No order: re-graded, the money card is gone');
-  cs = await caches(page, pq); ok(cs.length === 4 && cs.every(c => c === false), 'No order re-grades with cache:false');
+  cs = await caches(page, pq); ok(cs.length === 5 && cs.every(c => c === false), 'No order re-grades with cache:false');
   ok(await page.locator('#cs-ctx .txcall').count() === 0, 'no order, no recordings');
 
   // ===== 9. next chat, dark, phone widths
@@ -234,8 +234,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok((await txt(page, '#cvGrade')) === 'Re-grade', 'a graded chat offers Re-grade');
   pq = await nPrompts(page);
   await page.click('#cvGrade');
-  await page.waitForFunction(n => window.__prompts.length >= n + 4 && !chatRun && !document.querySelector('#chatSteps'), pq, { timeout: 20000 }); await page.waitForTimeout(100);
-  cs = await caches(page, pq); ok(cs.length === 4 && cs.every(c => c === false), 'Re-grade asks Claude fresh (cache:false)');
+  await page.waitForFunction(n => window.__prompts.length >= n + 5 && !chatRun && !document.querySelector('#chatSteps'), pq, { timeout: 20000 }); await page.waitForTimeout(100);
+  cs = await caches(page, pq); ok(cs.length === 5 && cs.every(c => c === false), 'Re-grade asks Claude fresh (cache:false)');
   await page.click('#coachCopy'); await page.waitForTimeout(150);
   ok(/Copied|Couldn't copy/.test(await txt(page, '#toast')), 'Copy gives feedback');
   const harbor = await page.evaluate(() => (Object.values(window.__data).find(d => d.restaurant === 'Harbor Crust' && d.grade) || {}).sid);
@@ -323,7 +323,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(() => { window.__opts.sampleFail = null }); pq = await nPrompts(page);
   await page.click('#chatGradePicks'); await page.waitForFunction(() => !document.querySelector('#chatStop'), null, { timeout: 20000 }); await page.waitForTimeout(200);
   ok((await docs(page, P('chats'))).every(c => !c.gradeError) && await count(page, P('audits')) === a0 + left, 'grading again clears the marks');
-  cs = await caches(page, pq); ok(cs.length === 4 * left && cs.every(c => c === false), 'a chat that failed is asked fresh (cache:false)');
+  cs = await caches(page, pq); ok(cs.length === 5 * left && cs.every(c => c === false), 'a chat that failed is asked fresh (cache:false)');
   ok(!errors.length, 'no console errors (batches) ' + JSON.stringify(errors));
   await ctx.close();
   ok(!allErrors.length, 'no console errors (routes) ' + JSON.stringify(allErrors));

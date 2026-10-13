@@ -32,6 +32,7 @@ const CH_ROLES=[["ae","AE/CSM"],["lead","Lead"],["crt","CRT"],["staff","Staff"]]
 const chFirst=s=>String(s||"").trim().split(/\s+/)[0]||"";
 const chLower=s=>s&&/^[A-Z][a-z]/.test(s)?s[0].toLowerCase()+s.slice(1):s;
 function chFrt(m){if(m==null||isNaN(m))return "–";m=Number(m);return m<60?(Math.round(m*10)/10)+" min":Math.floor(m/60)+" h "+Math.round(m%60)+" min"}
+const chMarkL=v=>v==="na"?"N/A":v==null?"–":Number(v)%1?`${Math.floor(v)}–${Math.ceil(v)}`:String(v);
 function chMarkCls(v,max){if(v==="na"||v==null)return "na";const p=Number(v)/max;return p>=1?"s3":p>=.5?"s2":p>0?"s1":"s0"}
 /* a doc's content fingerprint (cached per snapshot object): what the audit view and the review draft key on, so a re-grade always shows */
 const chHashes=new WeakMap();
@@ -162,7 +163,7 @@ async function gradeOneChat(c,ctl,orderIds,fresh){
   const sid=String(c.sid),w=chWk(c),guard=()=>{if(ctl.signal.aborted)throw {code:"cancelled",src:"run"}};
   const deps={
     query:async(cfg,title)=>{guard();try{return await ldQuery(cfg,title)}catch(e){throw chTag(e,"ld")}},
-    ask:async(prompt,pass)=>{guard();const o={signal:ctl.signal,modelTier:"default"};if(fresh)o.cache=false;
+    ask:async(prompt,pass,po)=>{guard();const o={signal:ctl.signal,modelTier:"default"};if(fresh||(po&&po.fresh))o.cache=false;
       try{return await sampleFn.json(prompt,o)}catch(e){throw chTag(e,"ai")}},
     policy:chatPolicyDoc||CHAT_POLICY_EMPTY,
     cal:chatCal.slice().sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))),
@@ -265,7 +266,7 @@ function chatDraft(sid){const a=chatAud[sid],rv=chatRev[sid],base=chHash(a),rvAt
 function coachText(c,a,scores){const pct=chatScore(scores),v=chatVerdict(pct),G=(a&&a.grade)||{},R=G.route||{};
   const L=[`Chat ${a.sid||c.sid} · ${a.restaurant||c.restaurant||""} · ${shortDate(String(a.at||c.at||"").slice(0,10))} — ${v?v.label:"–"} (${pct==null?"–":fmt(pct)}%)`,""];
   [["facts","Facts"],["analysis","Analysis"],["solution","Solution"]].forEach(([k,l])=>{const r=R[k]||{};L.push(`${l}: ${CH_MARK[r.mark]||"–"} ${r.why||""}`.trimEnd())});
-  const es=scores&&scores.esc,er=R.escalation||{};L.push(`Escalation: ${es==="na"||es==null?"N/A":"Level "+es}${er.why?" · "+er.why:""}`);
+  const es=scores&&scores.esc,er=R.escalation||{};L.push(`Escalation: ${es==="na"||es==null?"N/A":"Level "+chMarkL(es)}${er.why?" · "+er.why:""}`);
   if((G.wentWell||[]).length){L.push("","What you did well");G.wentWell.forEach(x=>L.push("- "+x))}
   if((G.nextTime||[]).length){L.push("","Next time");G.nextTime.forEach((n,i)=>{L.push(`${i+1}. What happened: ${n.what||""}`);if(n.why)L.push(`   Why it matters: ${n.why}`);if(n.do)L.push(`   Do: ${n.do}`);if(n.model)L.push(`   Model message: "${n.model}"`)})}
   return L.join("\n")}
@@ -292,9 +293,9 @@ function chBoard(c,a,rv,d){
   const init=c.initiator==="ae"?"AE"+(c.createdBy?" · "+c.createdBy:""):c.initiator==="client"?"Client":(c.createdBy||"–");
   const route=a?`<div class="vroute" id="cvRoute">${[["facts","Facts"],["analysis","Analysis"],["solution","Solution"]].map(([k,l])=>{const r=R[k]||{};
       return `<span class="rm ${esc(r.mark||"")}" title="${esc(r.why||"")}"><span>${l}</span><b>${CH_MARK[r.mark]||"–"} ${esc(CH_MARK_L[r.mark]||"")}</b></span>`}).join("")}
-      <span class="rm esc" title="${esc((R.escalation||{}).why||"")}"><span>Escalation</span><b id="cvEsc">${d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+esc(d.scores.esc)}</b></span></div>`:"";
+      <span class="rm esc" title="${esc((R.escalation||{}).why||"")}"><span>Escalation</span><b id="cvEsc">${d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+esc(chMarkL(d.scores.esc))}</b></span></div>`:"";
   return `<div class="vhead"><span class="lbl-sm">Chat ${esc(c.sid)}</span>${rv?`<span class="pill solid ${chVB(rv.pct)}">Reviewed</span>`:a?`<span class="pill none">Graded</span>`:""}</div>
-    ${a?`<div class="vword v-${esc(v?v.id:"")}" id="cvWord">${esc(v?v.label:"–")}</div><div class="vpct"><span class="num" id="cvPct">${pct==null?"–":fmt(pct)+"%"}</span><span class="hint num" id="cvClaude"${pct===a.pct?" hidden":""}>Claude ${fmt(a.pct)}%</span></div>`
+    ${a?`<div class="vword v-${esc(v?v.id:"")}" id="cvWord">${esc(v?v.label:"–")}</div><div class="vpct"><span class="num" id="cvPct">${pct==null?"–":fmt(pct)+"%"}</span><span class="hint num" id="cvClaude"${pct===a.pct?" hidden":""}>Claude ${fmt(a.pct)}%</span></div>${a.grade&&a.grade.spread>=15&&Array.isArray(a.grade.runPcts)?`<div class="hint num vreads">Two reads: ${a.grade.runPcts.map(x=>fmt(x)+"%").join(" · ")}</div>`:""}`
       :`<div class="vword v-none">${g?"Not graded":"No SA reply"}</div>`}
     ${a?chCaseHtml(a.analysis):""}
     ${route}
@@ -390,11 +391,12 @@ function chAnalysis(c,a){const A=a.analysis||{},comp=a.comp||{},off=a.offer||{},
   if(A.ideal)rows.push(["Escalation",`<b>${es.needed?"Needed":"Not needed"}</b>${es.to?` · ${esc(es.to)}`:""}${es.why?` ${esc(es.why)}`:""}`]);
   Object.keys(A).filter(k=>!CH_KNOWN.includes(k)).forEach(k=>rows.push([chLabel(k),chAny(A[k])]));
   return `<dl class="adl">${rows.map(([k,v,line])=>line?`<dt class="sr-only">${esc(k)}</dt><dd class="aline">${esc(v)}</dd>`:`<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`}
-function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{};
-  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id];
-    const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}" data-cm="${r.id}" data-v="${v}" aria-pressed="${String(cur)===String(v)}">${v}</button>`).join("")+
+function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null;
+  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0;
+    const reads=runs&&String(runs[0][r.id])!==String(runs[1][r.id])?`<span class="reads num">Reads ${chMarkL(runs[0][r.id])} · ${chMarkL(runs[1][r.id])}</span>`:"";
+    const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}${half&&(v===Math.floor(cur)||v===Math.ceil(cur))?" half":""}" data-cm="${r.id}" data-v="${v}" aria-pressed="${String(cur)===String(v)}">${v}</button>`).join("")+
       (r.na?`<button type="button" class="cm na" data-cm="${r.id}" data-v="na" aria-pressed="${cur==="na"}">N/A</button>`:"");
-    return `<div class="ccrit" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span><span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${orig==="na"?"N/A":esc(orig??"–")}</span></div>
+    return `<div class="ccrit" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span><span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>${reads}</div>
       <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}</div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}</div>`}).join("")}
 function chCoach(c,a,rv,d){const gen=coachText(c,a,d.scores),txt=d.coach!=null?d.coach:gen,calEx=chatCal.some(x=>String(x.sid)===String(c.sid));
   const xp=chatXpFor({sid:c.sid})-(rv?chatXpFor(rv):0);
@@ -430,11 +432,12 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
 /* live: a changed mark recomputes the score, the verdict, the escalation level and the generated coaching note */
 function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
   const d=chatDraft(sid),pct=chatScore(d.scores),v=chatVerdict(pct),cl=(a.grade&&a.grade.scores)||{};
-  CHAT_RUBRIC.forEach(r=>{document.querySelectorAll(`#view-chat [data-cm="${r.id}"]`).forEach(b=>b.setAttribute("aria-pressed",String(String(d.scores[r.id])===b.dataset.v)));
+  CHAT_RUBRIC.forEach(r=>{const cur=d.scores[r.id],half=typeof cur==="number"&&cur%1!==0;document.querySelectorAll(`#view-chat [data-cm="${r.id}"]`).forEach(b=>{b.setAttribute("aria-pressed",String(String(cur)===b.dataset.v));
+      b.classList.toggle("half",half&&(Number(b.dataset.v)===Math.floor(cur)||Number(b.dataset.v)===Math.ceil(cur)))});
     const w=$("#was-"+r.id);if(w)w.hidden=String(d.scores[r.id])===String(cl[r.id])});
   const wd=$("#cvWord");if(wd){wd.textContent=v?v.label:"–";wd.className="vword v-"+(v?v.id:"")}
   const p=$("#cvPct");if(p)p.textContent=pct==null?"–":fmt(pct)+"%";const cc=$("#cvClaude");if(cc)cc.hidden=pct===a.pct;
-  const e=$("#cvEsc");if(e)e.textContent=d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+d.scores.esc;
+  const e=$("#cvEsc");if(e)e.textContent=d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+chMarkL(d.scores.esc);
   const sa=$("#csScoreAns");if(sa)sa.textContent=v?`${v.label} · ${fmt(pct)}%`:"";
   const ta=$("#coachText"),gen=coachText(c,a,d.scores);if(ta&&d.coach==null)ta.value=gen;
   const rb=$("#coachRebuild");if(rb)rb.hidden=!(d.coach!=null&&d.coach!==gen);
