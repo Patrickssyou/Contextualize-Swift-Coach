@@ -96,6 +96,7 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   const titles = [];
   const query = async (cfg, title) => { titles.push(title);
     if (/ · tasks$/.test(title)) return fx.relRows;
+    if (/ · states$/.test(title)) return fx.stateRows || [];
     if (/ · orders$/.test(title)) return fx.orderRows;
     if (/ · order recordings$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_conversation_id));
     if (/ · same caller$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_call_phone_detail));
