@@ -1,6 +1,8 @@
 // Chats area: Queue → Audit → Brain, on the real case (data/chats/cases/1831362.json, git-ignored) plus invented chats from tests/mock.js.
 // Storage is by week (chatWeeks/<week>/{chats,audits,tx,reviews}); an invented, already-graded week before the case week covers week switching,
 // case types, bot lines, request fields and the game layer's history.
+// The QA ticket (top of Audit): fields, the brain's compensation check, findings with checked quotes, Agree / Not a mistake with live re-scoring,
+// corrections (chatLessons) saved, deleted, listed in Brain and fed to the next grade's prompt.
 // No names or chat text from the real case are written here: the SA, restaurant and messages are read from the fixture at run time.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
 const { openPage, chatWorld, DIR } = require('./mock.js');
@@ -15,8 +17,13 @@ const PW = addD(WEEK, -7);                                                  // t
 const P = (k, w) => `chatWeeks/${w || WEEK}/${k}`;
 const SA0 = W.realSA.name, first = SA0.split(' ')[0];
 const cal = Object.assign({}, W.calibration[0], { sid: '9900999', id: undefined });   // an older calibration case, not one of this week's chats
+// two invented corrections (findings the QA lead marked not a mistake) on last week's chat; the newer one must reach the prompts first
+const LS_OLD = { sid: '9900901', week: PW, sa: 'Mara Quill', crit: 'tone', label: 'Reply quality', type: 'Too brief', what: 'Closed with a one-line confirmation.', note: 'Short is right for a menu fix.', by: 'u_test', at: addD(PW, 2) + 'T15:10:00.000Z' };
+const LS_NEW = { sid: '9900901', week: PW, sa: 'Mara Quill', crit: 'rs', label: 'Restated the case correctly', type: 'No restatement', what: 'Did not repeat the request back.', note: 'Both prices were confirmed back in M5.', by: 'u_test', at: addD(PW, 3) + 'T09:00:00.000Z' };
 const seed = [['settings/chatPolicy', W.policy], ['chatCalib/9900999', cal], ['settings/staff', { map: { 'dana.lowe': { name: 'Dana Lowe', role: 'ae' } } }],
-  ['meta/roster', { agents: W.SA.map((s, i) => ({ name: s.name, logins: ['zzsa' + i] })) }]].concat(W.sideWeek(PW));
+  ['meta/roster', { agents: W.SA.map((s, i) => ({ name: s.name, logins: ['zzsa' + i] })) }], ['chatLessons/9900901_tone', LS_OLD], ['chatLessons/9900901_rs', LS_NEW]].concat(W.sideWeek(PW));
+const markL = v => v === 'na' ? 'N/A' : Number(v) % 1 ? `${Math.floor(v)}–${Math.ceil(v)}` : String(v);
+const vLabel = id => (B.VERDICTS.find(v => v[0] === id) || [])[2];
 // the parked call queue (real Sep 28 week) so Calls › Snapshot has something to show
 const callSeed = [['pulls/2026-09-28', { status: 'done', week: '2026-09-28', at: '2026-10-05T19:33:25.065Z', added: 30 }]];
 for (const f of fs.readdirSync(path.join(DIR, 'data/live4/queue'))) { const q = JSON.parse(fs.readFileSync(path.join(DIR, 'data/live4/queue', f))); if (q.week !== '2026-09-28') continue;
@@ -75,6 +82,13 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(/request fields/i.test(rf) && rf.includes('Large Margherita') && /new price/i.test(rf) && rf.includes('16.99') && /not linked yet/i.test(await txt(page, '#cs-ctx')) === false, 'Context shows the request fields');
   ok(JSON.stringify(await page.evaluate(() => [chFieldList({ a_b: 'x', n: null }), chFieldList([{ name: 'Item', value: 'Pie' }, 'loose']), chFieldList('not json'), chFieldList('{}')]))
     === JSON.stringify([[['A b', 'x']], [['Item', 'Pie'], ['', 'loose']], [['', 'not json']], []]), 'request fields read objects, name/value lists and raw strings');
+  // an older chat-1 audit (no check, no findings, no priority) still gets a ticket: fields, what happened, and no findings because every mark is full or N/A
+  const tk0 = await txt(page, '#cTicket');
+  ok(await page.locator('#cTicket').isVisible() && /QA ticket/i.test(tk0) && tk0.includes('Chat 9900901') && (await txt(page, '#tkWord')) === 'Great' && (await txt(page, '#tkPct')) === '100.0%' && await page.locator('#tkPrio .prio').count() === 0,
+    'chat-1 audit: the ticket renders with verdict and score, no priority');
+  ok(await page.locator('#cTicket .tkf').count() === 11 && tk0.includes('No order linked') && tk0.includes('None linked') && tk0.includes('MENU SETUP') && tk0.includes('The client asked for two price fixes'),
+    'chat-1 ticket: 11 fields, no order, no recordings, case type, what happened');
+  ok(await page.locator('#tkComp').count() === 0 && await page.locator('.tkfind').count() === 0 && (await txt(page, '#tkFinds')).includes('No findings.') && await page.locator('.vmeta').count() === 0, 'chat-1 ticket: no comp check, No findings, and the board drops the duplicate meta');
   await shot(page, 'chats-audit-case.png'); await shot(page, 'chats-audit-case-full.png', true);
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(100); await shot(page, 'chats-audit-case-dark.png'); await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
@@ -128,22 +142,92 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await weekSubN(page) === nSub, 'pulling and grading open no new subscriptions');
   ok(/Graded 9 chats/.test(await txt(page, '#chatStatus')) && await page.locator('.crow .pill', { hasText: 'Graded' }).count() === 9, 'queue shows Graded pills and the summary');
   const realA = await page.evaluate(p => window.__data[p], P('audits/' + SID));
-  ok(realA.verdict === 'okay' && realA.pct === 74.2 && realA.orders[0].ticket === '65', 'real case graded Okay 74.2 on ticket 65');
-  await shot(page, 'chats-queue.png');
+  const RV = vLabel(realA.verdict), RP = fmt(realA.pct);
+  ok(realA.v === 'chat-2' && realA.pct === B.chatScore(realA.grade.scores) && realA.verdict === B.chatVerdict(realA.pct).id && realA.orders[0].ticket === '65', `real case graded ${RV} ${RP}% on ticket 65`);
+  ok(realA.check && realA.check.applies && realA.check.status === 'wrong' && realA.check.due.amount === 16.42 && realA.check.given.amount === 17.73 && realA.check.diff === 1.31 && realA.check.errors.some(e => e.code === 'tax')
+    && realA.grade.amtBy === 'system' && realA.grade.scores.amt === 1 && realA.priority === 'P1', 'the brain checked the comp: due $16.42, gave $17.73, taxes included; amt set by the check; ticket P1');
+  ok(W.chat.gradeSrc !== 't1' || (realA.grade.runs && JSON.stringify(realA.grade.runs[0]) !== JSON.stringify(realA.grade.runs[1])), 'the two grade reads come from grade and grade2');
+  // the corrections reach the prompts, newest first
+  const gp = await page.evaluate(s => window.__prompts.filter(p => /You are Swift Coach/.test(p.input) && p.input.includes(`CHAT ${s} ·`)).map(p => p.input), SID);
+  const corr = gp.length ? gp[0].slice(gp[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
+  ok(gp.length === 2 && corr.includes(LS_NEW.note) && corr.includes(LS_OLD.note) && corr.indexOf(LS_NEW.note) < corr.indexOf(LS_OLD.note), "seeded corrections reach the grade prompt under QA LEAD'S CORRECTIONS, newest first");
+  ok(await page.evaluate(s => window.__prompts.some(p => /You are the analyst for a QA lead/.test(p.input) && p.input.includes(`CHAT ${s} ·`) && p.input.includes("QA LEAD'S CORRECTIONS")), SID), 'and the analysis prompt');
+  // queue: graded rows carry the ticket priority and the comp chip; the SA card counts comp right
+  const realRow = page.locator(`.crow[data-open="${SID}"]`);
+  ok((await realRow.locator('.prio').innerText()) === 'P1' && (await realRow.locator('.compchip').innerText()) === 'Comp ✗', 'the real case row: P1 and Comp ✗');
+  ok(await page.locator('.crow .compchip').count() === 9 && await page.locator('.crow .compchip', { hasText: 'Comp ✓' }).count() === 8 && await page.locator('.crow .prio').count() >= 6, 'graded rows: 9 comp chips (8 ✓ nothing due), priority badges');
+  ok((await page.locator('.sacard', { hasText: SA0 }).innerText()).replace(/\s+/g, ' ').includes('Comp right 0 of 1') && await page.locator('.sacard .sacomp').count() === 1, `${first}'s card: Comp right 0 of 1; no line where no check counts`);
+  ok(await page.locator('.crow .cflags').count() === 9 && await page.locator('.crow:not(:has(.pill.solid)):not(:has(.cflags)) .pill', { hasText: 'Graded' }).count() === 0, 'every graded row has its flags');
+  await shot(page, 'chats-queue.png'); await shot(page, 'queue-ticket.png');
+  for (const wd of [1100, 900]) { await page.setViewportSize({ width: wd, height: 900 }); await page.waitForTimeout(120);
+    ok(await width(page) <= wd && await page.evaluate(() => [...document.querySelectorAll('.crow .cmain')].every(m => m.getBoundingClientRect().width >= 160)), `${wd}px queue: rows keep room for the chat, no overflow`) }
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(100);
 
   // ===== 4. the real case in Audit
   await page.click(`.crow[data-open="${SID}"] .clink`); await page.waitForTimeout(300);
   ok(await sel(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, 'row opens Audit at #chat/<week>/<sid>');
-  ok((await txt(page, '#cvWord')) === 'Okay' && (await txt(page, '#cvPct')) === '74.2%', 'verdict card: Okay 74.2%');
+  ok((await txt(page, '#cvWord')) === RV && (await txt(page, '#cvPct')) === RP + '%', `verdict card: ${RV} ${RP}%`);
   await shot(page, 'chats-audit-top.png'); await shot(page, 'chats-audit-full.png', true);
-  ok(await page.locator('#cvRoute .rm').count() === 4 && (await txt(page, '#cvEsc')) === 'Level 2', 'route marks with escalation Level 2');
-  ok(await page.locator('#cvCase').count() === 0 && (await page.locator('#cs-an .adl dt').allInnerTexts()).map(t => t.toLowerCase()).includes('policy') && await page.locator('#cs-an .aline').count() === 0, 'an older audit with no case type keeps Policy and Compensation');
-  const meta = await txt(page, '.vmeta');
-  ok(meta.includes(SA0) && meta.includes(W.code) && meta.includes('2.3 min') && meta.includes('Client'), 'chat meta: SA, restaurant code, first reply, started by');
+  await shot(page, 'ticket-top.png'); await shot(page, 'ticket-full.png', true);
+  ok(await page.locator('#cvRoute .rm').count() === 4 && (await txt(page, '#cvEsc')) === 'Level ' + markL(realA.grade.scores.esc), `route marks with escalation Level ${markL(realA.grade.scores.esc)}`);
+  ok((await txt(page, '#cvCase')).includes('COMPENSATION') && (await page.locator('#cs-an .adl dt').allInnerTexts()).map(t => t.toLowerCase()).includes('policy') && await page.locator('#cs-an .aline').count() === 0, 'a compensation case keeps Policy and Compensation in Analysis');
   const ord = await txt(page, '.ordcard');
   ok(/Ticket 65/.test(ord) && ord.includes('$54.72') && ord.includes('$4.38') && ord.includes('$59.10'), 'money card: ticket 65, items $54.72, tax $4.38, total $59.10');
-  ok((await txt(page, '.cline.right')) === 'Right: 30% × $54.72 items = $16.42', 'comp line: Right: 30% × $54.72 items = $16.42');
-  ok((await txt(page, '.cline.off')) === `${first} offered $17.73: 30% of the full bill $59.10 (tax included) instead of $54.72 items`, 'offer line: offered $17.73 on the full bill');
+  ok((await txt(page, '.cline.right')) === 'Due: 30% × $54.72 items = $16.42', 'Analysis comp line: Due: 30% × $54.72 items = $16.42');
+  ok((await txt(page, '.cline.off')) === `${first} gave $17.73: 30% × $59.10 (items $54.72 + tax $4.38) = $17.73`, "Analysis gave line follows the brain's check");
+
+  // ===== 4b. the QA ticket: on top, fields, comp check, findings
+  ok(await page.evaluate(() => { const t = document.getElementById('cTicket'), c = document.getElementById('cs-chat'); return !!t && !!c && !!(t.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) && t.getBoundingClientRect().bottom <= c.getBoundingClientRect().top }), 'the ticket sits above the chat');
+  const hd = (await txt(page, '#cTicket .tkhd')).replace(/\s+/g, ' ');
+  ok(/QA ticket/i.test(hd) && hd.includes('Chat ' + SID) && (await txt(page, '#tkWord')) === RV && (await txt(page, '#tkPct')) === RP + '%' && (await page.locator('#tkPrio .prio.p1').innerText()) === 'P1' && await page.locator('#cTicket.p1').count() === 1, `header: QA ticket · Chat ${SID}, ${RV} ${RP}%, P1`);
+  const tdts = await page.locator('#cTicket .tkf dt').allInnerTexts();
+  ok(JSON.stringify(tdts.map(t => t.trim().toLowerCase())) === JSON.stringify(['restaurant', 'sa', 'chat', 'order', 'case type', 'fault', 'opened', 'first reply', 'closed', 'started by', 'recordings']), 'field grid: Restaurant, SA, Chat, Order, Case type, Fault, Opened, First reply, Closed, Started by, Recordings');
+  const fv = async k => (await page.locator('#cTicket .tkf', { has: page.locator('dt', { hasText: new RegExp('^' + k + '$', 'i') }) }).locator('dd').innerText()).replace(/\s+/g, ' ').trim();
+  ok((await fv('Restaurant')).includes(W.code) && (await fv('SA')) === SA0 && (await fv('First reply')) === '2.3 min' && (await fv('Started by')) === 'Client' && /^Not closed · Blocked/.test(await fv('Closed')) && (await fv('Case type')) === 'COMPENSATION' && /Shared/.test(await fv('Fault')), 'fields: restaurant code, SA, first reply, started by, closed, case type, fault');
+  const wira = page.locator('#cTicket .tkf a', { hasText: 'WIRA ' + SID }), gdo = page.locator('#cTicket .tkf a', { hasText: 'Ticket 65' }), o1 = realA.orders[0];
+  ok(await wira.getAttribute('href') === W.fx.chatRow.wira_project_tasks_wira_ticket_url && await wira.getAttribute('target') === '_blank', 'Chat: the WIRA link, new tab');
+  ok((await gdo.getAttribute('href')) === `https://greendot.prod.letsdowonders.io/greendot/restaurant/${encodeURIComponent(W.code)}?orderId=${encodeURIComponent(o1.id)}` && (await gdo.getAttribute('href')).includes(encodeURIComponent(o1.id)) && (await fv('Order')).includes('$59.10'), 'Order: GreenDot order link with the order id, and the total');
+  const recs = page.locator('#cTicket .tkf a', { hasText: /^Rec/ });
+  ok(await recs.count() === realA.calls.length && (await recs.first().getAttribute('href')).includes('/callrecordings?callIds=' + encodeURIComponent(realA.calls[0].id)), `Recordings: ${realA.calls.length} Rec links`);
+  ok(await page.evaluate(() => [...document.querySelectorAll('#cTicket a[href^="http"]')].every(a => a.target === '_blank' && /noopener/.test(a.rel))), 'every ticket link opens in a new tab');
+  const comp = (await txt(page, '#tkComp')).replace(/\s+/g, ' ');
+  ok(comp.includes('Due') && comp.includes('$16.42') && comp.includes(`${first} gave`) && comp.includes('$17.73') && comp.includes('Taxes included') && comp.includes('Over by $1.31') && /Wrong/.test(await txt(page, '#tkComp .tkst')), `comp check: Due $16.42, ${first} gave $17.73, Taxes included, Over by $1.31, Wrong`);
+  ok((await txt(page, '#tkComp del')).includes('tax $4.38') && (await txt(page, '#tkComp .rwhere')) === 'CHAT' && comp.includes(W.policy.comp.buckets.find(b => b.id === 'made_twice_one_paid').label), "comp check: the tax in the SA's base is struck; where it's written; the policy row");
+  const pr = await page.locator('.tkfind .tkfh .prio').allInnerTexts();
+  ok(pr.length === realA.grade.findings.length && pr[0] === 'P1' && pr.every((p, i) => !i || p >= pr[i - 1]), `findings sorted P1 first (${pr.join(' ')})`);
+  ok((await txt(page, '#tf-amt .tkfs')).includes('set by the comp check') && (await txt(page, '#tf-amt .tkfs')).includes('1/3') && (await txt(page, '#tf-amt .tktype')).includes('Taxes included'), 'the amount finding: 1/3, set by the comp check, typed by the check');
+  ok(await page.locator('.tkfind .tkq .qok').count() >= 3 && await page.locator('.tkfind').first().locator('.tkfix h5').innerText().then(t => t.toLowerCase() === `what ${first.toLowerCase()} should have done`), 'verified quotes show ✓; What <SA> should have done');
+  ok(await page.locator('.tkfind details.tkmodel').count() >= 1 && await page.locator('.tkfind details.tkmodel[open]').count() === 0, 'model messages are folded');
+  const mchip = page.locator('.tkfind .srcchip[data-jump^="cm-"]').first(), mid = (await mchip.getAttribute('data-jump'));
+  await mchip.click(); await page.waitForTimeout(700);
+  ok(await page.evaluate(id => { const el = document.getElementById(id), r = el.getBoundingClientRect(); return el.classList.contains('flash') && r.top >= 0 && r.bottom <= innerHeight && !!el.closest('#cs-chat') }, mid) && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, `an M# chip scrolls to ${mid.replace('cm-', 'M')} in the chat and highlights it`);
+  const tchip = page.locator('.tkfind .srcchip[data-jump^="cx-task-"]').first();
+  if (await tchip.count()) { await tchip.click(); await page.waitForTimeout(700); ok(await page.evaluate(id => document.getElementById(id).classList.contains('flash'), await tchip.getAttribute('data-jump')), 'a Task chip scrolls to the task card in Context') }
+  ok(await page.evaluate(t => { const d = document.createElement('div'); d.innerHTML = chSrcChip('Call 2') + chSrcChip('O1') + chSrcChip('Task ' + t);
+    return [...d.querySelectorAll('a')].map(a => a.dataset.jump).every(id => !!document.getElementById(id)) }, realA.tasks[0].sid), 'Call, O# and Task chips point at the call card, the order card and the task card in Context');
+  // every compensation status gets its badge (invented checks)
+  const stl = await page.evaluate(() => ['right', 'minor', 'held', 'none_due', 'not_recorded', 'missing', 'not_due', 'unknown'].map(s => { const d = document.createElement('div');
+    d.innerHTML = chCompHtml({ sid: '1', sa: 'Ana Ruiz' }, { sa: 'Ana Ruiz', analysis: {}, check: { applies: true, status: s, due: { label: 'Test row', pct: 30, formula: '30% × $10.00 items = $3.00', amount: 3, needsApproval: s === 'held', limit: 25 },
+      given: { amount: s === 'minor' ? 3.5 : s === 'right' ? 3 : null, given: !['missing', 'held', 'none_due'].includes(s), where: 'note' }, errors: s === 'minor' ? [{ code: 'rounding', label: 'Rounded', detail: '$3.50 instead of the exact $3.00.' }] : [],
+      flags: [], computed: s === 'right' ? '30% × $10.00 items = $3.00' : '', diff: s === 'minor' ? 0.5 : s === 'right' ? 0 : null, summary: 'Summary ' + s } });
+    return [d.querySelector('.tkst').textContent, d.textContent.includes('Exact to the cent'), d.textContent.includes('Summary ' + s), !!d.querySelector('.rappr')] }));
+  ok(JSON.stringify(stl.map(x => x[0])) === JSON.stringify(['Right', 'Rounded', 'Held for approval', 'Nothing due', 'Not recorded', 'Not offered', 'Not due', "Can't check"]) && stl[0][1] && !stl[1][1] && stl[2][2] && stl[2][3] && stl[7][2],
+    'comp badges: Right (exact to the cent), Rounded, Held for approval (with the approval line), Nothing due, Not recorded, Not offered, Not due, Can\'t check');
+  await page.click('#tkCopy'); await page.waitForTimeout(150);
+  ok(/Ticket copied|Couldn't copy/.test(await txt(page, '#toast')), 'Copy ticket gives feedback');
+  const plain = await page.evaluate(s => chTicketText(chatBy(s), chatAud[s], chatDraft(s)), SID);
+  ok(plain.startsWith(`QA ticket · Chat ${SID} · ${RV} ${RP}% · P1`) && plain.includes('Order: Ticket 65 ($59.10) https://greendot') && plain.includes('Compensation check: Wrong') && plain.includes('- Taxes included:') && /\n1\. P1 · Resolution accuracy/.test(plain) && plain.includes(`What ${first} should have done:`) && !/<[a-z]/i.test(plain),
+    'the copied ticket is clean plain text: fields, comp check, findings with should-have-done');
+  // phone and dark: the ticket stays first, fields stack, nothing overflows
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120); await shot(page, 'ticket-dark.png');
+  ok(await page.evaluate(() => getComputedStyle(document.body).backgroundColor) !== 'rgb(253, 248, 244)' && await page.evaluate(() => getComputedStyle(document.querySelector('#cTicket .tkhd')).backgroundColor) !== 'rgb(244, 239, 234)', 'dark: the ticket takes the dark tokens');
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  ok(await width(page) <= 390, `390px dark ticket: no horizontal overflow (${await width(page)})`);
+  await page.emulateMedia({ colorScheme: 'light' }); await page.waitForTimeout(100);
+  ok(await width(page) <= 390 && await page.evaluate(() => { const t = document.getElementById('cTicket').getBoundingClientRect(), b = document.getElementById('chatBoard').getBoundingClientRect(); return t.bottom <= b.top && t.right <= 390 }), `390px light ticket: first on the page, no overflow (${await width(page)})`);
+  ok(await page.evaluate(() => { const f = [...document.querySelectorAll('#cTicket .tkf')].map(x => x.getBoundingClientRect().left); return f.every(l => Math.abs(l - f[0]) < 1) }), '390px: the field grid stacks in one column');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-390.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
   const ints = await page.locator('.bub.internal').allInnerTexts();
   ok(ints.length === 3 && ints.every(t => t.includes('internal · inferred')), '3 internal notes tagged internal · inferred');
   ok(await page.locator('.bub.cl').count() > 0 && await page.locator('.bub.me').count() > 0, 'client bubbles left, audited SA bubbles marked');
@@ -155,7 +239,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator('.cfacts .fact').count() === realA.facts.timeline.length && await page.locator('.claim').count() === realA.facts.claims.length, `case facts: ${realA.facts.timeline.length} facts, ${realA.facts.claims.length} claims`);
   ok(await page.locator('.claim.contradicted').count() === realA.facts.claims.filter(c => c.check === 'contradicted').length, 'contradicted claims flagged');
   ok(await page.locator('.ccrit').count() === 9 && await page.locator('[data-cm="esc"]').count() === 6 && await page.locator('[data-cm="ev"][data-v="na"]').count() === 0, 'scorecard: 9 criteria, esc 0–4 + N/A, N/A only where allowed');
-  ok((await page.locator('#coachText').inputValue()).startsWith(`Chat ${SID} · `) && /— Okay \(74\.2%\)/.test(await page.locator('#coachText').inputValue()), 'coaching note starts with the chat line and the verdict');
+  const note0 = await page.locator('#coachText').inputValue();
+  ok(note0.startsWith(`Chat ${SID} · `) && note0.includes(`— ${RV} (${RP}%)`), 'coaching note starts with the chat line and the verdict');
+  const items = note0.slice(note0.indexOf('\nNext time\n')).split('\n').filter(l => /^\d+\. /.test(l));
+  ok(items.length === realA.grade.findings.length && items[0].startsWith('1. P1 · Resolution accuracy') && note0.includes(`Do: ${realA.grade.findings[0].should}`) && note0.includes('Why it matters: '), "coaching uses the ticket's findings, P1 first: what happened, why, do, model");
   // cite links jump without touching the route
   await page.locator('#cs-an .cite').first().click(); await page.waitForTimeout(200);
   ok(await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, 'cites scroll to the fact and keep the route');
@@ -167,16 +254,45 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok((await txt(page, '#cvPct')) === want.p + '%' && (await txt(page, '#cvWord')) === want.v && (await txt(page, '#csScoreAns')) === `${want.v} · ${want.p}%`, `one mark changes the score to ${want.v} ${want.p}%`);
   ok(await page.locator('#was-amt').isVisible() && (await txt(page, '#was-amt')) === 'Claude 1' && await page.locator('#cvClaude').isVisible(), "Claude's original mark shown when changed");
   ok((await page.locator('#coachText').inputValue()).includes(`— ${want.v} (${want.p}%)`), 'coaching note follows the marks');
+  ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v && (await txt(page, '#tf-amt .tkfs s')) === '1/3' && (await txt(page, '#tf-amt .tkscore')) === '3/3', "the ticket follows the scorecard: score, verdict, the finding's mark");
 
-  // ===== 6. save review: chatReviews + XP
+  // ===== 5b. Not a mistake: full marks on that criterion, the % and verdict recomputed live, a note box; Agree just marks
+  const NF = realA.grade.findings.find(f => f.id !== 'amt' && f.id !== 'approval' && typeof f.score === 'number'), NR = B.CHAT_RUBRIC.find(r => r.id === NF.id);
+  const marks2 = Object.assign({}, marks, { [NF.id]: NR.max }), want2 = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks2);
+  await page.click(`#tf-${NF.id} [data-fmark="not"]`); await page.waitForTimeout(100);
+  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && await page.locator(`#tf-${NF.id} [data-fmark="not"][aria-pressed="true"]`).count() === 1 && (await txt(page, `#tf-${NF.id} .tknot`)) === 'NOT A MISTAKE', `Not a mistake greys out ${NF.label}`);
+  ok(await page.locator(`[data-cm="${NF.id}"][data-v="${NR.max}"][aria-pressed="true"]`).count() === 1 && (await txt(page, `#tf-${NF.id} .tkscore`)) === `${NR.max}/${NR.max}` && await page.locator(`#was-${NF.id}`).isVisible(), `${NF.label} restored to full marks (${NR.max}/${NR.max}) on the scorecard`);
+  ok((await txt(page, '#cvPct')) === want2.p + '%' && (await txt(page, '#tkPct')) === want2.p + '%' && (await txt(page, '#cvWord')) === want2.v && (await txt(page, '#csScoreAns')) === `${want2.v} · ${want2.p}%`, `% and verdict recomputed live: ${want2.v} ${want2.p}%`);
+  ok(!(await page.locator('#coachText').inputValue()).includes(`P${NF.priority.slice(1)} · ${NF.label}`) && await page.locator(`#tkn-${NF.id}`).isVisible() && (await txt(page, `label[for="tkn-${NF.id}"]`)).toLowerCase() === "why it wasn't a mistake", 'the finding leaves the coaching note; a note box opens');
+  const NOTE = 'The lead had already cleared this reply wording.';
+  await page.fill(`#tkn-${NF.id}`, NOTE);
+  const fa = realA.grade.findings.find(f => f.id !== 'amt' && f.id !== NF.id);
+  await page.click(`#tf-${fa.id} [data-fmark="agree"]`); await page.waitForTimeout(100);
+  ok(await page.locator(`#tf-${fa.id} [data-fmark="agree"][aria-pressed="true"]`).count() === 1 && await page.locator(`#tf-${fa.id}.not`).count() === 0 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE && (await txt(page, '#tkPct')) === want2.p + '%', 'Agree just marks it; the note survives the repaint');
+  // marking the P1 finding drops the ticket to its next priority; un-marking puts the mark back
+  await page.click('#tf-amt [data-fmark="not"]'); await page.waitForTimeout(100);
+  const nextP = realA.grade.findings.filter(f => f.id !== 'amt' && f.id !== NF.id).map(f => f.priority).sort()[0];
+  ok((await txt(page, '#tkPrio')) === nextP && await page.locator(`#cTicket.${nextP.toLowerCase()}`).count() === 1, `all P1s marked not a mistake: the ticket drops to ${nextP}`);
+  await page.click('#tf-amt [data-fmark="not"]'); await page.waitForTimeout(100);
+  ok((await txt(page, '#tkPrio')) === 'P1' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tkPct')) === want2.p + '%' && await page.locator('#tkn-amt').count() === 0, 'un-marking puts the earlier mark back (3, set on the scorecard) and P1');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
+  await page.locator(`#tf-${NF.id}`).scrollIntoViewIfNeeded(); await page.evaluate(id => document.getElementById(id).scrollIntoView({ block: 'center' }), 'tf-' + NF.id); await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(SH, 'ticket-notmistake.png') });
+
+  // ===== 6. save review: chatReviews + finding marks + a correction (chatLessons) + XP
   const xp0 = await page.evaluate(() => gameStats().xp);
   await page.fill('#chatReviewer', 'QA lead');
   await page.click('#chatSave'); await page.waitForTimeout(300);
   const rv = await page.evaluate(p => window.__data[p], P('reviews/' + SID));
-  ok(rv && rv.scores.amt === 3 && fmt(rv.pct) === want.p && rv.verdict === B.chatVerdict(rv.pct).id && rv.week === WEEK && rv.sa === SA0 && rv.reviewer === 'QA lead' && rv.by === 'u_test' && rv.coaching.startsWith('Chat ' + SID), 'Save review writes chatReviews/<sid>');
+  ok(rv && rv.scores.amt === 3 && rv.scores[NF.id] === NR.max && fmt(rv.pct) === want2.p && rv.verdict === B.chatVerdict(rv.pct).id && rv.week === WEEK && rv.sa === SA0 && rv.reviewer === 'QA lead' && rv.by === 'u_test' && rv.coaching.startsWith('Chat ' + SID), 'Save review writes chatReviews/<sid>');
+  ok(JSON.stringify(rv.findings) === JSON.stringify({ [NF.id]: { mark: 'not', note: NOTE }, [fa.id]: { mark: 'agree', note: '' } }) || (rv.findings[NF.id].mark === 'not' && rv.findings[NF.id].note === NOTE && rv.findings[fa.id].mark === 'agree' && Object.keys(rv.findings).length === 2), 'the review stores the finding marks: {id: {mark, note}}');
+  const LID = `chatLessons/${SID}_${NF.id}`, les = await page.evaluate(p => window.__data[p], LID);
+  ok(les && les.sid === SID && les.week === WEEK && les.sa === SA0 && les.crit === NF.id && les.label === NF.label && les.type === NF.type && les.what === NF.what && les.note === NOTE && les.by === 'u_test' && !isNaN(Date.parse(les.at)), `Not a mistake writes ${LID}: sid, week, sa, crit, label, type, what, note, by, at`);
+  ok(await count(page, 'chatLessons') === 3, 'only the finding marked not a mistake becomes a correction');
   const xp1 = await page.evaluate(() => gameStats().xp);
   ok(xp1 - xp0 === 10, `review adds 10 XP (${xp0} → ${xp1})`);
-  ok(/Saved .* · \+10 XP · 1 of 9/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9, offers Next chat');
+  ok(/Saved .* · \+10 XP · 1 of 9 · 1 correction/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9 · 1 correction, offers Next chat');
+  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE, 'after saving, the ticket shows the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }
 
@@ -212,6 +328,9 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.waitForFunction(([p, id]) => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && a.orders.length === 1 && a.orders[0].id === id && !document.querySelector('#chatSteps') }, [P('audits/' + SID), tgt.id], { timeout: 20000 }); await page.waitForTimeout(150);
   let cs = await caches(page, pq);
   ok(cs.length === 5 && cs.every(c => c === false), 'picking an order re-grades with cache:false on every pass (refs, facts, analysis, two grade reads)');
+  const rg = await page.evaluate(n => window.__prompts.slice(n).filter(p => /You are Swift Coach/.test(p.input)).map(p => p.input), pq);
+  const rgc = rg.length ? rg[0].slice(rg[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
+  ok(rg.length === 2 && rgc.includes(NOTE) && rgc.includes(NF.label) && rgc.indexOf(NOTE) < rgc.indexOf(LS_NEW.note), "after a re-grade the new correction is in the grade prompt, newest first");
   ok((await txt(page, '.ordcard')).includes('Ticket ' + tgt.ticket) && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'the picked order is linked as your pick');
   // → No order: re-grade without the order, money card gone
   await page.click('#ordChange'); await page.waitForTimeout(100);
@@ -226,6 +345,13 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator('.ordcard').count() === 0 && (await txt(page, '#cs-ctx')).includes('No order linked') && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'No order: re-graded, the money card is gone');
   cs = await caches(page, pq); ok(cs.length === 5 && cs.every(c => c === false), 'No order re-grades with cache:false');
   ok(await page.locator('#cs-ctx .txcall').count() === 0, 'no order, no recordings');
+  ok((await txt(page, '#cTicket')).includes('No order linked') && (await txt(page, '#cTicket')).includes('None linked') && /Can't check/.test(await txt(page, '#tkComp .tkst')), "the ticket after No order: no order, no recordings, the comp check can't check");
+  // un-mark Not a mistake and save: the correction is deleted, the mark goes back
+  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1, 'the saved mark survives a re-grade');
+  await page.click(`#tf-${NF.id} [data-fmark="not"]`); await page.waitForTimeout(100);
+  ok(await page.locator(`#tf-${NF.id}.not`).count() === 0 && (await txt(page, `#tf-${NF.id} .tkscore`)) === `${markL(NF.score)}/${NR.max}`, `un-marking puts ${NF.label} back to ${markL(NF.score)}`);
+  await page.click('#chatSave'); await page.waitForTimeout(300);
+  ok(!(await page.evaluate(p => window.__data[p], LID)) && await count(page, 'chatLessons') === 2 && !(await page.evaluate(p => window.__data[p].findings, P('reviews/' + SID)))[NF.id], 'un-marking and saving deletes the correction and the mark');
 
   // ===== 9. next chat, dark, phone widths
   await page.click('#cvNext'); await page.waitForTimeout(200);
@@ -247,6 +373,23 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(s => openChat(s), SID); await page.waitForTimeout(250);
   const an = await txt(page, '#cs-an');
   ok(/case notes/i.test(an) && an.includes('repeat'), 'unknown analysis fields are shown, not dropped');
+  // an approval flag: a P1 finding with no criterion. Its flag shows as a warning in the comp check; Not a mistake only marks it
+  await page.evaluate(p => window.claude.use('db').then(db => db.doc(p).get().then(d => { const a = d.data();
+    a.check.flags = [{ code: 'over_limit', label: 'Over the limit without approval', detail: 'Above the limit; the lead approves first.' }];
+    a.grade.findings.unshift({ id: 'approval', label: 'Approval', score: null, max: null, priority: 'P1', type: 'Over the limit without approval', what: 'Above the limit; the lead approves first.', why: 'The policy holds the confirmation until the lead approves.', evidence: [], should: 'Hold the confirmation and ask the lead.', model: '', reason: '' });
+    return db.doc(p).set(a) })), P('audits/' + SID));
+  await page.waitForTimeout(250);
+  const pa = await txt(page, '#tkPct');
+  ok((await txt(page, '#tkComp .rflag')).includes('Over the limit without approval') && await page.locator('#tf-approval .tkscore').count() === 0 && (await txt(page, '#tf-approval .prio')) === 'P1', 'approval flag: a warning in the comp check, a P1 finding with no score');
+  await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
+  ok(await page.locator('#tf-approval.not').count() === 1 && (await txt(page, '#tkPct')) === pa && await page.locator('#tkn-approval').isVisible(), 'Not a mistake on approval marks it and leaves the score alone');
+  await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
+  // an older chat-1 audit with misses: no check, findings or priority stored. The page rebuilds the findings from the grade's reasons and cited facts
+  await page.evaluate(p => window.claude.use('db').then(db => db.doc(p).get().then(d => { const a = d.data(); a.v = 'chat-1'; delete a.check; delete a.priority; delete a.grade.findings; delete a.grade.amtBy; return db.doc(p).set(a) })), P('audits/' + SID));
+  await page.waitForTimeout(250);
+  const a1 = await page.evaluate(p => window.__data[p], P('audits/' + SID)), below = B.CHAT_RUBRIC.filter(r => a1.grade.scores[r.id] !== 'na' && Number(a1.grade.scores[r.id]) < r.max).length;
+  ok(await page.locator('#cTicket').isVisible() && await page.locator('#tkComp').count() === 0 && below > 0 && await page.locator('.tkfind').count() === below && (await page.locator('.tkfind .tkfh .prio').allInnerTexts()).every(p => /^P[123]$/.test(p)), `chat-1 audit with misses: ${below} findings rebuilt from the reasons, no comp check`);
+  ok(await page.locator('.tkfind .tkq.fact').count() > 0 && await page.locator('.tkfind .tkq.fact .cite').count() === await page.locator('.tkfind .tkq.fact').count(), 'rebuilt findings show their cited facts as evidence, each with its fact id');
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(150);
   await shot(page, 'chats-audit-dark.png');
   await page.emulateMedia({ colorScheme: 'light' });
@@ -264,6 +407,17 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await sel(page) === 'brain' && (await page.locator('#polText').inputValue()).length > 200 && await page.locator('#brRubric .rbr:not(.rbh)').count() === 9, 'Brain shows the policy text and the 9-row rubric');
   ok(await page.locator('#brCal .calitem').count() === 3 && await page.locator('#brStaff .srow:not(.srh)').count() === 4, 'Brain lists 3 calibration cases and the staff directory');
   await shot(page, 'chats-brain.png');
+  // corrections: newest first, with what the coach said, the note, the SA, the date and the chat
+  const lsi = page.locator('#brLessons .lsitem');
+  ok(await lsi.count() === 2 && (await txt(page, '#brLessons .bhd')).includes('Corrections') && (await txt(page, '#brLessons .bhd .num')) === '2', 'Brain: Corrections with a count');
+  const ls0 = (await lsi.first().innerText()).replace(/\s+/g, ' ');
+  ok(ls0.includes(LS_NEW.label) && ls0.includes(LS_NEW.type) && ls0.includes(LS_NEW.what) && ls0.includes(LS_NEW.note) && ls0.includes('Mara Quill') && ls0.includes('Chat 9900901') && (await lsi.nth(1).innerText()).includes(LS_OLD.note), 'each correction: label · type, what the coach said, the note, SA, date, chat; newest first');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('brLessons').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(120);
+  await page.screenshot({ path: path.join(SH, 'brain-corrections.png') });
+  const ldel = page.locator('#brLessons [data-lsdel="9900901_tone"]');
+  await ldel.click(); ok(await page.evaluate(() => !!window.__data['chatLessons/9900901_tone']) && (await ldel.innerText()) === 'Confirm', 'delete asks to confirm');
+  await ldel.click(); await page.waitForTimeout(200);
+  ok(!(await page.evaluate(() => window.__data['chatLessons/9900901_tone'])) && await lsi.count() === 1 && (await txt(page, '#brLessons .bhd .num')) === '1', 'delete removes a correction');
   const bi = W.policy.comp.buckets.findIndex(x => x.id === 'made_twice_one_paid');
   await page.fill(`[data-bpct="${bi}"]`, '35'); await page.fill('#polLimit', '30');
   ok(await page.locator('#polSave').isEnabled() && await page.locator('#polUndo').isVisible(), 'editing the policy arms Save');

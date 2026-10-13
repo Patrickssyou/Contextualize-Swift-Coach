@@ -79,13 +79,16 @@ const MOCK = ([seed, ld, opts, extra]) => {
         if (q.polls-- > 0) return { content: [], payload: { result: { status: 'running', queryUuid: input.queryUuid, nextPollAfterMs: 20 } } };
         return { content: [], payload: { result: { status: 'done', queryUuid: input.queryUuid, rows: q.rows, fields: {}, exploreUrl: null } } } }
       throw { code: 'bad_request' } } };
-  // chat passes first: the chat facts prompt also says "note-taker". The real case (CH.realSid) gets its saved replies, invented chats a small valid one
+  // chat passes first: the chat facts prompt also says "note-taker". The real case (CH.realSid) gets its saved replies, invented chats a small valid one.
+  // The grade is read twice per grading: the real case answers the first read with CH.grade and the second with CH.grade2
+  const gradeReads = {};
   const chatReply = input => { if (!CH) return null;
     const sid = (input.match(/CHAT (\S+) ·/) || [])[1] || '', real = sid === String(CH.realSid), S = CH.synth;
     if (/find the order a support chat is about/.test(input)) return CH.refs || {};
     if (/auditing one WIRA support chat/.test(input)) return real ? CH.facts : S.facts;
     if (/You are the analyst for a QA lead/.test(input)) return real ? CH.analysis : S.analysis;
-    if (/You are Swift Coach/.test(input)) return real ? CH.grade : S.grade[Number(sid.slice(-1)) % S.grade.length];
+    if (/You are Swift Coach/.test(input)) { if (!real) return S.grade[Number(sid.slice(-1)) % S.grade.length];
+      const i = gradeReads[sid] = (gradeReads[sid] || 0) + 1; return i % 2 === 1 ? CH.grade : (CH.grade2 || CH.grade) }
     return null };
   // sample: records the prompt, answers with a canned case read after a short wait (or fails / waits for Stop)
   const sample = Object.assign(async () => ({ text: '{}', truncated: false, modelTierApplied: 'default' }), {
@@ -118,7 +121,11 @@ const CHAT_DIR = path.join(DIR, 'data/chats');
 function chatWorld(sid) {
   const file = path.join(CHAT_DIR, `cases/${sid}.json`);
   if (!fs.existsSync(file)) return null;
-  const fx = JSON.parse(fs.readFileSync(file, 'utf8')), out = p => JSON.parse(fs.readFileSync(path.join(CHAT_DIR, `cases/${sid}.r2.${p}.out.json`), 'utf8'));
+  const fx = JSON.parse(fs.readFileSync(file, 'utf8')), outOf = (t, p) => JSON.parse(fs.readFileSync(path.join(CHAT_DIR, `cases/${sid}.${t}.${p}.out.json`), 'utf8'));
+  // the brain's blind run with the QA-ticket prompts (t1: facts, analysis, two grade reads with findings); without it, the older r2 run plus an invented new-format grade
+  const T1 = ['facts', 'analysis', 'grade', 'grade2'].every(p => fs.existsSync(path.join(CHAT_DIR, `cases/${sid}.t1.${p}.out.json`)));
+  const out = p => outOf(T1 ? 't1' : 'r2', p);
+  const grades = T1 ? [outOf('t1', 'grade'), outOf('t1', 'grade2')] : inventGrades(fx, outOf('r2', 'grade'));
   const real = fx.chatRow, code = real.restaurants_unique_code, day = real.wira_project_tasks_created_at_est.slice(0, 10);
   const realSA = { name: real.wira_project_tasks_assigned_user, email: real.wira_project_tasks_agent_alias };
   const SA = [realSA, { name: 'Mara Quill', email: 'mara.quill@wondersco.com' }, { name: 'Theo Brandt', email: 'theo.brandt@wondersco.com' }];
@@ -193,8 +200,23 @@ function chatWorld(sid) {
     return [[P('chats/9900901'), menu], [P('chats/9900902'), silent], [P('audits/9900901'), audit], [P('reviews/9900901'), review], ['chatCalib/9900901', calib], [`chatWeeks/${pw}`, { week: pw, chats: 2, picked: 1 }]] };
   return { fx, realSid: String(sid), realSA, SA, code, sideWeek, synthIds: synth.map(r => r.wira_project_tasks_short_wira_id),
     chat: { realSid: String(sid), base: [tagBase(real)].concat(synth.map(tagBase)), rel: fx.relRows.map(tagCode), orders: fx.orderRows.map(tagCode), calls: fx.callRows.map(tagCode),
-      refs: {}, facts: out('facts'), analysis: out('analysis'), grade: out('grade'),
+      refs: {}, facts: out('facts'), analysis: out('analysis'), grade: grades[0], grade2: grades[1], gradeSrc: T1 ? 't1' : 'invented',
       synth: { facts: synthFacts, analysis: synthAnalysis, grade: [g({ fr: 3, ev: 3, rs: 3, fa: 3, path: 3, amt: 3, expl: 'na', esc: 'na', tone: 3 }), g({ fr: 2, ev: 2, rs: 3, fa: 2, path: 2, amt: 2, expl: 2, esc: 'na', tone: 3 }), g({ fr: 1, ev: 1, rs: 2, fa: 1, path: 1, amt: 1, expl: 'na', esc: 0, tone: 2 })] } },
     policy: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'policy_pack.json'), 'utf8')), calibration: JSON.parse(fs.readFileSync(path.join(CHAT_DIR, 'calibration.json'), 'utf8')) };
+}
+/* a new-format grade (criteria + findings with quotes) built at run time from an older grade and the chat itself, for when the brain's t1 run isn't on disk.
+   Quotes are cut from the chat's own messages, so nothing from the real case is written here */
+function inventGrades(fx, old) {
+  const B = require('../src/chat.js'), C = require('../src/core.js');
+  const msgs = B.chatRow(fx.chatRow, { roster: C.ROSTER_DEFAULT }).msgs, sa = msgs.filter(m => m.role === 'sa');
+  const quote = (m, k) => String(m.text).split(/\s+/).slice(0, k || 8).join(' ');
+  const mk = second => { const scores = Object.assign({}, old.scores, second ? { tone: Math.max(0, (old.scores.tone || 0) - 1) } : {});
+    const findings = B.CHAT_RUBRIC.filter(r => scores[r.id] !== 'na' && Number(scores[r.id]) < r.max).map((r, i) => { const m = sa[i % sa.length] || msgs[0];
+      return { criterion: r.id, type: 'Invented finding ' + (i + 1), what: 'The SA missed part of this criterion.', why: 'It changes what the client gets.',
+        evidence: [{ src: 'M' + m.n, quote: quote(m) }].concat(i === 0 ? [{ src: 'M' + m.n, quote: 'words that are not in the message' }] : []),
+        should: 'Check first, then answer with the exact amount.', model: 'Hi, checking the order and the recording now; back in a few minutes.' } });
+    return { criteria: Object.fromEntries(B.CHAT_RUBRIC.map(r => [r.id, { why: old.reasons[r.id] || '', score: scores[r.id] }])), route: old.route, wentWell: old.wentWell,
+      findings, verdictWhy: old.verdictWhy } };
+  return [mk(false), mk(true)];
 }
 module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld };

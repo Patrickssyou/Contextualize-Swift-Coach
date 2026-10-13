@@ -36,7 +36,13 @@
 .sagroups{display:flex;flex-direction:column;gap:14px}
 .sagroup{padding:4px 0;overflow:hidden;scroll-margin-top:12px}
 .sagroup h3{margin:0;padding:10px 16px 8px;font-size:15px;font-family:var(--f-display);display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
-.crow{display:grid;grid-template-columns:118px minmax(0,1fr) auto 168px 30px;gap:4px 14px;align-items:center;padding:9px 16px;border-top:1px solid var(--line);cursor:pointer;font-size:13.5px;min-width:0}
+.crow{display:grid;grid-template-columns:118px minmax(0,1fr) auto 92px 196px 30px;gap:4px 14px;align-items:center;padding:9px 16px;border-top:1px solid var(--line);cursor:pointer;font-size:13.5px;min-width:0}
+/* a graded row's flags: the ticket priority, then the compensation check */
+.cfl{min-width:0}
+.cflags{display:grid;grid-template-columns:30px auto;gap:6px;align-items:center;justify-content:start}
+.compchip{font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap;line-height:1.35}
+.sacomp{font-size:12px;font-weight:600;line-height:1.2}
+.sacomp b{font-weight:700}
 .crow:hover{background:var(--soft)}
 .crow.sel{box-shadow:inset 3px 0 0 var(--accent)}
 .ctime{font-size:12px;color:var(--muted);white-space:nowrap}
@@ -62,9 +68,13 @@ details.tlfold>summary::before{content:"▸";color:var(--muted);transition:trans
 details.tlfold[open]>summary::before{transform:rotate(90deg)}
 details.tlfold>summary:hover .lbl-sm{color:var(--ink)}
 details.tlfold+.fhd{margin-top:14px}
+/* a narrower window stacks each row: time and status, then the chat, then meta, flags and the pick */
+@media (max-width:1000px){
+  .crow{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"time stat stat" "main main main" "meta flags pick";gap:4px 10px;padding:10px 14px}
+  .ctime{grid-area:time}.cmain{grid-area:main}.cmeta{grid-area:meta;flex-wrap:wrap}.cstat{grid-area:stat}.cpick{grid-area:pick;justify-self:end}.cfl{grid-area:flags}
+  .cflags{grid-template-columns:auto auto}.cflags>span:empty{display:none}
+}
 @media (max-width:760px){
-  .crow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"time stat" "main main" "meta pick";gap:4px 10px;padding:10px 14px}
-  .ctime{grid-area:time}.cmain{grid-area:main}.cmeta{grid-area:meta;flex-wrap:wrap}.cstat{grid-area:stat}.cpick{grid-area:pick;justify-self:end}
   .chatbar .cbtns{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
   .chatbar .cbtns .btn{width:auto;min-width:0;padding:9px 6px;font-size:13.5px;white-space:normal}
   .chatbar .cbtns #chatStop{grid-column:1/-1}
@@ -75,6 +85,8 @@ details.tlfold+.fhd{margin-top:14px}
 
 /* audit: verdict board beside the sections (on top on phones) */
 .cdesk{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"main board";gap:22px;align-items:start}
+/* a graded chat: the QA ticket on top of the sections, the board beside both */
+.cdesk.has-tk{grid-template-areas:"ticket board" "main board";row-gap:14px}
 .cverdict{grid-area:board;gap:14px}
 .ccol{grid-area:main;display:flex;flex-direction:column;gap:14px;min-width:0}
 .vhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -99,7 +111,7 @@ details.tlfold+.fhd{margin-top:14px}
 .csi{text-align:center;font-weight:700;color:var(--muted)}
 .cst.done .csi{color:var(--s3)} .cst.error .csi{color:var(--s1)} .cst.run .csl{font-weight:600;color:var(--accent)}
 .csi .spin{width:11px;height:11px;margin:0;vertical-align:-1px}
-@media (max-width:900px){.cdesk{grid-template-columns:minmax(0,1fr);grid-template-areas:"board" "main"}.cverdict{position:static}}
+@media (max-width:900px){.cdesk{grid-template-columns:minmax(0,1fr);grid-template-areas:"board" "main"}.cdesk.has-tk{grid-template-areas:"ticket" "board" "main"}.cverdict{position:static}}
 
 /* chat bubbles: client left, support right; the audited SA is tinted; internal notes are dashed */
 .bubbles{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
@@ -223,7 +235,7 @@ textarea.coach{width:100%;min-height:300px;background:var(--bg);border:1px solid
 .bpanel{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .bhd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .bhd h2{font-family:var(--f-display);font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em}
-#brPolicy{grid-row:span 2}
+#brPolicy{grid-row:span 3}
 #brRubric{grid-column:1/-1}
 textarea.poltext{field-sizing:fixed;height:340px;min-height:160px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;resize:vertical;font-size:13px;line-height:1.5}
 .btbl input[type=number]{width:72px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;text-align:right}
@@ -254,3 +266,127 @@ textarea.poltext{field-sizing:fixed;height:340px;min-height:160px;background:var
 .cm.half:not([aria-pressed="true"]){border-color:currentColor;background:color-mix(in srgb,currentColor 14%,var(--panel))}
 .reads{font-size:11.5px;color:var(--muted);white-space:nowrap}
 .vreads{margin-top:4px}
+
+/* ---------- the QA ticket (top of the audit). A ticket stub: a header strip with the verdict and priority, a dashed perforation,
+   the field grid, what happened, the compensation receipt, then one card per finding. The top edge takes the priority colour ---------- */
+.qticket{grid-area:ticket;min-width:0;overflow:hidden;border-top:4px solid var(--line)}
+.qticket.p1{border-top-color:var(--s1)} .qticket.p2{border-top-color:var(--s2)} .qticket.p3{border-top-color:var(--na)}
+.tkhd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:12px 18px;background:var(--soft);border-bottom:1.5px dashed var(--line)}
+.tkttl{display:flex;flex-direction:column;gap:1px;min-width:0}
+.tkkind{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.tkid{font-family:var(--f-display);font-weight:800;font-size:18px;letter-spacing:-.01em}
+.tkverd{display:flex;align-items:center;gap:10px}
+.tkhd .tkword{font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:-.02em;line-height:1}
+.tkpct{font-size:16px;font-weight:600}
+.tkprio:empty{display:none}
+.prio{display:inline-grid;place-items:center;min-width:28px;height:22px;padding:0 6px;border-radius:6px;font-family:var(--f-mono);font-size:12px;font-weight:700;line-height:1}
+.prio.p1{background:var(--s1);color:var(--on-fill)} .prio.p2{background:var(--s2);color:var(--on-fill)} .prio.p3{background:var(--soft);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.tkbody{display:flex;flex-direction:column;gap:18px;padding:4px 18px 18px}
+.tkgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px;margin:0}
+.tkf{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);min-width:0}
+.tkf dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tkf dd{margin:0;min-width:0;overflow-wrap:anywhere;font-size:14px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.tkf .pill{font-family:var(--f-body)}
+.tkcode{font-size:12px;color:var(--muted)}
+.tklink{font-weight:600;text-decoration:none;white-space:nowrap}
+.tklink:hover{text-decoration:underline}
+.tkord{display:inline-flex;gap:6px;align-items:baseline}
+.tkrecs{display:inline-flex;flex-wrap:wrap;gap:4px 12px}
+.tkmut{color:var(--muted)}
+.tksec{display:flex;flex-direction:column;gap:8px;min-width:0;scroll-margin-top:80px}
+.tkch{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tkh{margin:0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.tkn{font-size:12px;color:var(--muted)}
+.tkp{margin:0;font-size:14.5px;line-height:1.55;max-width:78ch;overflow-wrap:anywhere}
+
+/* the compensation receipt: due, given, the difference; wrong parts of the SA's base struck through */
+.tkcomp{border:1px solid var(--line);border-left:4px solid var(--na);border-radius:10px;padding:12px 14px 14px;background:var(--bg)}
+.tkcomp.c-bad{border-left-color:var(--s1)} .tkcomp.c-ok{border-left-color:var(--s2)} .tkcomp.c-good{border-left-color:var(--s3)} .tkcomp.c-tp{border-left-color:var(--tp)}
+.tkst{font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap;background:var(--soft);color:var(--muted)}
+.tkst.c-bad{background:var(--s1);color:var(--on-fill)} .tkst.c-ok{background:var(--s2);color:var(--on-fill)} .tkst.c-good{background:var(--s3);color:var(--on-fill)} .tkst.c-tp{background:var(--tp);color:var(--on-fill)}
+.rcpt{display:flex;flex-direction:column;font-size:14px}
+.rl{display:grid;grid-template-columns:112px minmax(0,1fr) auto;grid-template-areas:"k v a";gap:2px 14px;align-items:baseline;padding:8px 0;border-top:1px dashed var(--line)}
+.rl:first-child{border-top:0;padding-top:2px}
+.rk{grid-area:k;font-weight:600}
+.rv{grid-area:v;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+.rf{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;line-height:1.5}
+.rf del{color:var(--s1);background:var(--s1-soft);text-decoration-thickness:2px;border-radius:3px;padding:0 3px}
+.rf mark{color:var(--s1);background:var(--s1-soft);border-radius:3px;padding:0 3px}
+.rf del,.rf mark{white-space:nowrap}
+.ra{grid-area:a;font-size:17px;font-weight:700;text-align:right;white-space:nowrap}
+.rwhere{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:var(--soft);color:var(--muted)}
+.rappr{font-size:12.5px;font-weight:600;color:var(--s2);padding:0 0 8px 126px;margin-top:-4px}
+.rappr.ok{color:var(--s3)}
+.rdiff{border-top:1.5px solid var(--ink)}
+.rdiff .rk,.rdiff .ra{color:var(--s1)}
+.rdiff.ok .rk,.rdiff.ok .ra{color:var(--s3)}
+.rsum{margin:4px 0 0;font-size:13.5px;color:var(--muted)}
+.rerr{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.45}
+.rerr li{padding:7px 10px;border-radius:8px;background:var(--s1-soft);overflow-wrap:anywhere}
+.rerr b{color:var(--s1);margin-right:4px}
+.rflag li{background:var(--s2-soft)} .rflag b{color:var(--s2)} .rflag b::before{content:"⚠ "}
+@media (max-width:560px){
+  .rl{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"k a" "v v";gap:2px 10px}
+  .rappr{padding-left:0;margin-top:0}
+}
+
+/* findings: one card each, the priority on the left edge */
+.tkfinds{display:flex;flex-direction:column;gap:12px}
+.tkfind{container-type:inline-size;border:1px solid var(--line);border-left:4px solid var(--na);border-radius:10px;background:var(--panel);min-width:0;scroll-margin-top:80px}
+.tkfind.p1{border-left-color:var(--s1)} .tkfind.p2{border-left-color:var(--s2)}
+.tkfh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.tkft{margin:0;flex:1 1 220px;min-width:0;font-size:14.5px;font-weight:600;line-height:1.35}
+.tktype{color:var(--muted);font-weight:500}
+.tkfs{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:13px}
+.tkfs s{color:var(--muted)}
+.tkscore{font-size:14px} .tkscore.s0{color:var(--s0)} .tkscore.s1{color:var(--s1)} .tkscore.s2{color:var(--s2)} .tkscore.s3{color:var(--s3)} .tkscore.na{color:var(--na)}
+.tksys{font-size:12px;color:var(--muted)}
+.tknot{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:4px;background:var(--tp-soft);color:var(--tp);white-space:nowrap}
+.tkfb{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 14px}
+@container (min-width:620px){.tkfb{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:22px}}
+.tkcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tkcol:empty{display:none}
+.tkblk h5{margin:0 0 4px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.tkblk p{margin:0;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.tkfix{padding:8px 11px 10px;border-radius:8px;background:var(--s3-soft)}
+.tkfix h5{color:var(--s3)}
+.tkev{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tkq{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 8px;align-items:baseline;padding:6px 10px;border-left:3px solid var(--tp);background:var(--tp-soft);border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.45}
+.tkq.fact{border-left-color:var(--line);background:var(--soft)}
+.tkqs{display:inline-flex;gap:4px;align-items:baseline}
+.tkqt{min-width:0;overflow-wrap:anywhere}
+q.tkqt{quotes:"\201C" "\201D" "\2018" "\2019"}
+.srcchip{font-family:var(--f-mono);font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--panel);border:1px solid var(--line);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.srcchip{color:var(--accent)}
+a.srcchip:hover{border-color:var(--accent)}
+.qok{color:var(--s3);font-weight:800}
+.qflag{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.qflag.bad{color:var(--s2)}
+.tkmodel summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);width:max-content}
+.tkmsg{margin:6px 0 8px;padding:8px 11px;border-radius:8px;background:var(--bg);border:1px dashed var(--line);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px;line-height:1.5}
+.tkact{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px}
+.tkb{padding:5px 12px}
+.tkbnot[aria-pressed="true"]{background:var(--tp);border-color:var(--tp);color:var(--on-fill)}
+.tkfind.not{border-left-color:var(--tp);background:color-mix(in srgb,var(--soft) 50%,var(--panel))}
+.tkfind.not .tkfb,.tkfind.not .tkft,.tkfind.not .prio{opacity:.5}
+.tkfind.not .tkft b{text-decoration:line-through;text-decoration-thickness:1.5px}
+.tknote{padding:0 14px 14px}
+.tknote textarea{min-height:52px}
+.tkfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:12px 18px;background:var(--soft);border-top:1.5px dashed var(--line);font-size:12.5px;color:var(--muted)}
+.tkfoot p{margin:0;max-width:72ch}
+@media (max-width:640px){
+  .tkgrid{grid-template-columns:minmax(0,1fr)}
+  .tkf{grid-template-columns:88px minmax(0,1fr)}
+  .tkhd,.tkfoot{padding-inline:14px} .tkbody{padding-inline:14px}
+  .tkfh,.tkfb{padding-inline:12px} .tkact{padding-inline:12px} .tknote{padding-inline:12px}
+}
+
+/* brain: the corrections list */
+.lstype{color:var(--muted)}
+.lstype::before{content:"· "}
+.lsline{font-size:13px;margin-top:5px;overflow-wrap:anywhere}
+.lsline .lbl-sm{margin-right:4px}
+.lsnote{color:var(--ink)}
+.lsmeta{margin-top:5px;display:flex;flex-wrap:wrap;gap:2px 4px;align-items:baseline}
+.lslink{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:12px}
+.lslink:hover{text-decoration:underline}
