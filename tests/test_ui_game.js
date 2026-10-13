@@ -11,7 +11,8 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
  const {page,ctx,errors}=await openPage(b,seed,{viewer:true},{width:1280,height:900});
  await page.goto('http://qa.test/');await page.waitForTimeout(300);
  ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='queue','opens on Snapshot');
- ok((await page.locator('[role=tab]').allInnerTexts()).map(t=>t.replace(/\s+/g,' ').trim()).slice(0,4).every((t,i)=>t.includes(['Snapshot','Calls','Scorecard','Facts'][i])),'tabs 1–4 in order');
+ const tabs=(await page.locator('[role=tab]').allInnerTexts()).map(t=>t.replace(/\s+/g,' ').trim());
+ ok(tabs.length===5&&['Snapshot','Calls','Facts','Results','Database'].every((x,i)=>tabs[i].includes(x)),'tabs: Snapshot, Calls, Facts, Results, Database ('+tabs.join(' / ')+')');
  await page.click('#wkNext');await page.waitForTimeout(300);
  ok(/0\s+of 30 audited/.test(await page.locator('#quest').innerText()),'week quest starts at 0 of 30');
  ok(await page.locator('.qcard:not(.qcases)',{hasText:'CJ Domingo'}).locator('.pips i').count()===5,'CJ card has 5 pips');
@@ -27,16 +28,20 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
  ok(await page.locator('#chainPanel .txcall a',{hasText:'Rec'}).count()===2,'each card has a recording link');
  ok(await page.locator('#callsRead').count()===0,'no Read button when summaries exist');
  ok(await page.locator('#st-facts .dot').count()===1,'Facts tab dot: read ready');
- // Scorecard: fill and save
- await page.click('[data-go="score"]');
+ // the scorecard sits under the calls on the same tab and starts at Case facts
+ const order=await page.evaluate(()=>['#s-call','#chainWrap','#tasksWrap','#s-facts','#rubric','#s-take'].map(s=>document.querySelector(s).getBoundingClientRect().top));
+ ok(order.every((t,i)=>!i||t>order[i-1]),'Calls order: details, calls, tasks, case facts, rubric, note');
+ ok(await page.locator('#steps #fLink, #steps #fRid, #steps #fCallId, #steps #fReviewer').count()===0,'scorecard repeats no call meta');
+ ok(await page.locator('#s-call #fLink').isVisible()&&await page.locator('#s-call #fRid').isVisible()&&await page.locator('#s-call #fCallId').isVisible(),'call link, restaurant ID and WIRA ID in the call details');
+ ok(await page.locator('.board').isVisible(),'score board beside the calls');
  await page.fill('#fReviewer','Patrick');await page.click('#gutChips [data-g="ok"]');
  await page.fill('#fRootCause','Receipt dispute on a self-delivery order');await page.click('#faultCorrectChips [data-fc="customer"]');await page.click('#faultAgentChips [data-fa="none"]');
  await page.click('#singleTouchChips [data-st="yes"]');await page.click('#sourceChips [data-src="call_rec"]');
  await page.click('#crit-1a .head');
  for(const [k,r] of [['3'],['3'],['3'],['3'],['3'],['2','Did not settle who was owed'],['3','Reprinted the ticket'],['n','One-off'],['3'],['3'],['n'],['3']]){await page.keyboard.press(k);if(r){await page.waitForTimeout(30);await page.keyboard.type(r);await page.keyboard.press('Enter')}}
  ok((await page.locator('#xpHint').innerText()).trim()==='+10 XP','board previews +10 XP');
- ok(/%$/.test((await page.locator('#st-score').innerText()).trim()),'Scorecard tab shows the running %');
- await page.click('[data-tab="facts"]');await page.click('#aiShow');await page.click('[data-m="rootCause"][data-v="same"]');await page.click('[data-tab="score"]');
+ ok(/%$/.test((await page.locator('#st-score').innerText()).trim()),'Calls tab shows the running %');
+ await page.click('[data-tab="facts"]');await page.click('#aiShow');await page.click('[data-m="rootCause"][data-v="same"]');await page.click('[data-tab="calls"]');
  ok((await page.locator('#xpHint').innerText()).trim()==='+12 XP','marking a conclusion adds 2 XP to the preview');
  await page.click('#saveBtn');await page.waitForTimeout(400);
  const xp1=await page.evaluate(()=>gameStats().xp);
@@ -54,6 +59,6 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
  ok(await page.locator('.qcard:not(.qcases)',{hasText:'CJ Domingo'}).locator('.pips i.on').count()===1,'CJ card: one pip filled');
  // keyboard still scoped to the Scorecard
  const before=await page.evaluate(()=>JSON.stringify(form.scores));await page.keyboard.press('3');
- ok(await page.evaluate(()=>JSON.stringify(form.scores))===before,'score keys do nothing outside the Scorecard');
+ ok(await page.evaluate(()=>JSON.stringify(form.scores))===before,'score keys do nothing outside Calls');
  ok(!errors.length,'no console errors '+JSON.stringify(errors));
  await ctx.close();await b.close();console.log('ui game: '+n+' checks passed')})().catch(e=>{console.error('TEST FAILED',e);process.exit(1)});

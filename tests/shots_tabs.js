@@ -1,4 +1,4 @@
-// Screenshots of the four main tabs (Snapshot, Calls, Scorecard, Facts) at 1280x900 and 390x860, light and dark → shots/tabs-*.png
+// Screenshots of the four main tabs (Snapshot, Calls (top and rubric), Facts) at 1280x900 and 390x860, light and dark → shots/tabs-*.png
 const { chromium } = require('playwright'); const fs=require('fs'),path=require('path');
 const { openPage } = require('./mock.js'); const SH=path.join(__dirname,'..','shots');
 const ai={cj:JSON.parse(fs.readFileSync('data/gen2/cj.ai.json'))};
@@ -12,11 +12,11 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
   const tag=`${w}-${scheme}`;
   await page.screenshot({path:path.join(SH,`tabs-1-snapshot-${tag}.png`)});widths.push(['snapshot',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
   await page.locator('.qcard:not(.qcases) .qitem',{hasText:'Bravo Pizza II'}).locator('[data-q]').first().click();await page.waitForTimeout(300);
-  await page.locator('details.txd').first().locator('summary').click();await page.waitForTimeout(500);
+  await page.locator('details.txd').first().locator('summary').click();await page.waitForTimeout(500);await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:path.join(SH,`tabs-2-calls-${tag}.png`)});widths.push(['calls',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
-  await page.click('[data-go="score"]');await page.waitForTimeout(200);
-  await page.screenshot({path:path.join(SH,`tabs-3-scorecard-${tag}.png`)});widths.push(['score',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
+  await page.locator('#rubric').scrollIntoViewIfNeeded();await page.evaluate(()=>window.scrollBy(0,-120));await page.waitForTimeout(200);
+  await page.screenshot({path:path.join(SH,`tabs-2-calls-rubric-${tag}.png`)});widths.push(['calls-rubric',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
   await page.click('[data-tab="facts"]');await page.waitForTimeout(200);await page.click('#aiShow').catch(()=>{});await page.waitForTimeout(200);
-  await page.screenshot({path:path.join(SH,`tabs-4-facts-${tag}.png`)});widths.push(['facts',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
+  await page.screenshot({path:path.join(SH,`tabs-3-facts-${tag}.png`)});widths.push(['facts',tag,await page.evaluate(()=>document.documentElement.scrollWidth)]);
   if(errors.length)console.log('errors',tag,JSON.stringify(errors));await ctx.close()}
  console.log('scrollWidth:',JSON.stringify(widths));await b.close()})().catch(e=>{console.error('FAIL',e);process.exit(1)});

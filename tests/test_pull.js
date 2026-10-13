@@ -62,18 +62,18 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
     await page.locator('#chainWrap').scrollIntoViewIfNeeded();
     await page.locator('#chainWrap').screenshot({ path: path.join(SHOTS, 'p7-context-chain-form.png') });
     log('context graded line:', await page.locator('.chaingraded').innerText());
-    await page.click('[data-tab="score"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
+    await page.click('[data-tab="calls"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
     await page.click('[data-tab="queue"]'); await page.waitForTimeout(100);
   }
   // ===== 2. score it: chain panel on the form
   const angItem = card.locator('.qitem').filter({ hasText: '11:37 AM' });
   await angItem.locator('[data-q]').click(); await page.waitForTimeout(150);
-  log('form: agent', await page.locator('#agentChips [aria-pressed="true"]').innerText(), '| type', await page.locator('#typeChips [aria-pressed="true"]').innerText(), '| rid', await page.inputValue('#fRid'), '| callId', await page.inputValue('#fCallId'), '| date', await page.inputValue('#fDate'));
+  log('form: agent', await page.locator('#agentChips [aria-pressed="true"]').textContent(), '| type', await page.locator('#typeChips [aria-pressed="true"]').textContent(), '| rid', await page.inputValue('#fRid'), '| callId', await page.inputValue('#fCallId'), '| date', await page.inputValue('#fDate'));
   log('graded line:', await page.locator('.chaingraded').innerText());
   log('chain panel:', await page.locator('#chainWrap').isVisible(), '|', await page.locator('#chainSum').innerText(), '|', (await page.locator('.chainhead').innerText()).replace(/\s+/g, ' '));
   await page.screenshot({ path: path.join(SHOTS, 'p3-score-chain.png'), fullPage: false });
   // complete + save the audit (Scorecard tab)
-  await page.click('[data-tab="score"]');
+  await page.click('[data-tab="calls"]');
   await page.fill('#fReviewer', 'Patrick'); await page.click('#gutChips [data-g="good"]');
   await page.fill('#fRootCause', 'Client called about a wrong item; Angel confirmed with the store manager and called the client back.');
   await page.click('#faultCorrectChips [data-fc="restaurant"]'); await page.click('#faultAgentChips [data-fa="restaurant"]');
@@ -152,7 +152,7 @@ const qDocs = page => page.evaluate(() => Object.entries(window.__data).filter((
   await page.waitForTimeout(100);
   log('mobile scrollWidth queue:', await page.evaluate(() => document.documentElement.scrollWidth));
   await page.screenshot({ path: path.join(SHOTS, 'p4-mobile-dark-queue.png'), fullPage: true });
-  await page.click('[data-tab="score"]'); await page.locator('[data-tab="queue"]').click(); await page.locator('.qcard:not(.qcases)', { hasText: 'Angel Lacsamana' }).locator('[data-q]').first().click(); await page.waitForTimeout(150);
+  await page.click('[data-tab="calls"]'); await page.locator('[data-tab="queue"]').click(); await page.locator('.qcard:not(.qcases)', { hasText: 'Angel Lacsamana' }).locator('[data-q]').first().click(); await page.waitForTimeout(150);
   await page.locator('#chainWrap').scrollIntoViewIfNeeded();
   log('mobile scrollWidth score:', await page.evaluate(() => document.documentElement.scrollWidth));
   await page.screenshot({ path: path.join(SHOTS, 'p5-mobile-dark-chain.png'), fullPage: false });

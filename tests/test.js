@@ -172,10 +172,10 @@ const MOCK = (seed) => {
   log('queue order:', JSON.stringify(await page.locator('.qitem .qmeta').allInnerTexts()));
   await page.locator('[data-q]').nth(1).click();
   await page.waitForTimeout(100);
-  log('from queue -> type:', await page.locator('#typeChips [aria-pressed="true"]').innerText(), '| date:', await page.inputValue('#fDate'), '| rid:', await page.inputValue('#fRid'), '| hint:', await txt('#saveHint'));
+  log('from queue -> type:', await page.locator('#typeChips [aria-pressed="true"]').textContent(), '| date:', await page.inputValue('#fDate'), '| rid:', await page.inputValue('#fRid'), '| hint:', await txt('#saveHint'));
   log('mgr 3c label:', (await txt('#crit-3c .ttl')).slice(0, 30));
   log('opened tab:', await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab'));
-  await page.click('[data-tab="score"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
+  await page.click('[data-tab="calls"]'); await page.click('#resetBtn'); await page.click('#resetBtn');
 
   // ---- downloads
   await page.click('[data-tab="results"]');
@@ -231,7 +231,7 @@ const MOCK = (seed) => {
   const ov3 = await page.evaluate(() => document.documentElement.scrollWidth);
   log('mobile scrollWidth score/results/queue:', ov1, ov2, ov3);
   await page.setViewportSize({ width: 1000, height: 900 });
-  await page.click('[data-tab="score"]'); await page.waitForTimeout(100);
+  await page.click('[data-tab="calls"]'); await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(SHOTS, '08-1000px.png'), fullPage: false });
 
   // ---- re-score a v1 audit end to end
@@ -265,7 +265,7 @@ const MOCK = (seed) => {
 
   // ---- mobile: empty form bottom bar + results criteria rows
   await page.setViewportSize({ width: 400, height: 860 });
-  await page.click('[data-tab="score"]'); await page.click('#resetBtn'); await page.click('#resetBtn'); await page.waitForTimeout(100);
+  await page.click('[data-tab="calls"]'); await page.click('#resetBtn'); await page.click('#resetBtn'); await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(SHOTS, '09-mobile-empty.png'), fullPage: false });
   await page.click('#mbSave'); await page.waitForTimeout(400);
   log('mobile save jumps to:', await page.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.className)));

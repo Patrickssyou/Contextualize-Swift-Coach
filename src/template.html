@@ -419,14 +419,29 @@ details.chain .tline{margin:6px 6px 4px}
 .pips i{width:9px;height:9px;border-radius:3px;background:var(--soft);border:1px solid var(--line)}
 .pips i.on{background:var(--s3);border-color:var(--s3)}
 /* calls tab */
-.callhead{padding:14px 16px;margin-bottom:14px}
+.callcol{display:flex;flex-direction:column;gap:14px;min-width:0}
+.callhead{padding:14px 16px}
+.callhead .chainhead .btn{margin-left:auto}
+.cfields{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:10px 12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.cfields .field input{padding:6px 9px}
+.cfields .fgut{grid-column:2/-1}
+.cfields .chip{padding:5px 12px}
+.callhead.done{border-color:color-mix(in srgb,var(--s3) 45%,var(--line))}
+details.cedit{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+details.cedit>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;font-size:13px;font-weight:600;color:var(--muted)}
+details.cedit>summary::-webkit-details-marker{display:none}
+details.cedit>summary::before{content:"▸";transition:transform .15s}
+details.cedit[open]>summary::before{transform:rotate(90deg)}
+details.cedit>summary:hover{color:var(--ink)}
+details.cedit .meta{margin-top:12px}
 .callhead .chainhead{padding:0;font-size:17px;gap:10px}
 .callhead .chainhead a{font-weight:700;text-decoration:none;color:var(--ink)} .callhead .chainhead a:hover{color:var(--accent)}
 .callhead .chainhead .kind{font-size:12px}
 .callhead .cmeta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--muted);margin-top:6px}
 .callhead .cmeta b{color:var(--ink);font-weight:600}
 .callhead .chaingraded{padding:8px 0 0;margin-top:8px;border-top:1px solid var(--line)}
-.readbar{padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px 14px;flex-wrap:wrap;border-color:var(--accent);background:var(--accent-soft)}
+#readBar:empty{display:none}
+.readbar{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px 14px;flex-wrap:wrap;border-color:var(--accent);background:var(--accent-soft)}
 .readbar .step{font-weight:600;color:var(--accent)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:99px;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -464,6 +479,8 @@ details.txd .txtext{margin-top:6px}
   .quest{grid-template-columns:minmax(0,1fr);padding:14px}
   .qring{display:none}
   .callhead .chainhead{font-size:15.5px}
+  .cfields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .cfields #f-link,.cfields .fgut{grid-column:1/-1}
 }
 @media (max-width:560px){.tabnav .btn{flex:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.confetti{display:none}}
@@ -485,9 +502,8 @@ details.txd .txtext{margin-top:6px}
   <div id="banner" class="banner" hidden></div>
   <nav class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="queue" aria-selected="true"><span class="tn"><span>1</span></span>Snapshot<span class="count" id="qCount"></span></button>
-    <button type="button" role="tab" data-tab="calls" aria-selected="false"><span class="tn"><span>2</span></span>Calls<span class="tst" id="st-calls"></span></button>
-    <button type="button" role="tab" data-tab="score" aria-selected="false"><span class="tn"><span>3</span></span>Scorecard<span class="tst num" id="st-score"></span></button>
-    <button type="button" role="tab" data-tab="facts" aria-selected="false"><span class="tn"><span>4</span></span>Facts<span class="tst" id="st-facts"></span></button>
+    <button type="button" role="tab" data-tab="calls" aria-selected="false"><span class="tn"><span>2</span></span>Calls<span class="tst num" id="st-score"></span></button>
+    <button type="button" role="tab" data-tab="facts" aria-selected="false"><span class="tn"><span>3</span></span>Facts<span class="tst" id="st-facts"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="results" aria-selected="false">Results<span class="count" id="rCount"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="data" aria-selected="false">Database</button>
   </nav>
@@ -514,12 +530,29 @@ details.txd .txtext{margin-top:6px}
     <div class="qgrid" id="qGrid"></div>
   </section>
 
-  <!-- 2 CALLS: the picked call or case, each linked call with what happened -->
+  <!-- 2 CALLS: call details, the linked calls with what happened, then the scorecard; the score board sits beside it all -->
   <section id="view-calls" hidden>
-    <div class="panel empty" id="callsEmpty" hidden>No call picked.<div style="margin-top:12px"><button type="button" class="btn primary" data-go="queue">Open Snapshot</button></div></div>
-    <div id="callsBody">
-      <div class="panel callhead" id="callHead"></div>
-      <div id="readBar"></div>
+    <div class="desk">
+      <div class="callcol">
+        <div class="panel callhead" id="s-call">
+          <div id="callHead"></div>
+          <div class="cfields">
+            <div class="field" id="f-link"><label for="fLink">Call link</label><div class="linkrow"><input id="fLink" inputmode="url" autocomplete="off"><a id="fOpen" href="#" target="_blank" rel="noopener" hidden>Open ↗</a></div></div>
+            <div class="field" id="f-rid"><label for="fRid">Restaurant ID</label><input id="fRid" autocomplete="off" placeholder="R70105"></div>
+            <div class="field"><label for="fCallId">Call / WIRA ID</label><input id="fCallId" autocomplete="off"></div>
+            <div class="field" id="f-reviewer"><label for="fReviewer">Reviewer</label><input id="fReviewer" autocomplete="name"></div>
+            <div class="field fgut" id="f-gut"><span class="lbl-sm">Gut call</span><div class="chips" id="gutChips"></div></div>
+          </div>
+          <details class="cedit" id="callEdit"><summary><span>Agent, type, date</span><span class="hint" id="ans-call"></span></summary>
+            <div class="meta">
+              <div class="field wide" id="f-agent"><span class="lbl-sm">Agent</span><div class="chips" id="agentChips"></div></div>
+              <div class="field" id="otherAgentWrap" hidden><label for="otherAgent" id="otherAgentLbl">Agent name</label><input id="otherAgent" autocomplete="off"></div>
+              <div class="field wide"><span class="lbl-sm">Interaction type</span><div class="chips" id="typeChips"></div></div>
+              <div class="field" id="f-date"><label for="fDate">Call date</label><input id="fDate" type="date"></div>
+            </div>
+          </details>
+        </div>
+        <div id="readBar"></div>
       <div class="stepcol" id="callSteps">
         <div class="qsec ref" id="chainWrap" hidden>
           <div class="qhd"><span class="qnum"></span><span class="qttl">Calls</span><span class="qans" id="chainSum"></span></div>
@@ -534,30 +567,7 @@ details.txd .txtext{margin-top:6px}
           <div class="qbody flush" id="slackPanel"></div>
         </div>
       </div>
-    </div>
-    <div class="tabnav"><button type="button" class="btn" data-go="queue">← Snapshot</button><button type="button" class="btn primary" data-go="score">Scorecard →</button></div>
-  </section>
-
-  <!-- 3 SCORECARD -->
-  <section id="view-score" hidden>
-    <div class="desk">
-      <div>
-      <div id="steps">
-        <div class="qsec" id="s-call">
-          <div class="qhd"><span class="qnum"></span><span class="qttl">Call</span><span class="qans" id="ans-call"></span><button type="button" class="qchg" id="callChg" hidden>Change</button></div>
-          <div class="qbody meta">
-            <div class="field wide" id="f-agent"><span class="lbl-sm">Agent</span><div class="chips" id="agentChips"></div></div>
-            <div class="field" id="otherAgentWrap" hidden><label for="otherAgent" id="otherAgentLbl">Agent name</label><input id="otherAgent" autocomplete="off"></div>
-            <div class="field wide"><span class="lbl-sm">Interaction type</span><div class="chips" id="typeChips"></div></div>
-            <div class="field wide" id="f-link"><label for="fLink">Call link</label><div class="linkrow"><input id="fLink" inputmode="url" autocomplete="off"><a id="fOpen" href="#" target="_blank" rel="noopener" hidden>Open ↗</a></div></div>
-            <div class="field" id="f-rid"><label for="fRid">Restaurant ID</label><input id="fRid" autocomplete="off" placeholder="R70105"></div>
-            <div class="field"><label for="fCallId">Call / WIRA ID</label><input id="fCallId" autocomplete="off"></div>
-            <div class="field" id="f-date"><label for="fDate">Call date</label><input id="fDate" type="date"></div>
-            <div class="field" id="f-reviewer"><label for="fReviewer">Reviewer</label><input id="fReviewer" autocomplete="name"></div>
-            <div class="field wide" id="f-gut"><span class="lbl-sm">Gut call</span><div class="chips" id="gutChips"></div></div>
-          </div>
-        </div>
-
+        <div id="steps">
         <div class="qsec" id="s-facts">
           <div class="qhd"><span class="qnum"></span><span class="qttl">Case facts</span><span class="qans" id="ans-facts"></span></div>
           <div class="qbody facts" id="factsPanel">
@@ -580,8 +590,8 @@ details.txd .txtext{margin-top:6px}
           <div class="qhd"><span class="qnum"></span><span class="qttl">Coaching note</span><span class="qans" id="ans-take"></span></div>
           <div class="qbody"><div class="field"><label for="fTake" class="sr-only">Coaching note</label><textarea id="fTake" rows="3"></textarea></div></div>
         </div>
-      </div>
-      <div class="tabnav"><button type="button" class="btn" data-go="calls">← Calls</button><button type="button" class="btn primary" data-go="facts">Facts →</button></div>
+        </div>
+        <div class="tabnav"><span></span><button type="button" class="btn primary" data-go="facts">Facts →</button></div>
       </div>
 
       <aside class="panel board" aria-live="polite">
@@ -608,7 +618,7 @@ details.txd .txtext{margin-top:6px}
   <!-- 4 FACTS: Claude's read -->
   <section id="view-facts" hidden>
     <div class="panel factsbox"><div class="aipanel" id="aiPanel" hidden></div><div class="empty" id="factsEmpty" hidden></div></div>
-    <div class="tabnav"><button type="button" class="btn" data-go="score">← Scorecard</button><button type="button" class="btn" data-go="calls">Calls</button></div>
+    <div class="tabnav"><button type="button" class="btn" data-go="calls">← Calls</button><span></span></div>
   </section>
 
   <!-- RESULTS -->
@@ -856,11 +866,11 @@ let tt; function toast(m,act){const t=$("#toast");t.textContent=m;
 function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 
 /* ---------- tabs & week ---------- */
-/* 1 Snapshot (queue) → 2 Calls → 3 Scorecard (score) → 4 Facts, then Results and Database */
-const TABS=["queue","calls","score","facts","results","data"];
-function setTab(t){if(!TABS.includes(t))t="queue";tab=t;document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+/* 1 Snapshot (queue) → 2 Calls (call details, linked calls, scorecard) → 3 Facts, then Results and Database. "score" is the old Scorecard tab: it opens Calls. */
+const TABS=["queue","calls","facts","results","data"];
+function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="queue";tab=t;document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
   TABS.forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+t)}catch(e){}
-  if(t==="score"||t==="calls"||t==="facts")renderForm();renderAll()}
+  if(t==="calls"||t==="facts")renderForm();renderAll()}
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
 document.querySelectorAll("[role=tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);renderAll()};
@@ -885,7 +895,7 @@ function paintOpen(){const u=safeUrl(form.link);$("#fOpen").hidden=!u;if(u)$("#f
 /* CALLS tab: the pick's header, then every linked call as a card with Claude's bullets, its recording and its transcript */
 function hasPick(){return !!(form.queueId||form.id||validChain(form.chain)||safeUrl(form.link)||form.callId.trim())}
 function renderCallHead(){
-  const has=hasPick();$("#callsEmpty").hidden=has;$("#callsBody").hidden=!has;if(!has){$("#callHead").innerHTML="";return}
+  const has=hasPick();if(!has){$("#callHead").innerHTML=`<div class="chainhead"><b>New audit</b><button type="button" class="btn small" data-go="queue">Pick from Snapshot</button></div>`;return}
   const c=validChain(form.chain),lc=c&&liveChain(c),isCase=form.type==="case",u=safeUrl(form.link);
   const who=agentName()||(c&&(c.legs.find(isGraded)||{}).who)||"";
   const title=form.restaurantName||form.restaurantId||(form.callId?"Call "+form.callId.slice(0,8):"Call");
@@ -1021,7 +1031,7 @@ function renderTasks(){
   $("#tasksPanel").innerHTML=`<div class="tnone"><span>${esc(taskNote||(run?"":list?"No linked task":"Not checked yet"))}</span>${btn(list?"Check again":"Find tasks")}</div>`;
 }
 $("#tasksPanel").addEventListener("click",e=>{if(e.target.closest("#taskFind"))findTasks()});
-$("#callChg").addEventListener("click",()=>{callOpen=true;renderSteps()});
+$("#callEdit").addEventListener("toggle",e=>{callOpen=e.target.open});
 $("#chainPanel").addEventListener("click",e=>{if(e.target.closest("[data-hidlegs]")){showHidden=!showHidden;renderChain();return}
   if(e.target.closest("[data-txretry]")){txNote="";loadTx()}});
 $("#chainPanel").addEventListener("toggle",e=>{const d=e.target;if(!(d instanceof HTMLDetailsElement)||!d.dataset.tx)return;
@@ -1272,7 +1282,7 @@ $("#rubric").addEventListener("focusin",e=>{const c=e.target.closest(".crit");if
 $("#rubric").addEventListener("keydown",e=>{const t=e.target.closest("[data-note]");if(!t)return;
   if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();t.blur();gotoNext()}else if(e.key==="Escape"){t.blur()}});
 document.addEventListener("keydown",e=>{
-  if(tab!=="score")return;const t=e.target;if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable))return;
+  if(tab!=="calls")return;const t=e.target;if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable))return;
   if(e.metaKey||e.ctrlKey||e.altKey)return;
   const items=flatItems(),it=items[active];if(!it)return;
   let v=null;if(["0","1","2","3"].includes(e.key))v=Number(e.key);else if(e.key==="n"||e.key==="N")v="na";
@@ -1308,7 +1318,7 @@ function canSave(){return !!db&&dbReady&&!missingList().length}
 function jumpTo(id){
   if(id.startsWith("note-")){focusNote(id.slice(5));return}
   const el=document.getElementById(id);if(!el)return;
-  if(el.closest("#s-call")&&!callOpen){callOpen=true;renderSteps()}
+  if(el.closest("#callEdit")&&!$("#callEdit").open){callOpen=true;$("#callEdit").open=true}
   if(id.startsWith("crit-")){active=Number(el.dataset.i);paintActive();if(document.activeElement)document.activeElement.blur()}
   el.scrollIntoView({block:"center",behavior:"smooth"});
   const f=el.matches("input,textarea,select")?el:el.querySelector("input,textarea,select,button.chip");
@@ -1343,8 +1353,7 @@ function renderSteps(){
   const callDone=!["f-agent","otherAgent","fLink","fRid","fDate","fReviewer","f-gut"].some(k=>miss.has(k));
   const factsDone=!["fRootCause","f-faultCorrect","f-faultAgent","f-singleTouch","f-sources","f-team"].some(k=>miss.has(k));
   const set=(el,done,ans)=>{if(!el)return;el.classList.toggle("done",!!done);const a=el.querySelector(".qans");if(a&&ans!=null)a.textContent=ans};
-  const fold=callDone&&!callOpen;$("#s-call").classList.toggle("folded",fold);$("#callChg").hidden=!fold;
-  set($("#s-call"),callDone,[agentName()&&agentName().split(" ")[0],typeLabel(form.type),form.gut?"Gut: "+GUT_L[form.gut]:""].filter(Boolean).join(" · "));
+  $("#s-call").classList.toggle("done",callDone);$("#ans-call").textContent=[agentName()&&shortWho(agentName()),typeLabel(form.type),form.callDate?shortDate(form.callDate):""].filter(Boolean).join(" · ");
   const own=form.type==="case"&&form.team.find(t=>t.role==="owner");
   set($("#s-facts"),factsDone,form.type==="case"?[own?"Owner: "+shortWho(own.name):"",F.faultCorrect?"Fault: "+FC_L[F.faultCorrect]:""].filter(Boolean).join(" · "):F.faultCorrect?`Fault: ${FA_L[F.faultAgent]||"–"} → ${FC_L[F.faultCorrect]}`:"");
   set($("#s-take"),!!form.take.trim(),form.take.trim()?"Written":"Optional");$("#s-take").classList.toggle("opt",!form.take.trim());
@@ -1352,17 +1361,16 @@ function renderSteps(){
   rub(CUR,form.type).forEach((sec,si)=>{const el=document.querySelector(`.rsec[data-sec="${si}"]`);if(!el)return;
     const its=items.filter(it=>sec.items.some(x=>x.id===it.id)),left=its.filter(needsWork).length,p=c.secs[si]&&c.secs[si].pct;
     set(el,!left,left?`${its.length-left} of ${its.length}`+(p!=null?` · ${fmt(p)}%`:""):(p!=null?fmt(p)+"%":"All NA"))});
-  ["#steps .qsec","#callSteps .qsec"].forEach(sel=>{let n=0;document.querySelectorAll(sel).forEach(el=>{const q=el.querySelector(".qnum");if(!q)return;if(el.hidden){q.innerHTML="";return}q.innerHTML=`<span>${++n}</span>`})});
+  {let n=0;document.querySelectorAll("#callSteps .qsec, #steps .qsec").forEach(el=>{const q=el.querySelector(".qnum");if(!q)return;if(el.hidden){q.innerHTML="";return}q.innerHTML=`<span>${++n}</span>`})}
   renderTabState();
 }
-/* tab labels carry the step state: Calls ✓ once a pick is loaded, Scorecard shows the running %, Facts gets a dot once Claude has read the call */
+/* tab labels carry the step state: Calls ✓ once a pick is loaded and the running % once anything is scored, Facts gets a dot once Claude has read the call */
 function renderTabState(){const tb=k=>document.querySelector(`[role=tab][data-tab="${k}"]`);if(!tb("calls"))return;
   tb("calls").classList.toggle("done",hasPick());
-  const c=calc(CUR,form.type,form.scores);tb("score").classList.toggle("done",!!form.id||(hasPick()&&!missingList().length));
-  $("#st-score").textContent=c.total!=null&&form.gut?fmt(c.total)+"%":"";
+  const c=calc(CUR,form.type,form.scores);$("#st-score").textContent=c.total!=null?fmt(c.total)+"%":"";
   const A=validAi(form.aiFacts);tb("facts").classList.toggle("done",!!A&&form.aiShown);$("#st-facts").innerHTML=A&&!form.aiShown?`<i class="dot" title="Ready"></i>`:"";
 }
-function renderForm(){renderMeta();renderFacts();renderRubric();renderBoard()}
+function renderForm(){const ce=$("#callEdit"),open=callOpen||!agentName()||!form.callDate;if(ce.open!==open)ce.open=open;renderMeta();renderFacts();renderRubric();renderBoard()}
 
 async function saveAudit(){
   if(db&&dbReady&&!canSave()){const m=missingList();if(m.length){jumpTo(m[0][1]);toast("Still to do: "+m[0][0]+(m.length>1?` + ${m.length-1} more`:""))}return}
@@ -1490,7 +1498,7 @@ function loadAudit(a){
   form.aiFacts=validAi(clone(a.aiFacts||(q&&q.aiFacts)||null));form.aiShown=!!form.aiFacts;taskNote="";aiNote="";slackNote="";
   form.team=validTeam(clone(a.team||[]));form.caseIds=Array.isArray(a.caseIds)?a.caseIds.slice():(a.queueId?[a.queueId]:[]);form.slack=validSlack(clone(a.slack??(q?q.slack:null)??null));form.slackAt=a.slackAt||null;
   if(!Array.isArray(form.facts.sources))form.facts.sources=[];
-  lastParsed=parseLink(form.link);openNotes=new Set();active=0;callOpen=false;saveDraft();setTab("score");window.scrollTo({top:0});
+  lastParsed=parseLink(form.link);openNotes=new Set();active=0;callOpen=false;saveDraft();setTab("calls");window.scrollTo({top:0});
 }
 /* tasks or Claude's read that land on the open call's queue doc (another device, or the weekly pull) */
 function mergeOpen(){const q=form.queueId&&queueAll.find(x=>x.id===form.queueId);if(!q)return;let ch=false;
@@ -1501,7 +1509,7 @@ function rescoreV1(a){
   const p=parseLink(a.link||"");
   form=Object.assign(blankForm(),{reviewer:form.reviewer},agentFields(a.agent,a.role),{type:a.type||"call",link:a.link||"",restaurantId:p.restaurantId||"",callId:p.callId||"",
     callDate:a.callDate||"",week:a.week,replaces:a.id});
-  lastParsed=p;openNotes=new Set();active=0;saveDraft();setTab("score");window.scrollTo({top:0});
+  lastParsed=p;openNotes=new Set();active=0;callOpen=true;saveDraft();setTab("calls");window.scrollTo({top:0});
 }
 /* call chain display, shared by queue cards and the score form */
 const openChains=new Set(),openHid=new Set();
@@ -2060,7 +2068,7 @@ function renderAll(){
   $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
   renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderGame();
 }
-const h0=(location.hash||"").slice(1);tab=TABS.includes(h0)?h0:"queue";
+const h0=(location.hash||"").slice(1);tab=h0==="score"?"calls":TABS.includes(h0)?h0:"queue";
 lastParsed=parseLink(form.link);
 setTab(tab);renderForm();
 

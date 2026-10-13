@@ -43,7 +43,7 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   const qa = await page.evaluate(id => window.__data['queue/ld-' + id].aiFacts, ANG);
   log('queue doc aiFacts saved:', !!qa, qa && JSON.stringify({ v: qa.v, calls: qa.calls, withText: qa.withText, tasks: qa.tasks, faultAgent: qa.faultAgent, faultCorrect: qa.faultCorrect }));
   // reviewer fills their own facts; chips auto-match, text rows get marked
-  await page.click('[data-tab="score"]');
+  await page.click('[data-tab="calls"]');
   await page.fill('#fReviewer', 'Patrick'); await page.click('#gutChips [data-g="good"]');
   await page.fill('#fRootCause', 'Store stopped receiving orders and card payments; tech (Mohammed) already working on it.');
   await page.click('#faultCorrectChips [data-fc="tarro"]'); await page.click('#faultAgentChips [data-fa="none"]'); await page.click('#errorTypeChips [data-et="product"]');
@@ -55,7 +55,7 @@ const seedQ = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'see
   log('ai head:', (await page.locator('#aiPanel .aihead').innerText()).replace(/\s*\n\s*/g, ' | '));
   await page.locator('#aiPanel').scrollIntoViewIfNeeded(); await page.locator('#aiPanel').screenshot({ path: path.join(SHOTS, 't2-compare.png') });
   // finish scoring + save
-  await page.click('[data-tab="score"]');
+  await page.click('[data-tab="calls"]');
   await page.click('#crit-1a .head');
   for (const [k, reason] of [['3'], ['3'], ['3'], ['3'], ['3'], ['3', 'Right: tech outage'], ['3', 'Looped in the store'], ['n', 'Tech owns it'], ['2', 'Task thin'], ['3'], ['n', 'No self-serve'], ['3']]) { await page.keyboard.press(k); if (reason) { await page.waitForTimeout(30); await page.keyboard.type(reason); await page.keyboard.press('Enter') } }
   log('missing:', JSON.stringify(await page.evaluate(() => missingList().map(m => m[0]))));
