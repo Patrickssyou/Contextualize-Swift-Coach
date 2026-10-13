@@ -157,8 +157,16 @@ function offerCheck(offer,comp,orders){const a=offer&&Number(offer.amount);if(!(
 /* ---------- 4. Prompts ---------- */
 const CHAT_CTX = "Tarro answers the phones and runs the POS, online ordering and delivery for pizza restaurants. The restaurant is Tarro's client. Super Agents (SAs) support clients through WIRA chat and phone. AEs/CSMs manage client accounts; leads (e.g. Howard Ho) approve exceptions.";
 const EVIDENCE_RULES = [
-  `- Some facts live where Tarro can't see them: the client's own online ordering or website, what their kitchen made, payments taken in store. There the client's own account is acceptable evidence. Note that it is the client's word; do not mark the SA down for not verifying what Tarro has no access to.`];
-const SCORE_ONCE = `- Score each flaw once, in the criterion it belongs to. A premature defense in the first reply is a First response problem; don't also take it off evidence, fault or reply quality if the SA later got those right.`;
+  `- Some facts live where Tarro can't see them: the client's own online ordering or website, what their kitchen made, payments taken in store. There the client's own account is acceptable evidence. Note that it is the client's word; do not mark the SA down for not verifying what Tarro has no access to.`,
+  `- Linked tasks, orders and recordings were matched automatically and can belong to another case. Use only what matches this chat's request; never judge the SA on another case.`,
+  `- This record is not everything the SA could see. The SA works in GreenDot (tickets with item notes, payment records, menu, printer and account settings) and can play recordings that are not linked here. A cant_check claim is not a mistake and costs the SA nothing; only a contradicted claim counts against the SA.`,
+  `- If a point can't be settled only because this record lacks something the SA could see, and the SA's account fits the client's report and any recordings, take the SA's account as the working fact and say it is unverified. Never conclude the SA skipped a check because this record doesn't show it.`,
+  `- Chat messages have no times. A call that started after the chat opened happened while the chat was going on; don't place it before or after a message unless a message refers to it, and never fault the SA on an order of events you can't see.`];
+const SCORE_ONCE = [`- Score each flaw once, in the one criterion it belongs to, and nowhere else:`,
+  `  a defense or conclusion before checking: First response if it was in the first reply, otherwise Gathered the evidence (never both) · a wrong account of what happened given to the client: Restated · blaming the wrong party for the client's problem: Fault attribution · the wrong action or next step for the client: Resolution path · a wrong number, base or terms: Resolution accuracy · the client left unsure what they get, why or when (including an amount never stated): Solution explained · how the lead was told or asked (summary, recommendation, logic): Escalation · tone, ownership, over-promising: Reply quality.`,
+  `  Fault attribution is about the problem the client brought, not the SA's own slips in this chat (a misread request, a wrong first answer); those count once where they happened.`,
+  `  When the SA corrected a wrong statement and ended right, score the other criteria on where the SA ended; the slip counts once, where it happened.`,
+  `- Marks: 3 right · 2 right with a small gap · 1 attempted but wrong in a way that matters · 0 not done, or the opposite of what was needed.`].join("\n");
 const NO_PRONOUNS = `- Refer to people by name or role, never as he or she.`;
 const SPEAKER_RULES = [
   `Who said it, in call transcripts (the hardest part; get it right):`,
@@ -167,19 +175,20 @@ const SPEAKER_RULES = [
   `- The other side is usually the customer ordering food, or restaurant staff. The agent's turns are mostly greetings, read-backs, totals, questions and the agent's own actions or offers. Reports of what happened almost always come from the caller.`,
   `- A question or read-back is not a claim. If a line can't be placed on one speaker with confidence, set "who" to "unclear". An "unclear" fact is fine; a fact on the wrong person is a serious error.`];
 function chatEvidence(k){const c=k.chat,L=[];
-  L.push(`CHAT ${c.sid} · ${c.restaurant}${c.code?` (${c.code})`:""} · opened ${c.at.replace("T"," ")} ET · ${c.initiator==="client"?"started by the client":c.initiator==="ae"?`created by AE ${c.createdBy}`:"started by "+(c.createdBy||"staff")}`);
+  L.push(`CHAT ${c.sid} · ${c.restaurant}${c.code?` (${c.code})`:""} · opened ${c.at.replace("T"," ")} ET · ${c.initiator==="client"?"started by the client (M1 is the client's message)":c.initiator==="ae"?`created by AE ${c.createdBy}`:"started by "+(c.createdBy||"staff")}`);
   L.push(`Audited SA: ${c.sa}${c.frt!=null?` · first reply ${c.frt} min after the first client message`:""} · status ${c.status}${c.sub?" / "+c.sub:""}`);
   L.push(`Messages are in order; WIRA keeps no per-message times. Internal notes are inferred from the text (an @mention, or staff talking about the client); if one clearly reads as written to the client, treat it as client-visible.`);
   L.push("",chatTranscript(c));
-  if((k.tasks||[]).length){L.push("","LINKED TASKS");k.tasks.forEach(t=>{L.push(`\nTASK ${t.sid}${t.parent===c.wid?" (child of this chat)":""} · created ${t.at.replace("T"," ")} ET by ${t.by||"unknown"} · assigned ${t.assigned||"nobody"} · ${t.intent||t.project} · status ${t.status}`);
+  if((k.tasks||[]).length){L.push("","LINKED TASKS");k.tasks.forEach(t=>{L.push(`\nTASK ${t.sid}${t.parent===c.wid?" (child of this chat)":" (the SA's other task at this restaurant; may be another case)"} · created ${t.at.replace("T"," ")} ET by ${t.by||"unknown"} · assigned ${t.assigned||"nobody"} · ${t.intent||t.project} · status ${t.status}`);
     L.push(`Title: ${t.title}`);if(t.desc)L.push(`Description: ${t.desc}`);if(t.fields&&t.fields!=="{}")L.push(`Fields: ${capText(t.fields,300)}`);
     t.comments.forEach(cm=>L.push(`- ${cm.who||"someone"}: ${cm.text}`))})}
-  if((k.orders||[]).length){L.push("","LINKED ORDERS (from Tarro's order data)");k.orders.forEach(o=>L.push(`${o.label} · ticket ${o.ticket||"?"} · created ${o.at.replace("T"," ")} ET · ${o.source}${o.type?" · "+o.type:""}${o.coupon?" · coupon "+o.coupon:""} · items ${money(o.items)} + tax ${money(o.tax)}${o.tip?" + tip "+money(o.tip):""}${o.other?` + other ${money(o.other)}`:""} = total ${money(o.total)}`))}
+  if((k.orders||[]).length){L.push("","LINKED ORDERS (Tarro's order data, matched automatically from clues in the chat and tasks; may be wrong)");k.orders.forEach(o=>L.push(`${o.label} · ticket ${o.ticket||"?"} · created ${o.at.replace("T"," ")} ET · ${o.source}${o.type?" · "+o.type:""}${o.coupon?" · coupon "+o.coupon:""} · items ${money(o.items)} + tax ${money(o.tax)}${o.tip?" + tip "+money(o.tip):""}${o.other?` + other ${money(o.other)}`:""} = total ${money(o.total)}`))}
   else L.push("","LINKED ORDERS: none matched with confidence.");
   if(k.orderNote)L.push(k.orderNote);
   let budget=CHAT.budget;
-  if((k.calls||[]).length){L.push("","LINKED CALL RECORDINGS");k.calls.forEach((l,i)=>{let tx=String(l.text||"").trim();if(tx.length>CHAT.txCap)tx=tx.slice(0,CHAT.txCap)+" …";if(tx.length>budget)tx=tx.slice(0,Math.max(0,budget))+" …";budget-=tx.length;
-    L.push(`\nCALL ${i+1} · ${l.at.replace("T"," ")} ET · ${dur(l.sec)} · agent ${l.agent||"unknown"} · ${l.dir==="out"?"outbound to":"inbound from"} …${String(l.phone).slice(-4)}${l.orders?` · tied to ${l.orders}`:""}\n${tx||"[no transcript]"}`)})}
+  if((k.calls||[]).length){L.push("","LINKED CALL RECORDINGS (the linked order's calls and the same caller's other calls; may be wrong)");k.calls.forEach((l,i)=>{let tx=String(l.text||"").trim();if(tx.length>CHAT.txCap)tx=tx.slice(0,CHAT.txCap)+" …";if(tx.length>budget)tx=tx.slice(0,Math.max(0,budget))+" …";budget-=tx.length;
+    const when=c.at&&l.at?(l.at>=c.at?"after the chat opened":"before the chat opened"):"";
+    L.push(`\nCALL ${i+1} · ${l.at.replace("T"," ")} ET${when?` (${when})`:""} · ${dur(l.sec)} · agent ${l.agent||"unknown"} · ${l.dir==="out"?"outbound to":"inbound from"} …${String(l.phone).slice(-4)}${l.orders?` · tied to ${l.orders}`:""}\n${tx||"[no transcript]"}`)})}
   else L.push("","LINKED CALL RECORDINGS: none found.");
   if((k.slack||[]).length){L.push("","SLACK");k.slack.forEach(t=>{L.push(`#${t.channel} · ${t.author||"someone"}: ${capText(t.text,600)}`);(t.replies||[]).forEach(r=>L.push(`- reply · ${r.who}: ${capText(r.text,300)}`))})}
   if(k.notFound&&k.notFound.length)L.push("","LOOKED FOR BUT NOT IN THE DATA: "+k.notFound.join("; "));
@@ -196,29 +205,51 @@ function chatFactsPrompt(k){const sa=k.chat.sa||"the SA";
     `- Include internal notes as facts, marked as internal.`,
     `- Record what the call recordings and order data show, in the same attributed way, with times.`,
     `- If something isn't in the evidence, leave it out.`,
+    `- Linked tasks, orders and recordings were matched automatically and can belong to another case. If one is about a different request, ticket, day or customer than this chat, record one fact saying it does not match this chat, and nothing else from it.`,
     NO_PRONOUNS,
     ...SPEAKER_RULES,
     ``,`Then CHECK THE SA'S CLAIMS. List every factual claim ${sa} made about what happened (to the client, in internal notes, or in tasks), e.g. "the customer chose pickup" or "the agent failed to confirm whether to keep the phone order". For each, check it against the recordings, order data and tasks:`,
-    `- "supported": the evidence shows it. "contradicted": the evidence shows otherwise. "cant_check": the evidence doesn't cover it.`,
+    `- "supported": the evidence shows it. "contradicted": the evidence shows otherwise. "cant_check": the evidence here doesn't cover it (the SA may have seen it in GreenDot).`,
     `- Evidence is a short quote or fact from a call, order or task. Judge each claim on its own, including claims ${sa} later took back.`,
     ``,`Reply with only a JSON object:`,
     `{"calls": [{"n": 1, "bullets": ["3 to 5 bullets, each under 15 words: who called and why, what happened, how it ended"]}],`,
-    ` "timeline": [{"src": "M3 | Call 2 | O1 | Task 1831693 | Slack", "when": "time if known, else empty", "who": "who said or did it, or unclear", "kind": "said | did | internal", "what": "the fact, under 25 words"}],`,
+    ` "timeline": [{"src": "M3 | Call 2 | O1 | Task 1234567 | Slack | Header", "when": "time if known, else empty", "who": "who said or did it, or unclear", "kind": "said | did | internal", "what": "the fact, under 25 words"}],`,
     ` "claims": [{"src": "M3", "claim": "what ${sa} claimed, under 20 words", "check": "supported | contradicted | cant_check", "evidence": "quote or fact, under 25 words"}],`,
     ` "promises": [{"src": "M8", "who": "", "to": "", "what": "under 12 words"}]}`,
-    `"timeline" puts recordings and orders in time order first, then the chat in message order. "calls" has one entry per call recording, numbered as below.`,
+    `"timeline" puts recordings and orders in time order first, then the chat in message order. A chat fact's src is its message number (M1, M2…); "Header" is only for when and by whom the chat was opened. "calls" has one entry per call recording, numbered as below.`,
     ``,chatEvidence(k)].join("\n")}
 function chatFactLines(F){return F.timeline.map(t=>`${t.id} · ${[t.when,t.src].filter(Boolean).join(" · ")} · ${t.who||"someone"} [${t.kind}]: ${t.what}`).join("\n")+
   "\n\nSA CLAIMS CHECK\n"+(F.claims.length?F.claims.map(c=>`${c.id} · ${c.src} · ${c.check.toUpperCase()}: ${c.claim} — ${c.evidence}`).join("\n"):"No factual claims.")+
   "\n\nPROMISES\n"+(F.promises.length?F.promises.map(p=>`${p.id} · ${p.src} · ${p.who} to ${p.to}: ${p.what}`).join("\n"):"None.")}
 function calibLines(cal){return (cal||[]).slice(0,CHAT.calibMax).map((c,i)=>`CASE ${i+1} · ${c.agent||"SA"} · ${c.restaurant||""} · ${c.date||""} · QA lead's verdict: ${String(c.verdict||"").toUpperCase()}\n`+(c.lessons||[]).map(l=>"- "+l).join("\n")).join("\n\n")}
+/* what the client asked for; only "compensation" uses the policy buckets and the money */
+const CASE_TYPES = [
+  ["compensation","the client reports an order problem that may be Tarro's mistake, or compensation was asked for, offered or promised"],
+  ["order_issue","check or correct an order or a call (what the customer ordered, a recording request, a complaint) with no money at stake"],
+  ["customer_recovery","the restaurant decides a credit, refund or remake for its own customer and the SA carries it out"],
+  ["contact_customer","the restaurant asks Tarro to call or update a customer"],
+  ["menu_setup","menu items, prices, modifiers or promos"],
+  ["hours_service","opening hours, closures, turning call service or delivery on or off"],
+  ["device_printer","printers, tablets, the POS app, receipts"],
+  ["billing_payment","charges, card fees, payouts, statements"],
+  ["order_admin","void an order, mark it paid or unpaid, change its type, dispatch or driver problems"],
+  ["how_to","how to use Tarro's tools"],
+  ["other","anything else"]];
 function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(policy&&policy.comp)||CHAT_POLICY_EMPTY.comp;
   const buckets=(P.buckets||[]).map(b=>`${b.id} (${b.label}: ${b.pct}%${b.deliveryFee?", + delivery fee on self-delivery":""})`).join("; ")||"none loaded";
   return [`You are the analyst for a QA lead at Tarro. ${CHAT_CTX}`,
     `Below is the record of one support chat (facts F#, SA claims C#, promises P#) and the orders it was tied to (O#). Analyze it the way the QA lead does: FIRST the facts, THEN fault, THEN the right solution, THEN how the SA's solution compares. Use only the record and the policy; cite fact ids.`,
     ``,`Rules:`,
-    `- Fault: "tarro" (a Tarro agent or system error, confirmed by the recording), "restaurant", "customer", "shared_tarro" (Tarro had a chance to catch it and didn't), "shared_other", or "unclear". A client's claim is not proof; the recording is.`,
-    `- Pick the compensation bucket from the policy that fits the facts, and the affected order (O#). Do NOT calculate money; the system does it from the bucket and the order's item subtotal.`,
+    `- Case type first, from what the client asked for in the chat (not from linked data):`,
+    ...CASE_TYPES.map(([id,d])=>`  ${id}: ${d}`),
+    `- Fault, by who caused the problem the client brought to the chat (not how the SA handled the chat):`,
+    `  "tarro": a Tarro agent's or system's own action or omission caused it (a wrong instruction or quote, an item or note not entered, an order not confirmed or not cancelled), confirmed by the recording.`,
+    `  "restaurant" or "customer": they caused it and Tarro followed process.`,
+    `  "shared_tarro": the customer or restaurant caused it, and a Tarro agent could have caught it but didn't.`,
+    `  "shared_other": Tarro followed process; the error came from ambiguous input or the restaurant's action.`,
+    `  "unclear": the evidence conflicts or nobody could know. "none": nothing went wrong (a plain request).`,
+    `  A client's claim is not proof; the recording is. Fault is about who caused it, not how sure we are: when the recording confirms a Tarro agent's own miss and the rest is the client's word about what Tarro can't see, it is "tarro".`,
+    `- Compensation policy applies only to the compensation type. There, pick the bucket that fits the facts and the affected order (O#); pick the bucket even when no order is linked. "none" is only for a fault that isn't Tarro's. Do NOT calculate money; the system does it from the bucket and the order's item subtotal. For any other type, set bucket.id and affectedOrder to "" and saOffer.amount to null. A credit or refund the restaurant gives its own customer is not Tarro compensation.`,
     `- Say what the ideal SA would have done for the client (and the customer, if relevant), whether escalation to a lead was needed, and why.`,
     `- Record what ${sa} offered (amount and what it was built on) and whether ${sa}'s path matches the ideal.`,
     `- AE/CSM involvement: "over_head" (the client went over the SA to the AE), "corrected_sa" (the AE had to correct the SA), "ae_initiated" (the AE created the chat), "context" (the AE added context), or "none". Say whether ${sa} could reasonably have prevented it.`,
@@ -227,12 +258,14 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     ...EVIDENCE_RULES,
     NO_PRONOUNS,
     ``,`Reply with only a JSON object:`,
-    `{"summary": "what happened, 2-3 sentences",`,
-    ` "fault": {"who": "tarro | restaurant | customer | shared_tarro | shared_other | unclear", "why": "one sentence", "cites": ["F2"]},`,
+    `{"caseType": "${CASE_TYPES.map(c=>c[0]).join(" | ")}", "request": "what the client asked for, under 20 words",`,
+    ` "summary": "what happened, 2-3 sentences",`,
+    ` "fault": {"who": "tarro | restaurant | customer | shared_tarro | shared_other | unclear | none", "why": "one sentence", "cites": ["F2"]},`,
     ` "bucket": {"id": "one of: ${(P.buckets||[]).map(b=>b.id).join(" | ")||"none"}", "why": "one sentence", "cites": []},`,
     ` "affectedOrder": "O1 or empty", "selfDelivery": false, "deliveryFee": null,`,
-    ` "ideal": {"client": "what the ideal SA tells and gives the client, under 40 words", "customer": "under 25 words, or empty", "escalation": {"needed": true, "why": "under 25 words", "to": "who"}},`,
-    ` "saOffer": {"amount": 17.73, "text": "what ${sa} offered, under 20 words", "cites": ["F8"]},`,
+    ` "ideal": {"client": "what the ideal SA tells and gives the client, under 40 words", "customer": "under 25 words, or empty"},`,
+    ` "escalation": {"needed": true, "why": "under 25 words", "to": "who"},`,
+    ` "saOffer": {"amount": 12.34, "text": "what ${sa} offered, under 20 words", "cites": ["F8"]},`,
     ` "saPath": {"match": "yes | partly | no", "why": "under 30 words"},`,
     ` "aeInvolvement": {"kind": "over_head | corrected_sa | ae_initiated | context | none", "saCouldPrevent": false, "why": "under 30 words"},`,
     ` "firstResponse": {"concludedBeforeEvidence": false, "why": "under 30 words", "cites": []}}`,
@@ -243,40 +276,42 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     ``,`CHAT ${k.chat.sid} · ${k.chat.restaurant} · audited SA ${sa}`,
     `ORDERS`,(k.orders||[]).map(o=>`${o.label} · ticket ${o.ticket||"?"} · ${o.type||o.source} · items ${money(o.items)}, tax ${money(o.tax)}${o.tip?`, tip ${money(o.tip)}`:""}, total ${money(o.total)}`).join("\n")||"None linked.",
     ``,`RECORD`,chatFactLines(F)].join("\n")}
+/* naWhen (added): the only situation in which a row may be marked N/A; the grade prompt prints it */
 const CHAT_RUBRIC = [
-  {id:"fr",label:"First response",w:10,max:3,na:true,d:"Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence."},
-  {id:"ev",label:"Gathered the evidence",w:15,max:3,d:"Reviewed the recording and the order before concluding; every factual claim is supported."},
-  {id:"rs",label:"Restated the case correctly",w:10,max:3,d:"Told the client what happened, accurately and plainly."},
-  {id:"fa",label:"Fault attribution",w:15,max:3,d:"Correct fault; owned clearly when it's Tarro's; pushed back when it isn't."},
-  {id:"path",label:"Resolution path",w:15,max:3,d:"Chose the right policy path for the case."},
-  {id:"amt",label:"Resolution accuracy",w:10,max:3,d:"The amount and terms are exactly right: right base (items only), right %, fees handled."},
-  {id:"expl",label:"Solution explained",w:5,max:3,na:true,d:"The client understands what they get, why and when; explains the math when challenged."},
-  {id:"esc",label:"Escalation",w:15,max:4,na:true,d:"0 needed but not done · 1 tagged the lead · 2 + a summary the lead will read (chat or ticket) · 3 + a recommended solution, asking the lead's opinion · 4 + the recommendation is correct, with clear logic. N/A when no escalation was needed."},
+  {id:"fr",label:"First response",w:10,max:3,na:true,naWhen:"the SA started the chat, so there was no message to answer",d:"Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence."},
+  {id:"ev",label:"Gathered the evidence",w:15,max:3,d:"Checked what the case needed before concluding or acting: the recording and the order for an order problem; the setup, settings or account for a request. Every factual claim holds up."},
+  {id:"rs",label:"Restated the case correctly",w:10,max:3,d:"Told the client what happened, or confirmed the request back, accurately and plainly."},
+  {id:"fa",label:"Fault attribution",w:15,max:3,na:true,naWhen:"nothing went wrong, so there was no fault to attribute (a plain request: menu, hours, settings, how-to)",d:"Correct fault; owned clearly when it's Tarro's; pushed back when it isn't."},
+  {id:"path",label:"Resolution path",w:15,max:3,d:"Chose the right path for the case type: the policy path for compensation; for a request, the right action, team or ticket, confirmed with the client; for a customer credit, the restaurant's decision carried out."},
+  {id:"amt",label:"Resolution accuracy",w:10,max:3,na:true,naWhen:"no compensation, credit, refund or fee was given or due, or one was given but its amount appears nowhere in the record (that gap counts under Solution explained)",d:"The amount and terms are exactly right: for Tarro compensation, the right base (items only), right % and fees handled; for a credit or refund the restaurant decided, exactly what the restaurant approved."},
+  {id:"expl",label:"Solution explained",w:5,max:3,na:true,naWhen:"there was nothing to explain beyond confirming it was done",d:"The client understands what they get, why and when; explains the math when challenged."},
+  {id:"esc",label:"Escalation",w:15,max:4,na:true,naWhen:"no escalation was needed",d:"0 needed but not done · 1 tagged the lead · 2 + a summary the lead will read (chat or ticket) · 3 + a recommended solution, asking the lead's opinion · 4 + the recommendation is correct, with clear logic."},
   {id:"tone",label:"Reply quality",w:5,max:3,d:"Clear, warm, professional; owns mistakes; no over-promising."}];
 const VERDICTS = [["great",90,"Great"],["good",80,"Good"],["okay",65,"Okay"],["needs_work",50,"Needs work"],["miss",0,"Miss"]];
 function chatGradePrompt(k,F,A,comp,offer,cal){const sa=k.chat.sa||"the SA";
   return [`You are Swift Coach, the QA lead's coaching assistant at Tarro. ${CHAT_CTX}`,
     `Grade how ${sa} handled this chat and coach ${sa.split(" ")[0]}. You have the record, the analysis and the system's compensation math. Do not re-decide the facts or the money; grade against them.`,
     ``,`The QA lead's route: (1) establish the case facts, (2) analyze them and attribute fault, (3) give the right solution, (4) reply well. Judge each step.`,
-    ``,`SCORECARD (0-3 unless noted; "na" only where it says so):`,
-    ...CHAT_RUBRIC.map(r=>`- ${r.id} · ${r.label}${r.max!==3?` (0-${r.max})`:""}: ${r.d}`),
-    `- "na" is allowed only for: ${CHAT_RUBRIC.filter(r=>r.na).map(r=>r.id).join(", ")} (when the criterion doesn't apply to this chat).`,
+    ``,`SCORECARD (0-3 unless noted). Use "na" only where a row says "N/A when", and then always when that is true; never score a row that doesn't apply:`,
+    ...CHAT_RUBRIC.map(r=>`- ${r.id} · ${r.label}${r.max!==3?` (0-${r.max})`:""}: ${r.d}${r.naWhen?` N/A when ${r.naWhen}.`:""}`),
+    ...(A.fault&&A.fault.who==="none"?[`- The analysis found nothing went wrong, so fa is "na".`]:[]),
+    ...(A.caseType&&!["compensation","customer_recovery"].includes(A.caseType)?[`- This is not a compensation or customer-credit case: amt is "na" unless the SA gave or set a credit, refund or fee in this chat.`]:[]),
     ``,`Rules:`,
-    `- Every reason cites facts (F#, C#, M#) and says exactly what was right or wrong, in one sentence.`,
+    `- For each criterion write the reason first, then the score that follows from it. Every reason cites facts (F#, C#, M#) and says exactly what was right or wrong, in one sentence; an "na" reason says why the row doesn't apply.`,
     `- Use the calibration cases: they are how the QA lead grades.`,
     SCORE_ONCE,
     ...EVIDENCE_RULES,
     NO_PRONOUNS,
     `- Coaching is for ${sa.split(" ")[0]}. Plain, direct, specific. Each "next time" item: what happened (quote it), why it matters, what to do, and a model message ${sa.split(" ")[0]} could have sent. For an escalation, the model message is a Level 4 escalation: summary + recommendation + logic.`,
     ``,`Reply with only a JSON object:`,
-    `{"scores": {${CHAT_RUBRIC.map(r=>`"${r.id}": 0`).join(", ")}},`,
-    ` "reasons": {${CHAT_RUBRIC.map(r=>`"${r.id}": "one sentence"`).join(", ")}},`,
+    `{"criteria": {${CHAT_RUBRIC.map(r=>`"${r.id}": {"why": "one sentence", "score": ${r.na?`"0-${r.max} or na"`:`"0-${r.max}"`}}`).join(", ")}},`,
     ` "route": {"facts": {"mark": "right | partly | wrong", "why": ""}, "analysis": {"mark": "", "why": ""}, "solution": {"mark": "", "why": ""}, "escalation": {"mark": "", "why": ""}},`,
     ` "wentWell": ["2-3 items, each under 20 words"],`,
     ` "nextTime": [{"what": "what happened, quoting the chat", "why": "why it matters", "do": "what to do next time", "model": "a message ${sa.split(" ")[0]} could have sent"}],`,
     ` "verdictWhy": "two sentences on the overall grade"}`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
-    ``,`ANALYSIS`,JSON.stringify({summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
+    ``,`ANALYSIS`,JSON.stringify({caseType:A.caseType,request:A.request,summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
+    A.caseType&&A.caseType!=="compensation"?`COMPENSATION: not a compensation case (${A.caseType}); the policy amount does not apply.`:
     `COMPENSATION MATH (system): right amount ${comp.amount==null?"unknown":money(comp.amount)} (${comp.formula}); ${sa} offered ${offer.amount==null?"nothing":money(offer.amount)}${offer.note?` — ${offer.note}`:""}.${comp.needsApproval?` Above the ${money(comp.limit)} approval limit.`:""}`,
     ``,`CHAT ${k.chat.sid} · ${k.chat.restaurant} · audited SA ${sa} · first reply ${k.chat.frt==null?"unknown":k.chat.frt+" min"}`,
     chatTranscript(k.chat),``,`RECORD`,chatFactLines(F)].join("\n")}
@@ -294,23 +329,30 @@ function cleanChatFacts(x,calls){if(!x||typeof x!=="object"||Array.isArray(x))re
   const claims=arr(x.claims).filter(c=>c&&c.claim).slice(0,30).map((c,i)=>{const k=String(c.check||"").toLowerCase().replace(/[\s-]+/g,"_");return {id:"C"+(i+1),src:chS(c.src,20),claim:chS(c.claim,220),check:CHECKS.includes(k)?k:"cant_check",evidence:chS(c.evidence,260)}});
   const promises=arr(x.promises).filter(p=>p&&p.what).slice(0,15).map((p,i)=>({id:"P"+(i+1),src:chS(p.src,20),who:chS(p.who,60),to:chS(p.to,60),what:chS(p.what,160)}));
   if(!timeline.length)return null;return {calls:callsOut,timeline,claims,promises}}
-const FAULTS=["tarro","restaurant","customer","shared_tarro","shared_other","unclear"],AE_KINDS=["over_head","corrected_sa","ae_initiated","context","none"],MATCH=["yes","partly","no"];
+const FAULTS=["tarro","restaurant","customer","shared_tarro","shared_other","unclear","none"],AE_KINDS=["over_head","corrected_sa","ae_initiated","context","none"],MATCH=["yes","partly","no"];
 function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray(x))return null;const ids=new Set(F.timeline.map(t=>t.id).concat(F.claims.map(c=>c.id),F.promises.map(p=>p.id)));
   const cites=a=>arr(a).map(v=>String(v).trim().toUpperCase()).filter(v=>ids.has(v)).slice(0,8),o=v=>v&&typeof v==="object"?v:{},low=v=>String(v||"").trim().toLowerCase().replace(/[\s-]+/g,"_");
-  const bucketIds=((policy&&policy.comp&&policy.comp.buckets)||[]).map(b=>b.id),f=o(x.fault),b=o(x.bucket),id=o(x.ideal),es=o(id.escalation),so=o(x.saOffer),sp=o(x.saPath),ae=o(x.aeInvolvement),fr=o(x.firstResponse);
+  const bucketIds=((policy&&policy.comp&&policy.comp.buckets)||[]).map(b=>b.id),f=o(x.fault),b=o(x.bucket),id=o(x.ideal),es=o(x.escalation&&typeof x.escalation==="object"?x.escalation:id.escalation),so=o(x.saOffer),sp=o(x.saPath),ae=o(x.aeInvolvement),fr=o(x.firstResponse);
   const amt=so.amount==null||so.amount===""?null:Number(String(so.amount).replace(/[$,]/g,""));
-  return {summary:chS(x.summary,700),fault:{who:FAULTS.includes(low(f.who))?low(f.who):"unclear",why:chS(f.why,300),cites:cites(f.cites)},
-    bucket:{id:bucketIds.includes(low(b.id))?low(b.id):"",why:chS(b.why,300),cites:cites(b.cites)},
-    affectedOrder:/^O\d+$/i.test(String(x.affectedOrder||"").trim())?String(x.affectedOrder).trim().toUpperCase():"",
+  const caseType=CASE_TYPES.some(c=>c[0]===low(x.caseType))?low(x.caseType):x.caseType==null||x.caseType===""?"":"other",comp=!caseType||caseType==="compensation";
+  /* added fields: caseType (one of CASE_TYPES, "" when the reply has none) and request. Buckets, the affected order and the SA's offer only count on a compensation case */
+  return {caseType,request:chS(x.request,200),summary:chS(x.summary,700),fault:{who:FAULTS.includes(low(f.who))?low(f.who):"unclear",why:chS(f.why,300),cites:cites(f.cites)},
+    bucket:{id:comp&&bucketIds.includes(low(b.id))?low(b.id):"",why:chS(b.why,300),cites:cites(b.cites)},
+    affectedOrder:comp&&/^O\d+$/i.test(String(x.affectedOrder||"").trim())?String(x.affectedOrder).trim().toUpperCase():"",
     selfDelivery:x.selfDelivery===true,deliveryFee:Number(x.deliveryFee)>0?r2(x.deliveryFee):null,
     ideal:{client:chS(id.client,400),customer:chS(id.customer,250),escalation:{needed:es.needed===true,why:chS(es.why,250),to:chS(es.to,60)}},
-    saOffer:{amount:isNaN(amt)?null:amt,text:chS(so.text,200),cites:cites(so.cites)},
+    saOffer:{amount:!comp||isNaN(amt)?null:amt,text:chS(so.text,200),cites:cites(so.cites)},
     saPath:{match:MATCH.includes(low(sp.match))?low(sp.match):"partly",why:chS(sp.why,300)},
     aeInvolvement:{kind:AE_KINDS.includes(low(ae.kind))?low(ae.kind):"none",saCouldPrevent:ae.saCouldPrevent===true,why:chS(ae.why,300)},
     firstResponse:{concludedBeforeEvidence:fr.concludedBeforeEvidence===true,why:chS(fr.why,300),cites:cites(fr.cites)}}}
 const MARKS=["right","partly","wrong"];
-function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;const sc=x.scores&&typeof x.scores==="object"?x.scores:{},rs=x.reasons&&typeof x.reasons==="object"?x.reasons:{};
-  const scores={},reasons={};CHAT_RUBRIC.forEach(r=>{const v=sc[r.id];const na=String(v).toLowerCase()==="na"||v==null;
+/* reads {criteria:{id:{why,score}}} (asked since chat-1 b13) or the older {scores, reasons}; returns {scores, reasons, ...} either way */
+function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;const cr=x.criteria&&typeof x.criteria==="object"&&!Array.isArray(x.criteria)?x.criteria:null;
+  /* a reply that never closed "criteria" carries the rest inside it: lift those keys back up */
+  if(cr)["route","wentWell","nextTime","verdictWhy"].forEach(k=>{if(x[k]==null&&cr[k]!=null)x=Object.assign({},x,{[k]:cr[k]})});
+  const pick=(k,f)=>{const o={};if(cr)Object.entries(cr).forEach(([id,v])=>{if(v&&typeof v==="object")o[id]=v[k]});return Object.keys(o).length?o:f};
+  const sc=pick("score",x.scores&&typeof x.scores==="object"?x.scores:{}),rs=pick("why",x.reasons&&typeof x.reasons==="object"?x.reasons:{});
+  const scores={},reasons={};CHAT_RUBRIC.forEach(r=>{const v=sc[r.id];const na=/^\s*(n\/?a|not applicable)\s*$/i.test(String(v))||v==null;
     scores[r.id]=na&&r.na?"na":Math.max(0,Math.min(r.max,Math.round(Number(v)||0)));reasons[r.id]=chS(rs[r.id],300)});
   const rt=x.route&&typeof x.route==="object"?x.route:{},route={};["facts","analysis","solution","escalation"].forEach(k=>{const v=rt[k]&&typeof rt[k]==="object"?rt[k]:{};
     route[k]={mark:MARKS.includes(String(v.mark).toLowerCase())?String(v.mark).toLowerCase():"partly",why:chS(v.why,300)}});
@@ -401,5 +443,5 @@ function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:
 if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(globalThis,core);
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
-    chatFactLines,calibLines,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
+    chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,chatWeek,pullChatWeek,chatGradable,chatPicks,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc}}
