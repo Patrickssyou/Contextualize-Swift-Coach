@@ -541,13 +541,15 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
   step("orders","done",k.orders.length?k.orders.map(o=>`ticket ${o.ticket||"?"}`).join(", "):close.length?"not clear":"none");
   step("calls","run");
   const ids=[...new Set(k.orders.flatMap(o=>o.callIds))];let calls=[];
-  if(ids.length)calls=(await q(callsByIdsConfig(ids,from,day),T+" · order recordings")).map(callRow);
+  /* a linked order can be older than the chat's day window (a WIRA tie or a named date): look for its calls from its own day */
+  const cFrom=k.orders.map(o=>String(o.at).slice(0,10)).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<from).sort()[0]||from;
+  if(ids.length)calls=(await q(callsByIdsConfig(ids,cFrom,day),T+" · order recordings")).map(callRow);
   /* the caller is the order's customer. A phone in the chat text can be the restaurant's own (the client's WIRA author id carries it), and a regular customer's earlier orders are other cases:
      calls from the same number count from 2 hours before the linked order (12 hours before the chat when no order is linked) */
   const own10=new Set(c.msgs.filter(m=>m.role==="client").map(m=>String(m.author||"").replace(/\D/g,"").slice(-10)).filter(x=>x.length===10));
   const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone).filter(ph=>!own10.has(String(ph).replace(/\D/g,"").slice(-10))))];
   const lo=k.orders.length?ldTs(k.orders[0].at)-2*36e5:ldTs(c.at)-12*36e5;
-  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,from,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(l)});
+  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,cFrom,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(l)});
   const t0=k.orders.length?ldTs(k.orders[0].at):ldTs(c.at);
   /* silent and voicemail legs never take one of the slots for calls with talk: they follow the talked ones, at most CHAT.quietCalls of them */
   const near=ls=>ls.filter(l=>l.id).map(l=>({l,own:ids.includes(l.id)?1:0,d:Math.abs(ldTs(l.at)-t0)||0})).sort((a,b)=>b.own-a.own||a.d-b.d),byTime=ls=>ls.sort((a,b)=>a.at.localeCompare(b.at));

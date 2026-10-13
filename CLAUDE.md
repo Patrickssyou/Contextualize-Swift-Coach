@@ -15,7 +15,8 @@ Two brains live in the page: the call brain in `src/core.js` (parked in its own 
 
 ## Build and test
 
-- `npm run build` → `dist/pizza-support-qa-desk.html` (injects `src/core.js` between the PULL-CORE markers and `src/rubric_v1.json` into `src/template.html`, then syntax-checks the script).
+- `npm run build` → `dist/pizza-support-qa-desk.html` (injects `src/core.js` (PULL-CORE), `src/chat.js` (CHAT-CORE), `src/ui/*.js|css` (UI markers) and `src/rubric_v1.json` into `src/template.html`, then syntax-checks the script).
+- `node eval/chat_case.js <sid> all --run --tag=<name>` runs one saved chat case blind through the Claude CLI (Sonnet, no tools), the same passes the page runs.
 - `npm test` → build + Playwright suites in `tests/` against a mocked `window.claude` (`tests/mock.js`) and real fixtures in `data/`.
 - Every change ends with `npm test` green. Screenshots go to `shots/`.
 
