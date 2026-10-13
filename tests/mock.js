@@ -16,18 +16,25 @@ const MOCK = ([seed, ld, opts, extra]) => {
   const clone = x => JSON.parse(JSON.stringify(x));
   const snap = p => ({ id: p.split('/').pop(), exists: !!data[p], data: () => data[p] ? clone(data[p]) : undefined, metadata: { fromCache: false, hasPendingWrites: false } });
   const collDocs = c => Object.keys(data).filter(p => p.startsWith(c + '/') && p.split('/').length === c.split('/').length + 1).sort().map(snap);
-  const notify = () => listeners.forEach(l => setTimeout(l, 0));
+  // like the store, a write wakes only the listeners on that document or on its own collection
+  const notify = p => { const c = p.split('/').slice(0, -1).join('/'); listeners.forEach(l => { if (l.path === (l.kind === 'doc' ? p : c)) setTimeout(l, 0) }) };
+  // subscriptions: every onSnapshot is logged in __subs ({path, kind, on}); its unsubscribe really stops it
+  const subs = [];
+  const listen = (path, kind, l) => { const s = { path, kind, on: true }; subs.push(s); const fire = () => { if (s.on) l() }; fire.path = path; fire.kind = kind; listeners.push(fire); setTimeout(fire, 0);
+    return () => { if (!s.on) return; s.on = false; const i = listeners.indexOf(fire); if (i >= 0) listeners.splice(i, 1) } };
+  const qsnap = c => { const docs = collDocs(c); return { docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: { fromCache: false, hasPendingWrites: false } } };
   const docRef = p => ({ id: p.split('/').pop(), path: p,
     async get() { return snap(p) },
-    async set(d) { if (JSON.stringify(d).length > 256 * 1024) throw { code: 'invalid_argument', message: 'too big' }; data[p] = clone(d); notify() },
-    async update(d) { if (!data[p]) throw { code: 'invalid_argument', message: 'missing' }; Object.assign(data[p], clone(d)); notify() },
-    async delete() { delete data[p]; notify() },
+    async set(d) { if (JSON.stringify(d).length > 256 * 1024) throw { code: 'invalid_argument', message: 'too big' }; data[p] = clone(d); notify(p) },
+    async update(d) { if (!data[p]) throw { code: 'invalid_argument', message: 'missing' }; Object.assign(data[p], clone(d)); notify(p) },
+    async delete() { delete data[p]; notify(p) },
     async acquire({ holder, ttlMs }) { const now = Date.now(), l = leases[p]; if (l && l.until > now && l.holder !== holder) return { acquired: false, expiresAt: new Date(l.until).toISOString() };
       leases[p] = { holder, until: now + (ttlMs || 30000) }; window.__leases.push([p, holder]); return { acquired: true, version: 1, holder, expiresAt: new Date(leases[p].until).toISOString() } },
-    onSnapshot(next) { const l = () => next(snap(p)); listeners.push(l); setTimeout(l, 0); return () => {} } });
+    onSnapshot(next) { return listen(p, 'doc', () => next(snap(p))) } });
   const db = { doc: docRef, collection(c) { return { path: c, doc: id => docRef(c + '/' + (id || Math.random().toString(36).slice(2))),
-    onSnapshot(next) { const l = () => { const docs = collDocs(c); next({ docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: {} }) }; listeners.push(l); setTimeout(l, 0); return () => {} } } } };
-  window.__data = data; window.__saved = []; window.__ld = []; window.__leases = []; window.__opts = opts; window.__prompts = []; window.__slack = [];
+    async get() { window.__gets.push(c); return qsnap(c) },
+    onSnapshot(next) { return listen(c, 'coll', () => next(qsnap(c))) } } } };
+  window.__data = data; window.__saved = []; window.__ld = []; window.__leases = []; window.__opts = opts; window.__prompts = []; window.__slack = []; window.__subs = subs; window.__gets = [];
   const TX = new Map(extra.tx);
   // Lightdash: apply "day inBetween=a,b AND field equals=v1,v2" to the fixture rows, cap at __opts.cap
   const parse = expr => { const out = {}; expr.split(' AND ').forEach(r => { const m = r.match(/^(\S+) (inBetween|equals)=(.*)$/); if (!m) throw { code: 'tool_error', message: 'bad filter ' + r };
@@ -82,7 +89,7 @@ const MOCK = ([seed, ld, opts, extra]) => {
     return null };
   // sample: records the prompt, answers with a canned case read after a short wait (or fails / waits for Stop)
   const sample = Object.assign(async () => ({ text: '{}', truncated: false, modelTierApplied: 'default' }), {
-    json: (input, o) => new Promise((resolve, reject) => { window.__prompts.push({ input, tier: o && o.modelTier });
+    json: (input, o) => new Promise((resolve, reject) => { window.__prompts.push({ input, tier: o && o.modelTier, cache: o && o.cache });
       const sig = o && o.signal; if (sig) sig.addEventListener('abort', () => reject({ code: 'cancelled', message: 'stopped' }));
       setTimeout(() => { if (sig && sig.aborted) return; if (window.__opts.sampleFail) { reject({ code: window.__opts.sampleFail, message: 'mock' }); return }
         const ch = chatReply(input); if (ch) { resolve(clone(ch)); return }
@@ -147,7 +154,44 @@ function chatWorld(sid) {
     saOffer: { amount: null, text: 'Nothing offered', cites: [] }, saPath: { match: 'yes', why: 'Fixed in chat.' }, aeInvolvement: { kind: 'none', saCouldPrevent: false, why: '' }, firstResponse: { concludedBeforeEvidence: false, why: 'Checked first.', cites: ['F2'] } };
   const g = s => ({ scores: s, reasons: Object.fromEntries(Object.keys(s).map(k => [k, 'Cites F1 and F2.'])), route: { facts: { mark: 'right', why: 'Checked.' }, analysis: { mark: 'right', why: 'Right fault.' }, solution: { mark: 'partly', why: 'Close.' }, escalation: { mark: 'right', why: 'Not needed.' } },
     wentWell: ['Replied fast', 'Checked before answering'], nextTime: [{ what: 'Closed without confirming', why: 'The client may still be stuck', do: 'Ask if it works', model: 'Can you confirm it prints now?' }], verdictWhy: 'Solid.' });
-  return { fx, realSid: String(sid), realSA, SA, code, synthIds: synth.map(r => r.wira_project_tasks_short_wira_id),
+  /* a second, already-graded week (all invented): a menu-setup chat with a workflow bot line, an unknown role, WIRA request fields,
+     an audit with caseType menu_setup and fault none, the reviewer's review and a calibration case; plus a chat with no SA reply */
+  const sideWeek = pw => { const at = (d, hm) => `${addD(pw, d)}T${hm}:00.000Z`, P = k => `chatWeeks/${pw}/${k}`;
+    const m = (n, role, name, text, author) => ({ n, author: author || '', role, name, text, internal: false, inferred: false });
+    const base = (id, rest, rcode, when, msgs, o) => Object.assign({ v: 'chat-1', week: pw, picked: true, gradable: true, wid: `Wid(0,1,1,0,${id})`, sid: id, url: `https://wira.example.test/tasks/${id}`,
+      at: when, closedAt: '', status: 'closed', sub: '', title: msgs[0].text.slice(0, 80), direction: 'inbound', createdBy: '', createdByTitle: '', sa: 'Mara Quill', saEmail: 'mara.quill@wondersco.com',
+      clientId: 'client-+15550199', frt: 2.5, firstClientAt: when, firstReplyAt: when, intent: 'menu-change', rating: '', code: rcode, restaurant: rest, initiator: 'client', msgs, clientName: msgs[0].name }, o || {});
+    const menu = base('9900901', 'Birch Lane Pizza', 'R90011', at(1, '11:20'), [
+      m(1, 'client', 'Nia', 'Hi, two prices on our online menu are wrong: Large Margherita should be $16.99 and garlic knots $5.49. This is Nia.', 'client-+15550199'),
+      m(2, 'bot', 'Workflow', 'Menu change request created and sent to the menu team.', 'wira-bot'),
+      m(3, 'sa', 'Mara Quill', 'Hi Nia, thanks. Both prices are with the menu team; I will confirm here once they are live.', 'mara.quill@wondersco.com'),
+      m(4, 'trainer', 'Quinn Reyes', 'Shadowing this chat for onboarding.', 'quinn.reyes@wondersco.com'),
+      m(5, 'sa', 'Mara Quill', 'Both prices are live now: Large Margherita $16.99, garlic knots $5.49.', 'mara.quill@wondersco.com'),
+      m(6, 'client', 'Nia', 'Perfect, thank you.', 'client-+15550199')],
+      { fields: JSON.stringify({ item: 'Large Margherita', new_price: '16.99', second_item: 'Garlic knots', second_price: '5.49' }) });
+    const silent = base('9900902', 'Fern Street Slice', 'R90012', at(3, '21:05'), [m(1, 'client', 'Client', 'Are the phones down tonight?', 'client-+15550198'), m(2, 'client', 'Client', 'Hello?', 'client-+15550198')],
+      { picked: false, gradable: false, frt: null, firstReplyAt: '', sa: 'Theo Brandt', saEmail: 'theo.brandt@wondersco.com' });
+    const scores = { fr: 3, ev: 3, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 3 };
+    const audit = { v: 'chat-1', sid: '9900901', wid: menu.wid, url: menu.url, week: pw, at: menu.at, sa: menu.sa, restaurant: menu.restaurant, code: menu.code, initiator: 'client', title: menu.title, frt: 2.5, clientName: 'Nia',
+      tasks: [], orders: [], candidates: [], dayOrders: [], orderNote: '', orderPick: 'auto', refs: { amounts: [16.99, 5.49], tickets: [], phones: [], names: [], items: ['Large Margherita', 'garlic knots'], orderType: '' },
+      calls: [], slack: [], notFound: [],
+      facts: { calls: {}, timeline: [{ id: 'F1', src: 'M1', when: '', who: 'Nia (client)', kind: 'said', what: 'Asks to correct two prices on the online menu' },
+        { id: 'F2', src: 'M3', when: '', who: 'Mara Quill', kind: 'did', what: 'Sent both prices to the menu team' }, { id: 'F3', src: 'M5', when: '', who: 'Mara Quill', kind: 'said', what: 'Confirms both prices are live' }],
+        claims: [{ id: 'C1', src: 'M5', claim: 'Both prices are live', check: 'cant_check', evidence: 'Menu data is not in this record' }], promises: [{ id: 'P1', src: 'M3', who: 'Mara Quill', to: 'Nia', what: 'Confirm once the prices are live' }] },
+      analysis: { caseType: 'menu_setup', request: 'Correct two menu prices shown online', summary: 'The client asked for two price fixes; the SA sent them to the menu team and confirmed once live.',
+        fault: { who: 'none', why: 'Nothing went wrong; a plain menu request.', cites: ['F1'] }, bucket: { id: '', why: '', cites: [] }, affectedOrder: '', selfDelivery: false, deliveryFee: null,
+        ideal: { client: 'Send both prices to the menu team and confirm in the chat once live.', customer: '', escalation: { needed: false, why: 'Routine request', to: '' } },
+        saOffer: { amount: null, text: '', cites: [] }, saPath: { match: 'yes', why: 'Sent and confirmed.' }, aeInvolvement: { kind: 'none', saCouldPrevent: false, why: '' },
+        firstResponse: { concludedBeforeEvidence: false, why: 'Acknowledged and acted.', cites: ['F2'] } },
+      comp: { bucket: '', label: '', pct: null, order: '', base: null, baseLabel: 'item subtotal', fee: null, amount: null, formula: 'No policy bucket chosen', needsApproval: false, limit: 25 },
+      offer: { amount: null, match: 'none', note: 'No amount offered' },
+      grade: { scores, reasons: Object.fromEntries(Object.keys(scores).map(k => [k, 'Cites F1 to F3.'])), route: { facts: { mark: 'right', why: 'Restated both prices.' }, analysis: { mark: 'right', why: 'Plain request.' },
+        solution: { mark: 'right', why: 'Sent and confirmed.' }, escalation: { mark: 'right', why: 'Not needed.' } }, wentWell: ['Confirmed both prices back', 'Closed the loop'], nextTime: [], verdictWhy: 'Clean request handling.' },
+      pct: 100, verdict: 'great', gradedAt: at(1, '15:00'), by: 'u_test' };
+    const review = { sid: '9900901', week: pw, sa: 'Mara Quill', scores, pct: 100, verdict: 'great', coaching: 'Chat 9900901 · Birch Lane Pizza — Great (100.0%)', reviewer: 'QA lead', by: 'u_test', at: at(2, '15:00') };
+    const calib = { sid: '9900901', wid: menu.wid, agent: 'Mara Quill', restaurant: 'Birch Lane Pizza', code: 'R90011', date: menu.at.slice(0, 10), verdict: 'great', lessons: ['Confirm the change back once it is live'], scores, by: 'u_test', at: at(2, '15:05') };
+    return [[P('chats/9900901'), menu], [P('chats/9900902'), silent], [P('audits/9900901'), audit], [P('reviews/9900901'), review], ['chatCalib/9900901', calib], [`chatWeeks/${pw}`, { week: pw, chats: 2, picked: 1 }]] };
+  return { fx, realSid: String(sid), realSA, SA, code, sideWeek, synthIds: synth.map(r => r.wira_project_tasks_short_wira_id),
     chat: { realSid: String(sid), base: [tagBase(real)].concat(synth.map(tagBase)), rel: fx.relRows.map(tagCode), orders: fx.orderRows.map(tagCode), calls: fx.callRows.map(tagCode),
       refs: {}, facts: out('facts'), analysis: out('analysis'), grade: out('grade'),
       synth: { facts: synthFacts, analysis: synthAnalysis, grade: [g({ fr: 3, ev: 3, rs: 3, fa: 3, path: 3, amt: 3, expl: 'na', esc: 'na', tone: 3 }), g({ fr: 2, ev: 2, rs: 3, fa: 2, path: 2, amt: 2, expl: 2, esc: 'na', tone: 3 }), g({ fr: 1, ev: 1, rs: 2, fa: 1, path: 1, amt: 1, expl: 'na', esc: 0, tone: 2 })] } },

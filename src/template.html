@@ -895,8 +895,8 @@ function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="chats";tab=t
   if(t==="calls"||t==="facts")renderForm();renderAll()}
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
 document.querySelectorAll(".tabs [data-area], .subtabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab||lastTab[b.dataset.area]));
-$("#wkPrev").onclick=()=>{week=addDays(week,-7);renderAll()};
-$("#wkNext").onclick=()=>{week=addDays(week,7);renderAll()};
+$("#wkPrev").onclick=()=>{week=addDays(week,-7);chatsWeekListen();renderAll()};
+$("#wkNext").onclick=()=>{week=addDays(week,7);chatsWeekListen();renderAll()};
 
 /* ---------- SCORE: details ---------- */
 let typeArm=null, typeArmT=null;
@@ -2097,7 +2097,8 @@ function renderAll(){
   renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderChats();renderGame();
 }
 const h0=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
-if(/^chat\/./.test(h0))chatSel=h0.slice(5);
+/* #chat/<week>/<sid> opens that chat on its week; #chat/<sid> on the default week */
+if(/^chat\/./.test(h0)){const p=h0.slice(5).split("/");chatSel=p.pop();if(p.length&&chatWeek(p[0]))week=chatWeek(p[0])}
 tab=h0==="score"?"calls":/^chat\//.test(h0)?"chat":TABS.includes(h0)?h0:"chats";
 lastParsed=parseLink(form.link);
 setTab(tab);renderForm();
