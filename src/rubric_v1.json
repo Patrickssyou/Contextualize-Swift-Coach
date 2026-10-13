@@ -1,0 +1,449 @@
+{
+ "call": [
+  {
+   "name": "Professionalism & Communication",
+   "items": [
+    {
+     "id": "1a",
+     "label": "Used correct opening spiel and introduced themselves",
+     "w": 0.025,
+     "lv": {
+      "3": "full correct spiel, clear intro",
+      "2": "greeted but missed one element",
+      "1": "wrong or skipped entirely"
+     },
+     "tip": ""
+    },
+    {
+     "id": "1b",
+     "label": "Maintained friendly, professional tone; avoided jargon; managed dead air with updates",
+     "w": 0.025,
+     "lv": {
+      "3": "warm, composed, plain language, no unmanaged silences",
+      "2": "mostly professional, minor lapses or brief dead air",
+      "1": "abrupt, heavy jargon, or long unmanaged silences"
+     },
+     "tip": ""
+    },
+    {
+     "id": "1c",
+     "label": "Showed empathy and composure; did not become defensive on difficult calls",
+     "w": 0.05,
+     "lv": {
+      "3": "consistent empathy, de-escalated naturally",
+      "2": "attempted but inconsistent",
+      "1": "defensive or dismissive"
+     },
+     "tip": "Mark 3 if no difficult moment arose on this call."
+    },
+    {
+     "id": "1d",
+     "label": "Conducted the interaction in an understandable manner; understood the client's concern and communicated the resolution clearly.",
+     "w": 0.1,
+     "lv": {
+      "3": "clear communication throughout, client understood the issue and resolution",
+      "2": "mostly understood the client and communicated the right things, but has identifiable points for improvement",
+      "1": "did not address the concern directly; English communication was unclear or caused confusion"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Resolution",
+   "items": [
+    {
+     "id": "2a",
+     "label": "Actively listened, asked only relevant questions, and gathered all necessary information before proceeding",
+     "w": 0.05,
+     "lv": {
+      "3": "all key info gathered efficiently, no redundant probing",
+      "2": "got main facts, some unnecessary questions or missed follow-ups",
+      "1": "proceeded without adequate info or excessive re-probing"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2b",
+     "label": "Root Cause Triage & Fault Attribution- Correctly identified what went wrong and who is at fault",
+     "w": 0.2,
+     "lv": {
+      "3": "Correct root cause and accurate fault attribution",
+      "2": "Identified the issue but misread root cause or fault attribution",
+      "1": "Wrong diagnosis or no attribution made"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2c",
+     "label": "Immediate resolution - Took the right short-term action given the situation",
+     "w": 0.1,
+     "lv": {
+      "3": "confident, accurate",
+      "2": "general knowledge, gaps on edge cases",
+      "1": "clear misunderstanding"
+     },
+     "tip": "Note in comments whether error was product or process."
+    },
+    {
+     "id": "2d",
+     "label": "Long-term Solution- Identified and actioned a long-term fix (product improvement, process change) or escalated to the right team to do so.",
+     "w": 0.15,
+     "lv": {
+      "3": "Long-term path identified and actioned or escalated to the right owner",
+      "2": "Root cause acknowledged but long-term path vague or incomplete",
+      "1": "No long-term path attempted or escalated"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2e",
+     "label": "Documented ticket with correct intent, sub-intent, and clear case notes",
+     "w": 0.05,
+     "lv": {
+      "3": "correct intent/sub-intent, clear notes",
+      "2": "ticket created, minor intent error",
+      "1": "wrong type or no ticket"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Ownership & Self-Serve Coaching",
+   "items": [
+    {
+     "id": "3a",
+     "label": "Took ownership and resolved without involving other teams unnecessarily",
+     "w": 0.1,
+     "lv": {
+      "3": "resolved independently OR escalated only where truly necessary",
+      "2": "attempted resolution but escalation borderline necessary",
+      "1": "passed off without attempting resolution"
+     },
+     "tip": ""
+    },
+    {
+     "id": "3b",
+     "label": "Proactively coached client on CMA self-serve features and de-escalated where applicable",
+     "w": 0.05,
+     "lv": {
+      "3": "proactively coached with specific CMA steps, confirmed client can do it next time",
+      "2": "mentioned self-serve but did not walk through steps",
+      "1": "missed opportunity entirely"
+     },
+     "tip": "Mark 3 if self-serve was not applicable on this call."
+    },
+    {
+     "id": "3c",
+     "label": "Communicated resolution or next steps clearly and confirmed client understanding before closing",
+     "w": 0.1,
+     "lv": {
+      "3": "clear resolution summary, confirmed understanding, clean close with client",
+      "2": "adequate close but no confirmation of understanding",
+      "1": "abrupt end or client unclear on outcome"
+     },
+     "tip": ""
+    }
+   ]
+  }
+ ],
+ "chat": [
+  {
+   "name": "Professionalism & Communication",
+   "items": [
+    {
+     "id": "1a",
+     "label": "Used the correct/appropriate opening spiel in a timely manner",
+     "w": 0.025,
+     "lv": {
+      "3": "Immediately matched the complaint type; urgent issues treated with urgency, inquiries handled conversationally",
+      "2": "Generally appropriate but missed tone or urgency nuance",
+      "1": "Generic or mismatched response to the complaint"
+     },
+     "tip": ""
+    },
+    {
+     "id": "1b",
+     "label": "Channel Judgment",
+     "w": 0.05,
+     "lv": {
+      "3": "Proactively called when needed — or correctly stayed on chat throughout",
+      "2": "Eventually called but later than ideal, or needed prompting",
+      "1": "Stayed on chat when a call was clearly needed; concern dragged or went unresolved"
+     },
+     "tip": "N/A if channel judgment was not a factor"
+    },
+    {
+     "id": "1c",
+     "label": "Showed empathy and composure; did not become defensive on difficult calls",
+     "w": 0.025,
+     "lv": {
+      "3": "consistent empathy, de-escalated naturally",
+      "2": "attempted but inconsistent",
+      "1": "defensive or dismissive"
+     },
+     "tip": "Mark 3 if no difficult moment arose on this call."
+    },
+    {
+     "id": "1d",
+     "label": "Conducted the interaction in an understandable manner; understood the client's concern and communicated the resolution clearly.",
+     "w": 0.1,
+     "lv": {
+      "3": "clear communication throughout, client understood the issue and resolution",
+      "2": "mostly understood the client and communicated the right things, but has identifiable points for improvement",
+      "1": "did not address the concern directly; English communication was unclear or caused confusion"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Resolution",
+   "items": [
+    {
+     "id": "2a",
+     "label": "Asked relevant questions, and gathered all necessary information before proceeding",
+     "w": 0.05,
+     "lv": {
+      "3": "all key info gathered efficiently, no redundant probing",
+      "2": "got main facts, some unnecessary questions or missed follow-ups",
+      "1": "proceeded without adequate info or excessive re-probing"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2b",
+     "label": "Root Cause Triage & Fault Attribution- Correctly identified what went wrong and who is at fault",
+     "w": 0.2,
+     "lv": {
+      "3": "Correct root cause and accurate fault attribution",
+      "2": "Identified the issue but misread root cause or fault attribution",
+      "1": "Wrong diagnosis or no attribution made"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2c",
+     "label": "Immediate resolution - Took the right short-term action given the situation",
+     "w": 0.1,
+     "lv": {
+      "3": "confident, accurate",
+      "2": "general knowledge, gaps on edge cases",
+      "1": "clear misunderstanding"
+     },
+     "tip": "Note in comments whether error was product or process."
+    },
+    {
+     "id": "2d",
+     "label": "Long-term Solution- Identified and actioned a long-term fix (product improvement, process change) or escalated to the right team to do so.",
+     "w": 0.15,
+     "lv": {
+      "3": "Long-term path identified and actioned or escalated to the right owner",
+      "2": "Root cause acknowledged but long-term path vague or incomplete",
+      "1": "No long-term path attempted or escalated"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2e",
+     "label": "Documented ticket with correct intent, sub-intent, and clear case notes",
+     "w": 0.05,
+     "lv": {
+      "3": "correct intent/sub-intent, clear notes",
+      "2": "ticket created, minor intent error",
+      "1": "wrong type or no ticket"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Ownership & Self-Serve Coaching",
+   "items": [
+    {
+     "id": "3a",
+     "label": "Took ownership and resolved without involving other teams unnecessarily",
+     "w": 0.1,
+     "lv": {
+      "3": "resolved independently OR escalated only where truly necessary",
+      "2": "attempted resolution but escalation borderline necessary",
+      "1": "passed off without attempting resolution"
+     },
+     "tip": ""
+    },
+    {
+     "id": "3b",
+     "label": "Proactively coached client on CMA self-serve features and de-escalated where applicable",
+     "w": 0.05,
+     "lv": {
+      "3": "proactively coached with specific CMA steps, confirmed client can do it next time",
+      "2": "mentioned self-serve but did not walk through steps",
+      "1": "missed opportunity entirely"
+     },
+     "tip": "Mark 3 if self-serve was not applicable on this call."
+    },
+    {
+     "id": "3c",
+     "label": "Communicated resolution or next steps clearly and confirmed client understanding before closing",
+     "w": 0.1,
+     "lv": {
+      "3": "clear resolution summary, confirmed understanding, clean close with client",
+      "2": "adequate close but no confirmation of understanding",
+      "1": "abrupt end or client unclear on outcome"
+     },
+     "tip": ""
+    }
+   ]
+  }
+ ],
+ "mgr": [
+  {
+   "name": "Professionalism & Communication",
+   "items": [
+    {
+     "id": "1a",
+     "label": "Used correct opening spiel and introduced themselves",
+     "w": 0.025,
+     "lv": {
+      "3": "full correct spiel, clear intro",
+      "2": "greeted but missed one element",
+      "1": "wrong or skipped entirely"
+     },
+     "tip": ""
+    },
+    {
+     "id": "1b",
+     "label": "Maintained friendly, professional tone; avoided jargon; managed dead air with updates",
+     "w": 0.025,
+     "lv": {
+      "3": "warm, composed, plain language, no unmanaged silences",
+      "2": "mostly professional, minor lapses or brief dead air",
+      "1": "abrupt, heavy jargon, or long unmanaged silences"
+     },
+     "tip": ""
+    },
+    {
+     "id": "1c",
+     "label": "Showed empathy and composure; did not become defensive on difficult calls",
+     "w": 0.05,
+     "lv": {
+      "3": "consistent empathy, de-escalated naturally",
+      "2": "attempted but inconsistent",
+      "1": "defensive or dismissive"
+     },
+     "tip": "Mark 3 if no difficult moment arose on this call."
+    },
+    {
+     "id": "1d",
+     "label": "Conducted the interaction in an understandable manner; understood the client's concern and communicated the resolution clearly.",
+     "w": 0.1,
+     "lv": {
+      "3": "clear communication throughout, client understood the issue and resolution",
+      "2": "mostly understood the client and communicated the right things, but has identifiable points for improvement",
+      "1": "did not address the concern directly; English communication was unclear or caused confusion"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Resolution",
+   "items": [
+    {
+     "id": "2a",
+     "label": "Actively listened, asked only relevant questions, and gathered all necessary information before proceeding",
+     "w": 0.05,
+     "lv": {
+      "3": "all key info gathered efficiently, no redundant probing",
+      "2": "got main facts, some unnecessary questions or missed follow-ups",
+      "1": "proceeded without adequate info or excessive re-probing"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2b",
+     "label": "Root Cause Triage & Fault Attribution- Correctly identified what went wrong and who is at fault",
+     "w": 0.2,
+     "lv": {
+      "3": "Correct root cause and accurate fault attribution",
+      "2": "Identified the issue but misread root cause or fault attribution",
+      "1": "Wrong diagnosis or no attribution made"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2c",
+     "label": "Immediate resolution - Took the right short-term action given the situation",
+     "w": 0.1,
+     "lv": {
+      "3": "confident, accurate",
+      "2": "general knowledge, gaps on edge cases",
+      "1": "clear misunderstanding"
+     },
+     "tip": "Note in comments whether error was product or process."
+    },
+    {
+     "id": "2d",
+     "label": "Long-term Solution- Identified and actioned a long-term fix (product improvement, process change) or escalated to the right team to do so.",
+     "w": 0.15,
+     "lv": {
+      "3": "Long-term path identified and actioned or escalated to the right owner",
+      "2": "Root cause acknowledged but long-term path vague or incomplete",
+      "1": "No long-term path attempted or escalated"
+     },
+     "tip": ""
+    },
+    {
+     "id": "2e",
+     "label": "Documented ticket with correct intent, sub-intent, and clear case notes",
+     "w": 0.05,
+     "lv": {
+      "3": "correct intent/sub-intent, clear notes",
+      "2": "ticket created, minor intent error",
+      "1": "wrong type or no ticket"
+     },
+     "tip": ""
+    }
+   ]
+  },
+  {
+   "name": "Ownership",
+   "items": [
+    {
+     "id": "3a",
+     "label": "Took ownership and resolved without involving other teams unnecessarily",
+     "w": 0.1,
+     "lv": {
+      "3": "resolved independently OR escalated only where truly necessary",
+      "2": "attempted resolution but escalation borderline necessary",
+      "1": "passed off without attempting resolution"
+     },
+     "tip": ""
+    },
+    {
+     "id": "3b",
+     "label": "Edge Case Judgment During Resolution: knowing when to pause and confirm with the client before proceeding (vs. resolving on assumption and getting it wrong)",
+     "w": 0.05,
+     "lv": {
+      "3": "Correctly identified the edge case and confirmed with the client first; avoided a wrong or incomplete resolution",
+      "2": "Noticed the ambiguity but proceeded without confirming, or confirmed but inefficiently (e.g., multiple unnecessary back-and-forths)",
+      "1": "Resolved on assumption when the situation clearly needed client confirmation first; led to wrong resolution or follow-up rework"
+     },
+     "tip": ""
+    },
+    {
+     "id": "3c",
+     "label": "Proactive Client Outreach — knowing when to reach back out to win back a customer, offer compensation, or flag an issue you found proactively — and doing so vs. just closing the case",
+     "w": 0.1,
+     "lv": {
+      "3": "Proactively reached out without being prompted; used the right channel and addressed the issue appropriately (compensation, win-back, or flagging)",
+      "2": "Identified the need for follow-up but action was incomplete, delayed, or used the wrong channel",
+      "1": "Missed a clear opportunity — case closed without appropriate outreach on a situation where client sentiment or the issue clearly warranted it"
+     },
+     "tip": ""
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,52 @@
+// Calls vs cases: voicemail set aside, cases grouped and graded once with Slack coordination
+const { chromium } = require('playwright'); const fs=require('fs'),path=require('path'); const XLSX=require('xlsx');
+const { openPage } = require('./mock.js'); const SH=path.join(__dirname,'..','shots'); const log=(...a)=>console.log(...a);
+const slack=JSON.parse(fs.readFileSync('data/fixtures/slack_w28.json','utf8'));
+const seed=[['pulls/2026-09-28',{status:'done',week:'2026-09-28',at:'2026-10-05T19:33:25.065Z',added:30}],['pulls/2026-09-21',{status:'done',week:'2026-09-21',at:'2026-09-28T15:00:00.000Z',added:30}]];
+for(const f of fs.readdirSync('data/live3/queue')){const q=JSON.parse(fs.readFileSync('data/live3/queue/'+f));if(q.week!=='2026-09-28')continue;Object.assign(q,JSON.parse(fs.readFileSync('data/backfill2/'+f)));delete q.slack;seed.push(['queue/'+f.replace('.json',''),q])}
+(async()=>{const b=await chromium.launch();
+ let {page,ctx,errors}=await openPage(b,seed,{},{width:1280,height:900},{slack});
+ await page.goto('http://qa.test/#queue');await page.waitForTimeout(300);await page.click('#wkNext');await page.waitForTimeout(300);
+ log('cases panel:',(await page.locator('.qcases h3').innerText()).replace(/\n/g,' | '));
+ for(const t of await page.locator('.qcases .qitem').allInnerTexts())log('   ',t.replace(/\s*\n\s*/g,' | ').slice(0,200));
+ await page.locator('.qcases').screenshot({path:path.join(SH,'c1-cases.png')});
+ await page.locator('.qcases .qitem',{hasText:"Today's Pizza"}).locator('[data-q]').click();await page.waitForTimeout(300);
+ log('type:',await page.locator('#typeChips [aria-pressed="true"]').innerText(),'| caseIds:',JSON.stringify(await page.evaluate(()=>form.caseIds)));
+ log('listen:',await page.locator('#chainSum').innerText(),'|',(await page.locator('.chaingraded').innerText()));
+ log('hidden toggle:',await page.locator('#chainPanel .hidlegs').innerText(),'| legs shown',await page.locator('#chainPanel .leg').count());
+ await page.click('#chainPanel .hidlegs');log('after show: legs',await page.locator('#chainPanel .leg').count(),'| off',await page.locator('#chainPanel .leg.off').count());await page.click('#chainPanel .hidlegs');
+ await page.evaluate(()=>0);log('team rows:',await page.locator('#teamRows .trow').count(),'|',(await page.locator('#teamRows .tname').allInnerTexts()).join(', '));
+ log('slack step:',await page.locator('#slackWrap').isVisible(),'|',(await page.locator('#slackPanel').innerText()).replace(/\s*\n\s*/g,' | '));
+ await page.click('#slackFind');await page.waitForFunction(()=>document.querySelectorAll('#slackPanel .task').length>0,null,{timeout:8000});
+ log('slack calls:',JSON.stringify(await page.evaluate(()=>window.__slack.map(x=>x.tool+':'+(x.input.keywords||[x.input.message_ts]).join(' ')))));
+ log('slack found:',await page.locator('#slackSum').innerText(),'|',(await page.locator('#slackPanel .task').first().innerText()).replace(/\s*\n\s*/g,' | ').slice(0,300));
+ fs.writeFileSync('data/slack_velka.json',JSON.stringify(await page.evaluate(()=>({slack:window.__data['queue/'+form.caseIds[0]].slack,slackAt:window.__data['queue/'+form.caseIds[0]].slackAt}))));log('queue docs slack saved:',JSON.stringify(await page.evaluate(()=>form.caseIds.map(id=>(window.__data['queue/'+id].slack||[]).length))));
+ await page.locator('#slackWrap').screenshot({path:path.join(SH,'c2-slack.png')});
+ // facts + team + case rubric
+ await page.fill('#fReviewer','Patrick');await page.click('#gutChips [data-g="ok"]');
+ await page.fill('#fRootCause','SP driver went to the wrong location and cancelled C9; store would not remake until Tarro agreed to cover it.');
+ await page.click('#faultCorrectChips [data-fc="tarro"]');await page.click('#errorTypeChips [data-et="process"]');await page.click('#sourceChips [data-src="call_rec"]');await page.click('#sourceChips [data-src="slack"]');
+ const rows=page.locator('#teamRows .trow');
+ await rows.filter({hasText:'Velka'}).locator('[data-role="owner"]').click();await rows.filter({hasText:'Velka'}).locator('[data-said="customer"]').click();
+ await rows.filter({hasText:'Yhan'}).locator('[data-role="helped"]').click();await rows.filter({hasText:'Yhan'}).locator('[data-said="tarro"]').click();
+ await rows.filter({hasText:'Yhan'}).locator('.tnote').fill('Closed the loop with Aqil: remake covered by Tarro');
+ await page.locator('#s-facts').screenshot({path:path.join(SH,'c3-team.png')});
+ log('rubric sections:',(await page.locator('.rsec .qttl').allInnerTexts()).join(' / '),'| items',await page.locator('.rsec .crit').count());
+ await page.click('#crit-1a .head');
+ for(const [k,r] of [['2','Fault drifted: Velka told the customer it was their location'],['2','Address asked twice'],['3'],['3'],['2','Yhan and Velka gave the client different stories'],['3','Remake sent, cost covered'],['n'],['2','Two transfers before the owner']]){await page.keyboard.press(k);if(r){await page.waitForTimeout(30);await page.keyboard.type(r);await page.keyboard.press('Enter')}}
+ log('missing:',JSON.stringify(await page.evaluate(()=>missingList().map(m=>m[0]))),'| score',await page.locator('#bigScore').innerText());
+ await page.click('#saveBtn');await page.waitForTimeout(400);
+ const aud=await page.evaluate(()=>Object.values(window.__data).find(d=>d.type==='case'&&d.rubric==='v2'));
+ log('saved case:',JSON.stringify({type:aud.type,total:aud.total,caseIds:aud.caseIds,team:aud.team.map(t=>t.name+':'+t.role+':'+t.said),slack:(aud.slack||[]).length}));
+ log('queue docs marked:',JSON.stringify(await page.evaluate(ids=>ids.map(id=>window.__data['queue/'+id].auditId?1:0),aud.caseIds)));
+ await page.click('[data-tab="results"]');await page.waitForTimeout(200);
+ log('results cases:',(await page.locator('.h2',{hasText:'cases'}).count()),'|',(await page.locator('#resBody table').last().innerText()).slice(0,10));
+ await page.click('#xlsxBtn');await page.waitForTimeout(900);
+ const dl=await page.evaluate(()=>window.__saved.map(s=>s.bytes));const wb=XLSX.read(Buffer.from(dl[dl.length-1]));
+ log('sheets:',wb.SheetNames.join(','));log('case_team:',JSON.stringify(XLSX.utils.sheet_to_json(wb.Sheets.case_team).map(r=>[r.member,r.role,r.told_caller_fault,r.said_matches_actual])));
+ log('linked_calls talked col:',JSON.stringify(XLSX.utils.sheet_to_json(wb.Sheets.linked_calls).reduce((m,r)=>(m[r.talked]=(m[r.talked]||0)+1,m),{})));
+ await page.screenshot({path:path.join(SH,'c4-results.png'),fullPage:false});
+ log('console errors:',JSON.stringify(errors));
+ await page.emulateMedia({colorScheme:'dark'});await page.setViewportSize({width:390,height:860});await page.click('[data-tab="queue"]');await page.waitForTimeout(200);
+ log('mobile width:',await page.evaluate(()=>document.documentElement.scrollWidth));await page.screenshot({path:path.join(SH,'c5-mobile.png')});
+ await ctx.close();await b.close()})().catch(e=>{console.error('TEST FAILED',e);process.exit(1)});

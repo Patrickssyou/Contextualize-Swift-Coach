@@ -1,0 +1,1853 @@
+<title>Pizza Support QA Desk</title>
+<style>
+/* Layout: a guided scoring path (numbered steps, each turns green when done) on the left, a sticky scoreboard on the right; stacks with a bottom score bar on phones. Look follows the MGR tool: warm paper, purple for the step you're on, green for done. */
+:root{
+  --bg:#fdf8f4; --panel:#ffffff; --ink:#1f1d2b; --muted:#6b6878; --line:#e6e1dc; --soft:#f4efea;
+  --accent:#6d28d9; --accent-soft:#f3ebfd; --on-accent:#ffffff; --on-fill:#ffffff; --tp:#6f5bc4; --tp-soft:#f2effc;
+  --s0:#9f1239; --s0-soft:#fff1f2;
+  --s1:#dc2626; --s1-soft:#fef2f2; --s2:#b45309; --s2-soft:#fffbeb; --s3:#15803d; --s3-soft:#f0fdf4;
+  --na:#6b6878; --na-soft:#efebe7;
+  --f-display:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --f-body:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --f-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1a1820; --panel:#232030; --ink:#eeecf5; --muted:#a29fb0; --line:#37334a; --soft:#2a2638;
+  --accent:#a78bfa; --accent-soft:#2b2440; --on-accent:#1a1820; --on-fill:#1a1820; --tp:#a595e6; --tp-soft:#272041;
+  --s0:#fb7185; --s0-soft:#3a1822;
+  --s1:#f87171; --s1-soft:#33201f; --s2:#d9ab4d; --s2-soft:#2e2718; --s3:#6cc296; --s3-soft:#1a2b21;
+  --na:#a29fb0; --na-soft:#2a2638; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1a1820; --panel:#232030; --ink:#eeecf5; --muted:#a29fb0; --line:#37334a; --soft:#2a2638;
+  --accent:#a78bfa; --accent-soft:#2b2440; --on-accent:#1a1820; --on-fill:#1a1820; --tp:#a595e6; --tp-soft:#272041;
+  --s0:#fb7185; --s0-soft:#3a1822;
+  --s1:#f87171; --s1-soft:#33201f; --s2:#d9ab4d; --s2-soft:#2e2718; --s3:#6cc296; --s3-soft:#1a2b21;
+  --na:#a29fb0; --na-soft:#2a2638; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:20px;padding-block:18px 96px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+h1,h2,h3{text-wrap:balance}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-content:space-between;margin-bottom:16px}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{font-family:var(--f-display);font-weight:800;font-size:22px;letter-spacing:-.02em;margin:0}
+.brand span{color:var(--muted);font-size:13px}
+.weekpick{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px}
+.weekpick button{border:0;background:transparent;width:30px;height:30px;border-radius:999px;font-size:16px;color:var(--muted)}
+.weekpick button:hover{background:var(--soft);color:var(--ink)}
+.weekpick .lbl{padding-inline:6px;font-weight:600;font-size:14px;min-width:150px;text-align:center}
+.weekpick .lbl small{display:block;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .count{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:4px}
+.banner{padding:10px 14px;border-radius:var(--r);background:var(--s2-soft);color:var(--ink);border:1px solid var(--line);margin-bottom:14px;font-size:14px}
+
+/* score view */
+.desk{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label,.lbl-sm{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.field input,.field select,.field textarea,textarea.big{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.field textarea{resize:vertical;min-height:40px;field-sizing:content}
+.field.wide{grid-column:1/-1}
+.field.dim{opacity:.55}
+.linkrow{display:flex;gap:8px}
+.linkrow input{flex:1}
+.linkrow a{white-space:nowrap;align-self:center;font-size:13px;font-weight:600;text-decoration:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1.5px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;color:var(--ink)}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--on-fill);border-color:var(--accent)}
+.chip.arm,.chip.arm:hover{background:var(--s2-soft);border-color:var(--s2);color:var(--ink)}
+.othersrc{margin-top:2px}
+
+.section{margin-top:18px}
+/* guided steps (MGR tool pattern): purple header = to do, green = done, lavender = reference material to listen/read */
+#steps{display:flex;flex-direction:column;gap:14px}
+.qsec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;scroll-margin-top:12px}
+.qhd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:2px solid var(--accent);background:var(--accent-soft)}
+.qnum{flex:none;width:26px;height:26px;border-radius:8px;background:var(--accent);color:var(--on-fill);display:grid;place-items:center;font-size:13px;font-weight:700}
+.qttl{font-size:15px;font-weight:700;flex:1;min-width:0;letter-spacing:-.01em;color:var(--accent)}
+.qans{font-size:12.5px;font-weight:600;color:var(--muted);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.qsec.done{border-color:color-mix(in srgb,var(--s3) 45%,var(--line))}
+.qsec.done .qhd{border-bottom-color:var(--s3);background:var(--s3-soft)}
+.qsec.done .qnum{background:var(--s3)} .qsec.done .qttl,.qsec.done .qans{color:var(--s3)}
+.qsec.done .qnum::after{content:"✓"} .qsec.done .qnum span{display:none}
+.qsec.ref .qhd{border-bottom-color:var(--tp);background:var(--tp-soft)}
+.qsec.ref .qnum{background:var(--tp)} .qsec.ref .qttl{color:var(--tp)}
+.qsec.opt .qhd{border-bottom-color:var(--line);background:var(--bg)} .qsec.opt .qnum{background:var(--muted)} .qsec.opt .qttl{color:var(--ink)}
+.qbody{padding:14px}
+.qsec.folded>.qbody{display:none}
+.qsec.folded>.qhd{border-bottom-width:0}
+.qchg{flex:none;border:1px solid var(--s3);background:var(--panel);color:var(--s3);border-radius:99px;padding:4px 12px;font-size:12px;font-weight:600}
+.qchg:hover{background:var(--s3);color:var(--on-fill)}
+.qbody.flush{padding:0}
+.qsec .chainpanel{padding:10px 8px 8px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.sechead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 4px 8px}
+.sechead h2{font-family:var(--f-display);font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em}
+.sechead .num{color:var(--muted);font-size:13px}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.crit{padding:14px 16px;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr);gap:10px;scroll-margin-top:80px}
+.crit:first-child{border-top:0}
+.crit.active{box-shadow:inset 3px 0 0 var(--accent);background:color-mix(in srgb,var(--accent-soft) 35%,var(--panel))}
+/* a finished criterion folds to one line (score + reason); click it to reopen */
+.crit .fold{display:none}
+.crit.closed{cursor:pointer;padding-block:10px;gap:4px}
+.crit.closed .opts,.crit.closed .notewrap{display:none}
+.crit.closed .fold{display:flex;gap:8px;align-items:baseline;padding-left:32px;font-size:13px;color:var(--muted);min-width:0}
+.crit.closed .fold .rs{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.crit.closed:hover{background:var(--soft)}
+.sbadge{flex:none;display:inline-block;min-width:30px;text-align:center;font-family:var(--f-mono);font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;color:var(--on-fill)}
+.sbadge.v0{background:var(--s0)} .sbadge.v1{background:var(--s1)} .sbadge.v2{background:var(--s2)} .sbadge.v3{background:var(--s3)} .sbadge.vna{background:var(--na)}
+.crit .head{display:flex;gap:10px;align-items:flex-start}
+.crit .cid{font-family:var(--f-mono);font-size:12px;color:var(--muted);padding-top:2px;min-width:22px}
+.crit .ttl{font-weight:600;flex:1;min-width:0}
+.crit .wt{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.opts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(96px,.8fr);gap:8px}
+.opt{text-align:left;border:1.5px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 11px;display:flex;gap:9px;align-items:flex-start;min-width:0;transition:background .12s,border-color .12s,color .12s}
+.opt b{font-family:var(--f-mono);font-size:17px;line-height:1.1;min-width:14px}
+.opt span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.opt:hover{border-color:var(--accent);background:var(--accent-soft)}
+.opt[data-v="0"] b{color:var(--s0)} .opt[data-v="1"] b{color:var(--s1)} .opt[data-v="2"] b{color:var(--s2)} .opt[data-v="3"] b{color:var(--s3)}
+.opt[data-v="na"] b{color:var(--na);font-size:13px;padding-top:2px}
+.opt[data-v="0"][aria-pressed="true"]{background:var(--s0);border-color:var(--s0)}
+.opt[data-v="1"][aria-pressed="true"]{background:var(--s1);border-color:var(--s1)}
+.opt[data-v="2"][aria-pressed="true"]{background:var(--s2);border-color:var(--s2)}
+.opt[data-v="3"][aria-pressed="true"]{background:var(--s3);border-color:var(--s3)}
+.opt[data-v="na"][aria-pressed="true"]{background:var(--na);border-color:var(--na)}
+.opt[aria-pressed="true"] b,.opt[aria-pressed="true"] span{color:var(--on-fill)}
+.notebtn{border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:600;padding:0;justify-self:start}
+.reason{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-height:40px;resize:vertical;field-sizing:content;font-size:14px}
+.reason.need{border-style:dashed;border-color:var(--s2)}
+.flash{animation:flash 1.3s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+
+/* scoreboard */
+.board{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);padding:18px;display:flex;flex-direction:column;gap:14px}
+.big{font-family:var(--f-mono);font-size:46px;font-weight:600;letter-spacing:-.03em;line-height:1}
+.big small{font-size:18px;color:var(--muted)}
+.boardsub{font-size:12.5px;color:var(--muted);margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.progress{height:6px;background:var(--soft);border-radius:99px;overflow:hidden;margin-top:6px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .2s}
+.secrows{display:flex;flex-direction:column;gap:8px}
+.secrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;font-size:13px}
+.secrow .bar{grid-column:1/-1;height:4px;background:var(--soft);border-radius:99px;overflow:hidden}
+.secrow .bar i{display:block;height:100%;background:var(--ink);opacity:.7}
+.missing{display:flex;flex-direction:column;gap:6px}
+.mlist{display:flex;flex-wrap:wrap;gap:6px}
+.mlist button{border:1px dashed var(--line);background:var(--bg);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600;color:var(--muted)}
+.mlist button:hover{color:var(--ink);border-color:var(--muted)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:9px 14px;font-weight:600;font-size:14px;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.danger{color:var(--s1)}
+.btn.small{padding:5px 10px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.hint{font-size:12px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+.mobilebar{display:none}
+
+/* queue */
+.qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;align-items:start}
+.qcard{padding:14px 16px}
+.qcard h3{margin:0;font-size:15px;font-family:var(--f-display);display:flex;justify-content:space-between;gap:8px}
+.qitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+.qitem:first-of-type{border-top:0}
+.qitem .info{color:var(--muted);overflow-wrap:anywhere}
+.qitem a{font-weight:600;overflow-wrap:anywhere}
+.qmeta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--muted)}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.good{background:var(--s3-soft);color:var(--s3)} .ok{background:var(--s2-soft);color:var(--s2)} .bad{background:var(--s1-soft);color:var(--s1)} .none{background:var(--soft);color:var(--muted)}
+.import{padding:16px;margin-bottom:18px;display:flex;flex-direction:column;gap:10px}
+textarea.big{min-height:120px;font-family:var(--f-mono);font-size:12.5px}
+
+/* results */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.kpi{padding:14px 16px}
+.kpi .v{font-family:var(--f-mono);font-size:28px;font-weight:600;letter-spacing:-.02em}
+.kpi .s{font-size:12px;color:var(--muted)}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.heat{display:inline-block;min-width:52px;text-align:center;padding:3px 6px;border-radius:6px;font-family:var(--f-mono);font-size:12.5px;font-weight:600}
+.h2{margin:26px 0 10px;font-family:var(--f-display);font-size:17px;font-weight:700;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.h2 span{font-family:var(--f-body);font-size:12.5px;font-weight:500;color:var(--muted)}
+.critbar{display:grid;grid-template-columns:34px minmax(0,1fr) 130px 44px 64px;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid var(--line);font-size:13px}
+.critbar:first-child{border-top:0}
+.critbar .track{height:8px;background:var(--soft);border-radius:99px;position:relative;overflow:hidden}
+.critbar .track i{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
+.delta{font-size:12px;font-family:var(--f-mono)}
+.delta.up{color:var(--s3)} .delta.down{color:var(--s1)}
+.empty{padding:28px 18px;text-align:center;color:var(--muted)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:var(--soft);color:var(--muted);margin-left:6px;vertical-align:1px}
+.fault{white-space:nowrap}
+details.older{margin-top:26px}
+details.older summary{cursor:pointer;padding:14px 16px;font-family:var(--f-display);font-weight:700;font-size:15px;display:flex;justify-content:space-between;gap:10px;list-style:none}
+details.older summary::-webkit-details-marker{display:none}
+details.older summary::after{content:"▸";color:var(--muted);transition:transform .15s}
+details.older[open] summary::after{transform:rotate(90deg)}
+details.older .tblwrap{border-top:1px solid var(--line)}
+.export{padding:16px;display:flex;flex-direction:column;gap:8px;margin-top:22px}
+
+/* weekly sample + call chains */
+.pullbar{padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap}
+.pullbar .hint{margin-top:2px;font-size:13px}
+details.import{margin-bottom:18px;padding:0}
+details.import>summary{cursor:pointer;padding:12px 16px;font-weight:600;font-size:14px;list-style:none;display:flex;justify-content:space-between;gap:10px}
+details.import>summary::-webkit-details-marker{display:none}
+details.import>summary::after{content:"▸";color:var(--muted);transition:transform .15s}
+details.import[open]>summary::after{transform:rotate(90deg)}
+details.import .importbody{padding:0 16px 16px;display:flex;flex-direction:column;gap:10px}
+.qtitle{display:flex;align-items:baseline;gap:8px;min-width:0}
+.qtitle a,.qtitle>span:last-child{font-weight:600;overflow-wrap:anywhere}
+.qact{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.kind{display:inline-block;font-family:var(--f-mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;flex:none}
+.kind.k-MGR,.kind.k-DE{background:var(--s2-soft);color:var(--s2)}
+details.chain{margin-top:2px;font-size:12.5px;grid-column:1/-1;min-width:0}
+details.chain>summary{cursor:pointer;color:var(--muted);font-weight:600;list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.chain>summary::-webkit-details-marker{display:none}
+details.chain>summary::before{content:"▸";transition:transform .15s}
+details.chain[open]>summary::before{transform:rotate(90deg)}
+details.chain>summary:hover{color:var(--ink)}
+.legs{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
+.leg{display:grid;grid-template-columns:16px 62px minmax(0,1fr) 36px auto;gap:6px;align-items:baseline;padding:5px 6px;border-radius:6px;font-size:12.5px}
+.leg .idx{color:var(--muted);font-size:11px;text-align:right}
+.leg .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leg .dir{color:var(--muted);margin-left:2px;font-weight:400}
+.leg>.num:nth-child(4){text-align:right}
+.leg.graded .who{font-weight:600}
+.leg.other .who{color:var(--muted)}
+.gtag{display:inline-block;font-family:var(--f-body);font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:0 4px;border-radius:3px;background:var(--soft);color:var(--muted);margin-left:5px;vertical-align:1px}
+.chaingraded{padding:0 6px 6px;font-size:12.5px;color:var(--muted)}
+.playall{font-weight:600;text-decoration:none;white-space:nowrap}
+.tline{display:flex;gap:2px;height:10px;margin:2px 6px 8px;border-radius:99px;overflow:hidden}
+.tline i{display:block;min-width:3px;background:var(--line)}
+.tline i.g{background:var(--accent)}
+details.chain .tline{margin:6px 6px 4px}
+.stag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:var(--s2-soft);color:var(--s2);white-space:nowrap}
+/* database */
+.dbbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.dbbar .chips{gap:6px}
+.dbsum td,.dbsum th{white-space:nowrap}
+.dbtbl table{font-size:13px}
+.dbtbl th,.dbtbl td{padding:8px 10px}
+.dbtbl td{white-space:nowrap}
+.dbtbl td.rest{white-space:normal;min-width:150px;max-width:230px}
+.dbtbl tr.muted td{color:var(--muted)}
+.dbtbl .links{display:flex;gap:8px}
+.dbtbl .links a{font-weight:600;text-decoration:none;white-space:nowrap}
+.st{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.st.sampled{background:var(--accent-soft);color:var(--accent)} .st.scored{background:var(--s3-soft);color:var(--s3)} .st.removed,.st.not{background:var(--soft);color:var(--muted)} .st.short{background:var(--s2-soft);color:var(--s2)}
+.chaingraded b{color:var(--ink);font-weight:600}
+.leg.sampled{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.leg a{font-weight:600;white-space:nowrap;text-decoration:none}
+.chainpanel{padding:10px 10px 8px}
+.chainhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:2px 6px 6px}
+.qempty{padding:10px 0 2px;font-size:13px;color:var(--muted)}
+/* cases, set-aside legs, team rows, Slack */
+.ctag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:1px 7px;border-radius:4px;background:var(--tp-soft);color:var(--tp);white-space:nowrap}
+.kind.k-case{background:var(--tp);color:var(--on-fill)}
+.qcases{grid-column:1/-1;border-color:var(--tp)}
+.leg.off{opacity:.5}
+.hidlegs{border:0;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:6px 6px 2px;text-decoration:underline}
+.trow{display:grid;grid-template-columns:150px auto minmax(0,1fr);gap:8px 14px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.trow:first-child{border-top:0}
+.trow .tname{font-weight:700;padding-top:6px}
+.trow .tsaid{grid-column:2/-1}
+.trow .tsaid .lbl-sm{display:block;margin-bottom:5px}
+.trow .tnote{grid-column:2/-1;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.cmts li.me b{color:var(--accent)}
+@media (max-width:700px){.trow{grid-template-columns:minmax(0,1fr)}.trow .tsaid,.trow .tnote{grid-column:1}}
+/* linked WIRA tasks */
+.task{padding:12px 16px;border-top:1px solid var(--line);min-width:0}
+.task:first-child{border-top:0}
+.thead{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;font-size:12.5px;color:var(--muted)}
+.tid{font-family:var(--f-mono);font-weight:600;text-decoration:none;white-space:nowrap}
+.tcat{font-family:var(--f-mono);font-size:11.5px;background:var(--soft);color:var(--ink);padding:1px 6px;border-radius:4px;overflow-wrap:anywhere}
+.ttag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.ttitle{font-weight:600;margin:5px 0 8px;overflow-wrap:anywhere}
+.tfields{display:grid;grid-template-columns:128px minmax(0,1fr);gap:5px 12px;margin:0;font-size:13px}
+.tfields dt{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;padding-top:2px}
+.tfields dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap;min-width:0}
+.cmts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;white-space:normal}
+.cmts li{white-space:pre-wrap}
+.cmts b{font-weight:600}
+.tnone{padding:12px 16px;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap}
+/* what Claude got */
+.aipanel{border-top:1px solid var(--line)}
+.aihead{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:12px 16px}
+.aihead h3{margin:0;font-size:14px;font-weight:700;font-family:var(--f-display)}
+.aihead .hint{font-size:12.5px}
+.aisum{padding:6px 16px 12px;font-size:14px;overflow-wrap:anywhere}
+.cmprow{display:grid;grid-template-columns:132px minmax(0,1fr) minmax(0,1fr) 136px;gap:6px 14px;padding:10px 16px;border-top:1px solid var(--line);align-items:start;font-size:13.5px}
+.cmprow.h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-block:8px}
+.cmprow .lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-top:2px}
+.cmprow .you,.cmprow .cl{overflow-wrap:anywhere;white-space:pre-wrap;min-width:0}
+.cmprow .why{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
+.cmprow .nil{color:var(--muted)}
+.mt{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+.mchip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600;color:var(--muted)}
+.mchip:hover{border-color:var(--muted);color:var(--ink)}
+.mchip.same[aria-pressed="true"]{background:var(--s3-soft);border-color:var(--s3);color:var(--s3)}
+.mchip.diff[aria-pressed="true"]{background:var(--s1-soft);border-color:var(--s1);color:var(--s1)}
+.mauto{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.mauto.same{background:var(--s3-soft);color:var(--s3)} .mauto.diff{background:var(--s1-soft);color:var(--s1)}
+.lview{padding:2px 6px 8px}
+.txnote{padding:4px 6px 8px;font-size:12.5px;color:var(--muted)}
+.txlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.txcall{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);min-width:0}
+.txcall.graded{border-left:3px solid var(--accent)}
+.txhd{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px}
+.txhd .idx{color:var(--muted)}.txhd a{margin-left:auto;font-size:12.5px}
+.txsum{margin:8px 0 0;padding-left:18px;font-size:13.5px;line-height:1.45}
+.txsum li{margin:2px 0;overflow-wrap:anywhere}
+.txtext{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto}
+.factrec{padding:0 16px 10px}
+.sumlbl{display:block;margin-bottom:4px}
+.fhd{display:flex;gap:10px;align-items:baseline;margin:10px 0 4px}
+.flist{list-style:none;margin:0;padding:0;font-size:13px}
+.fact,.promise{display:grid;grid-template-columns:34px 64px 96px minmax(0,1fr);gap:2px 10px;padding:5px 0;border-top:1px solid var(--line);align-items:baseline}
+.promise{grid-template-columns:34px minmax(0,1fr) auto}
+.promise.none{display:block;color:var(--muted)}
+.fid{color:var(--muted);font-size:12px}.fwhen{font-size:12px;color:var(--muted)}.fsrc{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.fwhat{overflow-wrap:anywhere;min-width:0}.fwhat .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.fact.did .fwhat b{color:var(--accent)}
+.fact:target,.promise:target{background:var(--accent-soft)}
+.pst{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid var(--line)}
+.pst.kept{color:var(--s3);background:var(--s3-soft);border-color:transparent}.pst.not_kept{color:var(--s1);background:var(--s1-soft);border-color:transparent}.pst.cant_tell{color:var(--muted)}
+.cites{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cite{font-family:var(--f-mono);font-size:11px;padding:1px 6px;border-radius:6px;border:1px solid var(--line);color:var(--muted);text-decoration:none}
+.cite:hover{color:var(--ink);border-color:var(--accent)}
+@media (max-width:640px){.fact{grid-template-columns:30px 56px minmax(0,1fr)}.fact .fsrc{display:none}}
+.aigaps{padding:10px 16px;border-top:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.aifoot{padding:10px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;align-items:center}
+@media (max-width:700px){
+  .cmprow{grid-template-columns:minmax(0,1fr) auto}
+  .cmprow.h{display:none}
+  .cmprow .lab{grid-column:1;grid-row:1;align-self:center}
+  .cmprow .mt{grid-column:2;grid-row:1}
+  .cmprow .you,.cmprow .cl{grid-column:1/-1}
+  .cmprow .you::before,.cmprow .cl::before{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:1px}
+  .cmprow .you::before{content:"You"} .cmprow .cl::before{content:"Claude"}
+  .tfields{grid-template-columns:minmax(0,1fr);gap:2px}
+  .tfields dd{margin-bottom:6px}
+}
+
+@media (max-width:1080px) and (min-width:901px){.opts{grid-template-columns:repeat(2,minmax(0,1fr))}.opts .opt[data-v="na"]{grid-column:1/-1}}
+@media (max-width:900px){
+  .desk{grid-template-columns:minmax(0,1fr)}
+  .board{position:static}
+  .mobilebar{display:flex;position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 10px);background:var(--panel);border-top:1px solid var(--line);align-items:center;justify-content:space-between;gap:12px;z-index:10}
+  .mobilebar .num{font-size:22px;font-weight:600}
+  .mobilebar .mnext{border:1px dashed var(--line);background:var(--bg);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--muted);max-width:52vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+@media (max-width:760px){.opts{grid-template-columns:repeat(2,minmax(0,1fr))}.opts .opt[data-v="na"]{grid-column:1/-1}.facts{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){
+  .wrap{padding-inline:16px}
+  .qgrid{grid-template-columns:minmax(0,1fr)}
+  .critbar{grid-template-columns:30px minmax(0,1fr) 40px 56px}
+  .critbar>span:nth-child(2){grid-column:2/5}
+  .critbar .track{grid-column:2/3}
+  .weekpick .lbl{min-width:120px}
+  .leg{grid-template-columns:14px 58px minmax(0,1fr) 36px auto;gap:5px}
+  .pullbar .btn{width:100%}
+}
+@media (max-width:480px){.opts{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Pizza Support QA Desk</h1><span>Super Agent audits · Rubric v2 · 0–3 + NA</span></div>
+    <div class="weekpick" role="group" aria-label="Audit week">
+      <button type="button" id="wkPrev" aria-label="Previous week">‹</button>
+      <div class="lbl"><small>Call week</small><span id="wkLabel"></span></div>
+      <button type="button" id="wkNext" aria-label="Next week">›</button>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="score" aria-selected="true">Score a call</button>
+    <button type="button" role="tab" data-tab="queue" aria-selected="false">Call queue<span class="count" id="qCount"></span></button>
+    <button type="button" role="tab" data-tab="data" aria-selected="false">Database</button>
+    <button type="button" role="tab" data-tab="results" aria-selected="false">Results<span class="count" id="rCount"></span></button>
+  </nav>
+
+  <!-- SCORE -->
+  <section id="view-score">
+    <div class="desk">
+      <div id="steps">
+        <div class="qsec" id="s-call">
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Call</span><span class="qans" id="ans-call"></span><button type="button" class="qchg" id="callChg" hidden>Change</button></div>
+          <div class="qbody meta">
+            <div class="field wide" id="f-agent"><span class="lbl-sm">Agent</span><div class="chips" id="agentChips"></div></div>
+            <div class="field" id="otherAgentWrap" hidden><label for="otherAgent" id="otherAgentLbl">Agent name</label><input id="otherAgent" autocomplete="off"></div>
+            <div class="field wide"><span class="lbl-sm">Interaction type</span><div class="chips" id="typeChips"></div></div>
+            <div class="field wide" id="f-link"><label for="fLink">Call link</label><div class="linkrow"><input id="fLink" inputmode="url" autocomplete="off"><a id="fOpen" href="#" target="_blank" rel="noopener" hidden>Open ↗</a></div></div>
+            <div class="field" id="f-rid"><label for="fRid">Restaurant ID</label><input id="fRid" autocomplete="off" placeholder="R70105"></div>
+            <div class="field"><label for="fCallId">Call / WIRA ID</label><input id="fCallId" autocomplete="off"></div>
+            <div class="field" id="f-date"><label for="fDate">Call date</label><input id="fDate" type="date"></div>
+            <div class="field" id="f-reviewer"><label for="fReviewer">Reviewer</label><input id="fReviewer" autocomplete="name"></div>
+            <div class="field wide" id="f-gut"><span class="lbl-sm">Gut call</span><div class="chips" id="gutChips"></div></div>
+          </div>
+        </div>
+
+        <div class="qsec ref" id="chainWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Listen</span><span class="qans" id="chainSum"></span></div>
+          <div class="qbody chainpanel" id="chainPanel"></div>
+        </div>
+
+        <div class="qsec ref" id="tasksWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Tasks</span><span class="qans" id="tasksSum"></span></div>
+          <div class="qbody flush" id="tasksPanel"></div>
+        </div>
+
+        <div class="qsec ref" id="slackWrap" hidden>
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Slack</span><span class="qans" id="slackSum"></span></div>
+          <div class="qbody flush" id="slackPanel"></div>
+        </div>
+
+        <div class="qsec" id="s-facts">
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Case facts</span><span class="qans" id="ans-facts"></span></div>
+          <div class="qbody facts" id="factsPanel">
+            <div class="field wide" id="f-rootCause"><label for="fRootCause">What happened / root cause</label><textarea id="fRootCause" rows="2"></textarea></div>
+            <div class="field wide" id="f-team" hidden><span class="lbl-sm">Who did what</span><div id="teamRows"></div></div>
+            <div class="field" id="f-faultAgent"><span class="lbl-sm">Fault · agent said</span><div class="chips" id="faultAgentChips"></div></div>
+            <div class="field" id="f-faultCorrect"><span class="lbl-sm">Fault · actual</span><div class="chips" id="faultCorrectChips"></div></div>
+            <div class="field" id="f-errorType"><span class="lbl-sm">Error type</span><div class="chips" id="errorTypeChips"></div></div>
+            <div class="field" id="f-singleTouch"><span class="lbl-sm">Resolved without another team</span><div class="chips" id="singleTouchChips"></div></div>
+            <div class="field"><label for="fAction">Action taken</label><input id="fAction" autocomplete="off"></div>
+            <div class="field"><label for="fPromised">Promised to client</label><input id="fPromised" autocomplete="off"></div>
+            <div class="field"><label for="fOwner">Follow-up owner</label><input id="fOwner" autocomplete="off"></div>
+            <div class="field wide" id="f-sources"><span class="lbl-sm">Checked to know this</span><div class="chips" id="sourceChips"></div><input id="fSourcesOther" class="othersrc" autocomplete="off" placeholder="Other"></div>
+          </div>
+          <div class="aipanel" id="aiPanel" hidden></div>
+        </div>
+
+        <div id="rubric"></div>
+
+        <div class="qsec" id="s-take">
+          <div class="qhd"><span class="qnum"></span><span class="qttl">Coaching note</span><span class="qans" id="ans-take"></span></div>
+          <div class="qbody"><div class="field"><label for="fTake" class="sr-only">Coaching note</label><textarea id="fTake" rows="3"></textarea></div></div>
+        </div>
+      </div>
+
+      <aside class="panel board" aria-live="polite">
+        <div>
+          <div class="lbl-sm" id="boardFor">New audit</div>
+          <div class="big" id="bigScore">–<small>%</small></div>
+          <div class="boardsub" id="boardSub"></div>
+        </div>
+        <div>
+          <span class="hint num" id="scoredCount">0 of 12 scored</span>
+          <div class="progress"><i id="progBar" style="width:0"></i></div>
+        </div>
+        <div class="secrows" id="secRows"></div>
+        <div class="row">
+          <button type="button" class="btn primary" id="saveBtn" disabled>Save audit</button>
+          <button type="button" class="btn" id="resetBtn">Clear</button>
+        </div>
+        <div class="hint" id="saveHint"></div>
+      </aside>
+    </div>
+    <div class="mobilebar"><div><div class="lbl-sm" id="mbCount">0 of 12</div><div class="num" id="mbScore">–%</div></div><button type="button" class="btn primary" id="mbSave" disabled>Save audit</button></div>
+  </section>
+
+  <!-- QUEUE -->
+  <section id="view-queue" hidden>
+    <div class="panel pullbar">
+      <div><div class="h2" style="margin:0">Weekly sample</div><div class="hint" id="pullStatus"></div></div>
+      <button type="button" class="btn primary" id="pullBtn" disabled>Pull from Lightdash</button>
+    </div>
+    <details class="panel import" id="importBox">
+      <summary>Add calls by hand</summary>
+      <div class="importbody">
+        <textarea class="big" id="qPaste" placeholder="Brix Estrope (10 of 14)&#10;https://…call link…	Sep 22 10:14	Brix Estrope	4m 12s	CL	Client asking about a missed order…"></textarea>
+        <div class="row">
+          <div class="field" style="min-width:200px"><label for="qAgent">Agent</label><select id="qAgent"></select></div>
+          <div class="field" style="min-width:160px"><label for="qType">Type</label><select id="qType"></select></div>
+          <div class="hint" id="qPreview" style="align-self:flex-end;padding-bottom:9px"></div>
+        </div>
+        <div class="row"><button type="button" class="btn primary" id="qAdd" disabled>Add to this week's queue</button></div>
+      </div>
+    </details>
+    <div class="qgrid" id="qGrid"></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="view-data" hidden>
+    <div id="dataBody"></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="view-results" hidden>
+    <div id="resBody"></div>
+    <div class="panel export">
+      <div class="h2" style="margin:0">Export</div>
+      <div class="row">
+        <button type="button" class="btn primary" id="gsBtn">Export to Google Drive</button>
+        <button type="button" class="btn" id="xlsxBtn">Download .xlsx</button>
+      </div>
+      <div class="hint" id="gsStatus"></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* ---------- rubric ---------- */
+const RUBRIC_V1 = __RUBRIC_V1__;
+const NA_ANY = "Doesn't apply to this call";
+const C = (id,w,label,lv,na) => ({id,w,label,lv,na:na||NA_ANY});
+const CALL_V2 = [
+ {name:"Professionalism & Communication",items:[
+  C("1a",.025,"Used correct opening spiel and introduced themselves",
+    ["Skipped the opening entirely","Wrong spiel, or missed most of it","Greeted but missed one element","Full correct spiel, clear intro"],"Agent didn't handle the opening"),
+  C("1b",.025,"Maintained friendly, professional tone; avoided jargon; managed dead air with updates",
+    ["Rude or unprofessional with the client","Abrupt, heavy jargon, or long unmanaged silences","Mostly professional; minor lapses or brief dead air","Warm, composed, plain language, no unmanaged silences"]),
+  C("1c",.05,"Showed empathy and composure; did not become defensive on difficult calls",
+    ["Defensive, argued, or escalated the tension","Flat or dismissive of the client's frustration","Attempted empathy, but inconsistent","Consistent empathy; de-escalated naturally"],"No difficult moment on this call"),
+  C("1d",.10,"Conducted the interaction in an understandable manner and understood the client's concern",
+    ["Did not grasp the concern, or communication broke down","Misread part of the concern, or unclear English caused confusion","Mostly clear and understood the client; identifiable points to improve","Clear throughout; understood the concern the first time"])]},
+ {name:"Resolution",items:[
+  C("2a",.05,"Actively listened, asked only relevant questions, and gathered all necessary information before proceeding",
+    ["Acted on assumptions without gathering the needed info","Proceeded with gaps in key info, or excessive re-probing","Got the main facts; some unnecessary questions or missed follow-ups","All key info gathered efficiently, no redundant probing"]),
+  C("2b",.20,"Root cause triage & fault attribution: correctly identified what went wrong and who is at fault",
+    ["No diagnosis or fault attribution attempted","Wrong diagnosis","Identified the issue but misread the root cause or the fault","Correct root cause and accurate fault attribution"],"Inquiry only; nothing went wrong"),
+  C("2c",.10,"Immediate resolution: took the right short-term action given the situation",
+    ["No action taken, or the action made it worse","Action didn't fit the situation, or was carried out wrong","Right kind of action, but incomplete, slow, or needed help","Right action, taken promptly and carried out correctly"],"No short-term action needed"),
+  C("2d",.15,"Long-term solution: identified and actioned a long-term fix (product improvement, process change) or escalated to the right team",
+    ["No long-term path attempted or escalated","Raised with the wrong team, or without enough detail to act on","Root cause acknowledged, but the long-term path is vague or incomplete","Long-term path identified and actioned, or escalated to the right owner"],"One-off; no long-term fix needed"),
+  C("2e",.05,"Documented ticket with correct intent, sub-intent, and clear case notes",
+    ["No ticket","Wrong intent or type, or notes too thin to follow","Ticket created; minor intent error or thin notes","Correct intent and sub-intent; clear notes"],"No ticket needed")]},
+ {name:"Ownership & Self-Serve Coaching",items:[
+  C("3a",.10,"Took ownership and resolved without involving other teams unnecessarily",
+    ["Passed it off without attempting resolution","Weak attempt, then handed off what Support could resolve","Attempted resolution; escalation was borderline necessary","Resolved independently, or escalated only where truly necessary"]),
+  C("3b",.05,"Proactively coached client on CMA self-serve features and de-escalated where applicable",
+    ["Missed the opportunity entirely","Raised it only when prompted, or gave unclear steps","Mentioned self-serve but didn't walk through the steps","Coached specific CMA steps; confirmed the client can do it next time"],"No self-serve angle"),
+  C("3c",.10,"Communicated resolution or next steps clearly and confirmed client understanding before closing",
+    ["Abrupt end with no summary or next steps","Vague close; client left unsure of the outcome","Adequate close, but no confirmation of understanding","Clear summary, confirmed understanding, clean close"],"Call dropped before the close")]}
+];
+const clone = x => JSON.parse(JSON.stringify(x));
+function patch(types,t,id,ch){types[t].forEach(s=>s.items.forEach(it=>{if(it.id===id)Object.assign(it,ch)}))}
+const V2 = {call:CALL_V2, chat:clone(CALL_V2), mgr:clone(CALL_V2)};
+patch(V2,"chat","1a",{label:"Used the correct/appropriate opening spiel in a timely manner",
+  lv:["No opening, or the first reply came too late","Generic or mismatched response to the complaint","Generally appropriate, but missed tone or urgency nuance","Immediately matched the complaint type; urgent issues treated with urgency, inquiries handled conversationally"],na:NA_ANY});
+patch(V2,"chat","1b",{label:"Channel judgment",w:.05,
+  lv:["Stayed on chat when a call was clearly needed; the concern went unresolved","Stayed on chat too long; the concern dragged","Eventually called, but later than ideal or after prompting","Called proactively when needed, or rightly stayed on chat throughout"],na:"Channel choice wasn't a factor"});
+patch(V2,"chat","1c",{label:"Showed empathy and composure; did not become defensive on difficult chats",w:.025,na:"No difficult moment in this chat"});
+patch(V2,"chat","2a",{label:"Asked relevant questions, and gathered all necessary information before proceeding"});
+patch(V2,"chat","3c",{na:"Client left before the close"});
+patch(V2,"mgr","1d",{label:"Conducted the interaction in an understandable manner; understood the client's concern and communicated the resolution clearly",
+  lv:["Did not address the concern; communication broke down","Misread part of the concern, or unclear English caused confusion","Mostly understood the client and communicated the right things; identifiable points to improve","Clear throughout; client understood the issue and the resolution"]});
+V2.mgr[2].name = "Ownership";
+patch(V2,"mgr","3b",{label:"Edge case judgment: knowing when to pause and confirm with the client before proceeding, instead of resolving on assumption",
+  lv:["Resolved on assumption and got it wrong","Resolved on assumption when confirmation was needed; caused rework","Noticed the ambiguity but proceeded without confirming, or confirmed inefficiently","Spotted the edge case and confirmed with the client first; avoided a wrong resolution"],na:"No edge case on this call"});
+patch(V2,"mgr","3c",{label:"Proactive client outreach: reaching back out to win back a customer, offer compensation, or flag an issue found, instead of just closing the case",
+  lv:["Missed a clear opportunity; closed without outreach the situation warranted","Reached out only when prompted, or the outreach missed the issue","Saw the need, but the follow-up was incomplete, late, or on the wrong channel","Reached out unprompted on the right channel and addressed it (compensation, win-back, or flag)"],na:"No outreach warranted"});
+
+/* CASE: several agents handled one problem (transfers, callbacks, Slack coordination). Graded once, as a team, on how the case was run.
+   Draft criteria for Patrick to refine, same 0–3 + NA scale. */
+V2.case = [
+ {name:"Diagnosis",items:[
+  C("1a",.20,"The team found the right root cause and fault, and agreed on it",
+    ["No diagnosis, or each agent worked from a different story","Wrong root cause or wrong fault carried through the case","Right issue found, but late, or agents disagreed on the cause or fault along the way","Right root cause and fault, found early and shared by everyone on the case"],"Inquiry only; nothing went wrong"),
+  C("1b",.10,"Facts were gathered once: the caller and client weren't asked the same things by each agent",
+    ["Each agent started over; the caller had to repeat everything","Key details asked for again, or missing when the next agent picked up","Mostly carried over; one or two repeat questions","Facts gathered once and passed along; nobody had to repeat themselves"])]},
+ {name:"Teamwork",items:[
+  C("2a",.15,"Clear owner and clean handoffs: whoever picked it up next knew the context",
+    ["No owner; the case bounced between agents","Owner unclear, or handoffs dropped key context","An owner existed, but one handoff lost context or time","One clear owner, and every handoff carried the full context"]),
+  C("2b",.15,"Coordinated in Slack or WIRA: the right team was pulled in and questions were answered promptly",
+    ["Needed coordination never happened","Wrong team, or questions left hanging in the thread","Right team, but slow replies or a loose end in the thread","Right team pulled in, questions answered promptly, decision recorded in the thread"],"No coordination needed"),
+  C("2c",.10,"One voice to the caller and the client: no contradicting stories or promises",
+    ["Agents told the caller or client conflicting things","A promise or explanation was contradicted later","Small inconsistencies in wording or timing","Everyone gave the same story and the same commitments"])]},
+ {name:"Resolution",items:[
+  C("3a",.20,"Right fix delivered, and every promise closed (callback, remake, refund, credit)",
+    ["No fix, or the fix made it worse","Wrong fix, or a promise was left open","Right fix, but a follow-up was late or only partly closed","Right fix delivered and every promise closed"]),
+  C("3b",.05,"The ticket and notes tell the whole case and how it ended",
+    ["No ticket","Ticket missing key steps or the outcome","Ticket covers the case; thin on the outcome","Ticket tells the whole case and the outcome"],"No ticket needed"),
+  C("3c",.05,"Resolved without unnecessary loops, transfers or delay",
+    ["Looped or stalled; the caller gave up or escalated","Several avoidable transfers or long waits","One avoidable loop or delay","Straight path to the fix"])]}
+];
+
+/* stable keys + Disaster Class dimensions, shared by every rubric version */
+const BASEKEYS = {"1a":["opening","communication"],"1b":["tone","communication"],"1c":["empathy","communication"],"1d":["clarity","communication"],
+  "2a":["discovery","investigation"],"2b":["root_cause_fault","investigation"],"2c":["immediate_action","resolution"],"2d":["long_term_fix","resolution"],"2e":["documentation","investigation"],
+  "3a":["ownership","resolution"],"3b":["self_serve","resolution"],"3c":["close_confirm","resolution"]};
+const CASEKEYS = {"1a":["case_root_cause_fault","investigation"],"1b":["case_facts_once","investigation"],"2a":["case_owner_handoffs","resolution"],"2b":["case_coordination","communication"],
+  "2c":["case_one_voice","communication"],"3a":["case_fix_promises","resolution"],"3b":["case_documentation","investigation"],"3c":["case_no_loops","resolution"]};
+const KEYS = {case:CASEKEYS, call:BASEKEYS, chat:{...BASEKEYS,"1b":["channel_judgment","communication"]}, mgr:{...BASEKEYS,"3b":["edge_case_judgment","investigation"],"3c":["proactive_outreach","resolution"]}};
+function tagKeys(types){for(const t in types)types[t].forEach(sec=>sec.items.forEach(it=>{const [k,d]=KEYS[t][it.id];it.key=k;it.dim=d}));return types}
+function adaptV1(R){const out={};for(const t in R)out[t]=R[t].map(sec=>({name:sec.name,items:sec.items.map(it=>({id:it.id,w:it.w,label:it.label,lv:[null,it.lv["1"],it.lv["2"],it.lv["3"]],na:/N\/A/.test(it.tip||"")?it.tip:null,tip:it.tip||""}))}));return tagKeys(out)}
+const RUBRICS = {
+  v1:{types:adaptV1(RUBRIC_V1),naRule:"full",scale:"1–3 (1 = 0%, 2 = 50%, 3 = 100% of the weight)",naLabel:"N/A counts as full marks"},
+  v2:{types:tagKeys(V2),naRule:"exclude",scale:"0–3 (score ÷ 3 of the weight)",naLabel:"NA is left out of the total"}
+};
+const CUR = "v2";
+const ALWAYS = ["2b","2c","2d"], ALWAYS_CASE = ["1a","3a"];
+const alwaysFor = t => t==="case"?ALWAYS_CASE:ALWAYS;
+
+/* ---------- reference lists ---------- */
+const TYPES = [{k:"call",label:"CL call",x:"cl_call"},{k:"chat",label:"CL chat",x:"cl_chat"},{k:"mgr",label:"MGR / DE",x:"mgr_de"},{k:"case",label:"Case",x:"case"}];
+const ROLES = [["owner","Owned it"],["helped","Helped"]];
+const AGENTS = ["Brix Estrope","Velka Pasion","Christ Aragon","Cherry Balonio","CJ Domingo","Angel Lacsamana"];
+const TARGET = 5;
+const DIMS = [["communication","Communication","Comm."],["investigation","Investigation","Invest."],["resolution","Resolution","Resol."]];
+const GUTS = [["good","Good"],["ok","OK"],["bad","Bad"]];
+const FAULT_AGENT = [["tarro","Tarro"],["restaurant","Restaurant"],["customer","Customer"],["unclear","Unclear"],["none","Didn't say"]];
+const FAULT_ACTUAL = [["tarro","Tarro"],["restaurant","Restaurant"],["customer","Customer"],["unclear","Unclear"],["no_error","No error"]];
+const ERROR_TYPES = [["product","Product"],["process","Process"],["both","Both"]];
+const YESNO = [["yes","Yes"],["no","No"]];
+const SOURCES = [["call_rec","Call recording"],["screen_rec","Screen recording"],["greendot","Greendot"],["wira","WIRA"],["mgr_tool","MGR tool"],["de_tool","DE tool"],["slack","Slack"],["lightdash","Lightdash"],["cma","CMA"]];
+const L = list => Object.fromEntries(list);
+const FA_L = L(FAULT_AGENT), FC_L = L(FAULT_ACTUAL), SRC_L = L(SOURCES), GUT_L = L(GUTS);
+const FAULTED = ["tarro","restaurant","customer"];
+const ROLE_X = {sa:"super_agent",ae:"ae",other:"other"};
+const BAND_NAME = {good:"strong",ok:"watch",bad:"coach"};
+
+/* ---------- weekly sample: sampling rules + call chains ---------- */
+/*__PULL_CORE__*/
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(String(u||"").trim()) ? String(u).trim() : "";
+const store = { get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
+const r1 = x => x==null||isNaN(x) ? null : Math.round(x*10)/10;
+const fmt = p => p==null||isNaN(p) ? "–" : (Math.round(p*10)/10).toFixed(1);
+const pctW = w => (w*100).toFixed(1).replace(/\.0$/,"")+"%";
+const avg = a => { a=a.filter(v=>v!=null&&!isNaN(v)); return a.length ? a.reduce((x,y)=>x+y,0)/a.length : null };
+const newId = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function band(p){if(p==null||isNaN(p))return "none";return p>=90?"good":p>=75?"ok":"bad"}
+const bandColor = p => `var(--${{good:"s3",ok:"s2",bad:"s1",none:"ink"}[band(p)]})`;
+function typeLabel(k){return (TYPES.find(t=>t.k===k)||TYPES[0]).label}
+function typeX(k){return (TYPES.find(t=>t.k===k)||TYPES[0]).x}
+
+/* ---------- weeks ---------- */
+function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x}
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function parseIso(s){const [y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
+function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)}
+function weekLabel(s){const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
+function shortWeek(s){return parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+function shortDate(s){return s?parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}
+let week = iso(mondayOf(new Date(Date.now()-7*864e5)));
+
+/* ---------- parsing ---------- */
+function parseLink(u){
+  const out={}; u=String(u||"");
+  const rm=u.match(/\/restaurants?\/(R\d{3,})/i)||u.match(/\b(R\d{4,6})\b/);
+  if(rm) out.restaurantId=rm[1].toUpperCase();
+  try{const url=new URL(u.trim());const cid=url.searchParams.get("callId")||url.searchParams.get("call_id")||url.searchParams.get("conversation_id");if(cid)out.callId=cid}catch(e){}
+  return out;
+}
+const MONTHS={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function mkDate(y,mo,d,ref){
+  if(mo<0||mo>11||d<1||d>31)return null;
+  const refD=parseIso(ref);
+  if(y==null){y=refD.getFullYear();const c=new Date(y,mo,d);if(c-refD>183*864e5)y--;else if(refD-c>183*864e5)y++}
+  const dt=new Date(y,mo,d); if(dt.getMonth()!==mo)return null; return iso(dt);
+}
+function parseDateLoose(s,ref){
+  s=String(s||"");const found=[];
+  const rules=[
+    [/\b(20\d\d)-(\d{1,2})-(\d{1,2})/,m=>mkDate(+m[1],+m[2]-1,+m[3],ref)],
+    [/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/,m=>mkDate(m[3]?(m[3].length===2?2000+(+m[3]):+m[3]):null,+m[1]-1,+m[2],ref)],
+    [/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(20\d\d))?/i,m=>mkDate(m[3]?+m[3]:null,MONTHS[m[1].toLowerCase()],+m[2],ref)],
+    [/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s+(20\d\d))?/i,m=>mkDate(m[3]?+m[3]:null,MONTHS[m[2].toLowerCase()],+m[1],ref)]];
+  rules.forEach(([re,fn])=>{const m=s.match(re);if(m){const d=fn(m);if(d)found.push([m.index,d])}});
+  found.sort((a,b)=>a[0]-b[0]);return found.length?found[0][1]:null;
+}
+function detectType(s){s=String(s||"");
+  for(const c of s.split(/\t|\s\|\s|\s{2,}/).map(x=>x.trim())){if(/^(MGR|DE)([\s\/&,+-]*(MGR|DE))?$/i.test(c))return "mgr";if(/^(CL[\s-]*)?chat$/i.test(c))return "chat";if(/^CL([\s-]*call)?$/i.test(c))return "call"}
+  if(/\b(MGR|DE)\b/.test(s))return "mgr";if(/\bCL\b/.test(s))return "call";if(/\bchat\b/i.test(s))return "chat";return null}
+function detectAgent(line){const l=line.toLowerCase();for(const a of AGENTS){const [f,...r]=a.toLowerCase().split(" ");if(l.includes(a.toLowerCase())||(l.includes(f)&&r.some(x=>l.includes(x))))return a}
+  for(const a of AGENTS){const f=a.split(" ")[0].toLowerCase();if(new RegExp("\\b"+f+"\\b").test(l))return a}return null}
+
+/* ---------- scoring ---------- */
+function verOf(a){return a&&a.rubric===CUR?CUR:"v1"}
+function rub(ver,type){const R=(RUBRICS[ver]||RUBRICS.v1).types;return R[type]||R.call}
+function itemsOf(ver,type){return rub(ver,type).flatMap(s=>s.items.map(it=>Object.assign({section:s.name},it)))}
+function pts(ver,s){return ver===CUR?s/3:(s-1)/2}
+function calc(ver,type,scores){
+  const R=RUBRICS[ver]||RUBRICS.v1, secs=rub(ver,type);
+  const dims={communication:{w:0,e:0},investigation:{w:0,e:0},resolution:{w:0,e:0}};
+  let done=0,na=0,n=0,W=0,E=0;
+  const secOut=secs.map(sec=>{let w=0,e=0;
+    sec.items.forEach(it=>{n++;const s=scores?scores[it.id]:null;if(s==null||s==="")return;done++;
+      let p;if(s==="na"){na++;if(R.naRule==="exclude")return;p=1}else p=pts(ver,Number(s));
+      w+=it.w;e+=p*it.w;const D=dims[it.dim];if(D){D.w+=it.w;D.e+=p*it.w}});
+    W+=w;E+=e;return {name:sec.name,pct:w?e/w*100:null}});
+  const dimPct=Object.fromEntries(Object.entries(dims).map(([k,v])=>[k,v.w?v.e/v.w*100:null]));
+  return {secs:secOut,done,na,n,complete:done===n,total:W?E/W*100:null,dims:dimPct};
+}
+function labelOf(ver,t,k){return (itemsOf(ver,t).find(i=>i.id===k)||{}).label||k}
+function wOf(ver,t,k){return (itemsOf(ver,t).find(i=>i.id===k)||{}).w||0}
+
+/* ---------- state ---------- */
+let db=null, mcp=null, downloads=null, userCap=null, myId=null, sampleFn=null;
+let audits=[], queue=[], queueAll=[], dbReady=false, queueReady=false, exportMeta=null, exporting=false, exportNote="";
+const blankFacts = () => ({rootCause:"",faultAgent:"",faultCorrect:"",errorType:"",actionTaken:"",promised:"",followUpOwner:"",singleTouch:"",sources:[],sourcesOther:""});
+const blankForm = () => ({id:null,agent:"",otherAgent:"",type:"call",link:"",restaurantId:"",callId:"",callDate:"",reviewer:store.get("qa.reviewer")||"",gut:"",
+  scores:{},notes:{},facts:blankFacts(),take:"",queueId:null,week:null,replaces:null,
+  kind:"",source:"",restaurantName:"",callTime:"",durationSec:null,chain:null,
+  tasks:null,tasksAt:null,aiFacts:null,factsMatch:{},aiShown:false,team:[],caseIds:[],slack:null,slackAt:null});
+const validChain = c => c&&typeof c==="object"&&Array.isArray(c.legs)&&c.legs.length ? c : null;
+/* the calls where people actually talked; voicemail and no-answer legs are set aside (kept in the data, counted in "hidden") */
+function liveChain(c){c=validChain(c);if(!c)return null;const legs=c.legs.filter(talked);if(!legs.length)return Object.assign({},c,{hidden:0});return Object.assign({},c,{legs,hidden:c.legs.length-legs.length})}
+const validTasks = t => Array.isArray(t) ? t.filter(k=>k&&typeof k==="object"&&k.id) : null;
+const validAi = a => a&&typeof a==="object"&&!Array.isArray(a)&&(a.rootCause||a.summary) ? a : null;
+const validSlack = t => Array.isArray(t) ? t.filter(x=>x&&typeof x==="object"&&x.ts) : null;
+const validTeam = t => Array.isArray(t) ? t.filter(x=>x&&x.name).map(x=>({name:String(x.name),role:x.role==="owner"||x.role==="helped"?x.role:"",said:String(x.said||""),note:String(x.note||"")})) : [];
+const validMatch = m => m&&typeof m==="object"&&!Array.isArray(m) ? Object.fromEntries(Object.entries(m).filter(([k,v])=>v==="same"||v==="diff")) : {};
+function loadDraft(){const d=store.get("qa.draft.v2");const f=Object.assign(blankForm(),d&&typeof d==="object"?d:{});
+  f.facts=Object.assign(blankFacts(),(d&&d.facts)||{});if(!Array.isArray(f.facts.sources))f.facts.sources=[];
+  if(!TYPES.some(t=>t.k===f.type))f.type="call";if(!f.scores||typeof f.scores!=="object")f.scores={};if(!f.notes||typeof f.notes!=="object")f.notes={};
+  f.chain=validChain(f.chain);f.tasks=validTasks(f.tasks);f.aiFacts=validAi(f.aiFacts);f.factsMatch=validMatch(f.factsMatch);f.aiShown=!!f.aiShown;f.team=validTeam(f.team);f.caseIds=Array.isArray(f.caseIds)?f.caseIds.map(String):[];f.slack=validSlack(f.slack);return f}
+let form = loadDraft();
+let active = 0, openNotes = new Set(), tab = "score", lastParsed = {}, callOpen = true;
+function saveDraft(){store.set("qa.draft.v2",form)}
+function agentName(){return form.agent==="__ae"||form.agent==="__other"?form.otherAgent.trim():form.agent}
+function roleOf(){return form.agent==="__ae"?"ae":form.agent==="__other"?"other":"sa"}
+function agentFields(name,role){if(role==="ae")return {agent:"__ae",otherAgent:name||""};if(AGENTS.includes(name))return {agent:name,otherAgent:""};return {agent:name?"__other":"",otherAgent:name||""}}
+function isSA(a){return a.type!=="case"&&(a.role?a.role==="sa":AGENTS.includes(a.agent))}
+
+/* ---------- toast & banner ---------- */
+let tt; function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2800)}
+function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
+
+/* ---------- tabs & week ---------- */
+function setTab(t){tab=t;document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+  ["score","queue","data","results"].forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+t)}catch(e){}
+  if(t==="score")renderForm();renderAll()}
+document.querySelectorAll("[role=tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$("#wkPrev").onclick=()=>{week=addDays(week,-7);renderAll()};
+$("#wkNext").onclick=()=>{week=addDays(week,7);renderAll()};
+
+/* ---------- SCORE: details ---------- */
+let typeArm=null, typeArmT=null;
+function chipsHtml(opts,cur,attr,multi){return opts.map(([v,l])=>`<button type="button" class="chip" data-${attr}="${esc(v)}" aria-pressed="${multi?cur.includes(v):cur===v}">${esc(l)}</button>`).join("")}
+function syncInput(sel,val){const el=$(sel);if(el&&document.activeElement!==el&&el.value!==(val??""))el.value=val??""}
+function renderMeta(){
+  $("#agentChips").innerHTML=chipsHtml(AGENTS.map(a=>[a,a]).concat([["__ae","AE…"],["__other","Other…"]]),form.agent,"a");
+  const named=form.agent==="__ae"||form.agent==="__other";
+  $("#otherAgentWrap").hidden=!named; $("#otherAgentLbl").textContent=form.agent==="__ae"?"AE name":"Agent name";
+  const scored=Object.keys(form.scores).length;
+  $("#typeChips").innerHTML=TYPES.map(t=>{const armed=typeArm===t.k;return `<button type="button" class="chip${armed?" arm":""}" data-t="${t.k}" aria-pressed="${form.type===t.k}">${armed?`Switch to ${t.label} and clear ${scored} score${scored===1?"":"s"}?`:t.label}</button>`}).join("");
+  $("#gutChips").innerHTML=chipsHtml(GUTS,form.gut,"g");
+  syncInput("#otherAgent",form.otherAgent);syncInput("#fLink",form.link);syncInput("#fRid",form.restaurantId);syncInput("#fCallId",form.callId);
+  syncInput("#fDate",form.callDate);syncInput("#fReviewer",form.reviewer);syncInput("#fTake",form.take);
+  paintOpen();renderChain();renderTasks();renderSlack();
+}
+function paintOpen(){const u=safeUrl(form.link);$("#fOpen").hidden=!u;if(u)$("#fOpen").href=u}
+function renderChain(){
+  const c=validChain(form.chain);$("#chainWrap").hidden=!c;
+  if(!c){$("#chainPanel").innerHTML="";$("#chainSum").textContent="";return}
+  $("#chainSum").textContent=chainSummary(c);
+  const head=form.restaurantName||form.kind?`<div class="chainhead">${form.kind?`<span class="kind k-${esc(form.kind)}">${esc(form.kind)}</span>`:""}${form.restaurantName?`<b>${esc(form.restaurantName)}</b>`:""}${form.restaurantId?`<span class="num hint">${esc(form.restaurantId)}</span>`:""}${form.callDate?`<span class="hint">${esc(shortDate(form.callDate))}</span>`:""}</div>`:"";
+  const lc=liveChain(c),g=lc.legs.filter(isGraded),gs=g.reduce((t,l)=>t+(Number(l.sec)||0),0);
+  const who=agentName()||(c.legs.find(isGraded)||{}).who||"";
+  const multi=lc.legs.length>1&&lc.legs.every(l=>l.id),isCase=form.type==="case";
+  const names=isCase?(form.team.length?form.team.map(t=>t.name):[who]):[who];
+  const gl=isCase?`Case: <b>${esc(names.map(shortWho).join(", "))}</b> · ${lc.legs.length} call${lc.legs.length===1?"":"s"} · ${fmtDur(lc.legs.reduce((t,l)=>t+(Number(l.sec)||0),0))} talk`
+    :`Graded: <b>${esc(who)}</b> · ${g.length} of ${lc.legs.length} call${lc.legs.length===1?"":"s"} by ${esc(shortWho(who))} · ${fmtDur(gs)} talk`;
+  const canTx=lc.legs.some(l=>l.id),view=canTx?listenView:"calls";
+  const sw=canTx?`<div class="chips lview" role="group" aria-label="Listen view"><button type="button" class="chip" data-lv="calls" aria-pressed="${view==="calls"}">Calls</button><button type="button" class="chip" data-lv="tx" aria-pressed="${view==="tx"}">Transcripts</button></div>`:"";
+  $("#chainPanel").innerHTML=head+`<div class="chaingraded">${gl}${multi?` · <a class="playall" href="${esc(playAllUrl(lc.legs.map(l=>l.id)))}" target="_blank" rel="noopener">Play all ↗</a>`:""}</div>`+sw+
+    (view==="tx"?txHtml():(multi?timelineHtml(lc):"")+legsHtml(c,showHidden));
+  if(view==="tx")loadTx();
+}
+/* Transcripts view: every talked call, Claude's bullets on top, the transcript under it */
+let listenView="calls",txRun=null,txNote="";const txCache=new Map();
+function txHtml(){const legs=aiLegs(),A=validAi(form.aiFacts),B=(A&&A.facts&&A.facts.calls)||{};
+  if(!legs.length)return "";
+  const head=txRun?`<div class="txnote">Getting transcripts…</div>`:txNote?`<div class="txnote">${esc(txNote)} <button type="button" class="btn small" data-txretry="1">Try again</button></div>`:"";
+  const noSum=!Object.keys(B).length;
+  return head+(noSum?`<div class="txnote">Summaries appear after "Read the calls" in What Claude got.</div>`:"")+`<ol class="txlist">`+legs.map((l,i)=>{
+    const t=String(l.at||""),dir=l.dir==="in"?"from":l.dir==="out"?"to":"with",b=B[l.id]||[],tx=txCache.get(l.id);
+    return `<li class="txcall${l.graded?" graded":""}" id="tx-${esc(l.id)}"><div class="txhd"><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b><span class="hint">${esc(dir)} ${esc(shortWho(l.party||""))}</span><span class="num hint">${esc(clock12(t.slice(11,16)))} · ${fmtDur(l.sec)}</span><a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">Rec ↗</a></div>
+      ${b.length?`<ul class="txsum">${b.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+      <div class="txtext">${tx==null?`<span class="hint">${txRun?"Loading…":"Not loaded"}</span>`:tx.trim()?esc(tx):`<span class="hint">No transcript for this call.</span>`}</div></li>`}).join("")+`</ol>`}
+async function fetchTx(legs){const need=legs.filter(l=>l.id&&!txCache.has(l.id));if(!need.length)return;
+  const ts=need.map(l=>ldTs(l.at)).filter(x=>!isNaN(x));if(!ts.length){need.forEach(l=>txCache.set(l.id,""));return}
+  const from=etDay(Math.min(...ts)),to=etDay(Math.max(...ts));
+  const rows=await ldQuery(transcriptConfig(from,to>from?to:from,need.map(l=>l.id)),"QA Desk · transcripts");
+  const m=new Map(rows.map(r=>[String(r.calls_conversation_id||""),String(r.asr_transcript_call_transcript||"")]));
+  need.forEach(l=>txCache.set(l.id,m.get(l.id)||""))}
+async function loadTx(){const legs=aiLegs();if(txRun||!mcp||!legs.some(l=>!txCache.has(l.id))||txNote)return;
+  txRun=true;try{await fetchTx(legs)}catch(e){txNote=pullErr(e,"Try again")}finally{txRun=null;if(listenView==="tx")renderChain()}}
+$("#agentChips").addEventListener("click",e=>{const b=e.target.closest("[data-a]");if(!b)return;form.agent=form.agent===b.dataset.a?"":b.dataset.a;saveDraft();renderMeta();renderBoard();
+  if(form.agent==="__ae"||form.agent==="__other")$("#otherAgent").focus()});
+$("#typeChips").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(!b)return;const t=b.dataset.t;if(form.type===t)return;
+  const dirty=Object.keys(form.scores).length||Object.values(form.notes).some(v=>v&&v.trim());
+  if(dirty&&typeArm!==t){typeArm=t;clearTimeout(typeArmT);typeArmT=setTimeout(()=>{typeArm=null;renderMeta()},4000);renderMeta();return}
+  clearTimeout(typeArmT);typeArm=null;form.type=t;form.scores={};form.notes={};openNotes=new Set();active=0;saveDraft();renderMeta();renderFacts();renderRubric();renderBoard()});
+$("#gutChips").addEventListener("click",e=>{const b=e.target.closest("[data-g]");if(!b)return;form.gut=form.gut===b.dataset.g?"":b.dataset.g;saveDraft();renderMeta();renderBoard()});
+const FIELDS=[["#otherAgent","otherAgent"],["#fLink","link"],["#fRid","restaurantId"],["#fCallId","callId"],["#fDate","callDate"],["#fReviewer","reviewer"],["#fTake","take"]];
+FIELDS.forEach(([sel,k])=>$(sel).addEventListener("input",e=>{
+  form[k]=e.target.value;
+  if(k==="reviewer")store.set("qa.reviewer",form.reviewer);
+  if(k==="link"){const p=parseLink(form.link);
+    if(p.restaurantId&&(!form.restaurantId||form.restaurantId===lastParsed.restaurantId)){form.restaurantId=p.restaurantId;syncInput("#fRid",form.restaurantId)}
+    if(p.callId&&(!form.callId||form.callId===lastParsed.callId)){form.callId=p.callId;syncInput("#fCallId",form.callId)}
+    lastParsed=p;paintOpen()}
+  saveDraft();renderBoard()}));
+$("#fRid").addEventListener("blur",()=>{const v=form.restaurantId.trim().toUpperCase();if(v!==form.restaurantId){form.restaurantId=v;syncInput("#fRid",v);saveDraft()}});
+
+/* ---------- SCORE: case facts ---------- */
+const FACT_CHIPS={fa:"faultAgent",fc:"faultCorrect",et:"errorType",st:"singleTouch"};
+function renderFacts(){const F=form.facts;
+  $("#faultAgentChips").innerHTML=chipsHtml(FAULT_AGENT,F.faultAgent,"fa");
+  $("#faultCorrectChips").innerHTML=chipsHtml(FAULT_ACTUAL,F.faultCorrect,"fc");
+  $("#errorTypeChips").innerHTML=chipsHtml(ERROR_TYPES,F.errorType,"et");
+  $("#singleTouchChips").innerHTML=chipsHtml(YESNO,F.singleTouch,"st");
+  $("#sourceChips").innerHTML=chipsHtml(SOURCES,F.sources,"src",true);
+  $("#f-faultAgent").classList.toggle("dim",F.faultCorrect==="no_error");
+  const isCase=form.type==="case";$("#f-team").hidden=!isCase;$("#f-faultAgent").hidden=isCase;$("#f-singleTouch").hidden=isCase;
+  if(isCase)renderTeam();
+  syncInput("#fRootCause",F.rootCause);syncInput("#fAction",F.actionTaken);syncInput("#fPromised",F.promised);syncInput("#fOwner",F.followUpOwner);syncInput("#fSourcesOther",F.sourcesOther);
+  renderAi();
+}
+/* case: each agent's part, and what each told the caller about fault (fault is attributed per agent, not to the case) */
+function renderTeam(){
+  if(!form.team.length){const c=validChain(form.chain);form.team=[...new Set([agentName()].concat(c?caseTeam(c.legs):[]).filter(Boolean))].map(n=>({name:n,role:"",said:"",note:""}))}
+  $("#teamRows").innerHTML=form.team.map((t,i)=>`<div class="trow" data-ti="${i}"><div class="tname">${esc(t.name)}</div>
+    <div class="chips">${ROLES.map(([v,l])=>`<button type="button" class="chip" data-role="${v}" aria-pressed="${t.role===v}">${l}</button>`).join("")}</div>
+    <div class="tsaid"><span class="lbl-sm">Told the caller the fault was</span><div class="chips">${FAULT_AGENT.map(([v,l])=>`<button type="button" class="chip" data-said="${v}" aria-pressed="${t.said===v}">${esc(l)}</button>`).join("")}</div></div>
+    <input class="tnote" data-tnote="${i}" autocomplete="off" placeholder="What they did on the case" value="${esc(t.note)}"></div>`).join("")}
+$("#teamRows").addEventListener("click",e=>{const b=e.target.closest("button.chip");if(!b)return;const r=b.closest("[data-ti]"),t=form.team[Number(r.dataset.ti)];if(!t)return;
+  if(b.dataset.role){const v=b.dataset.role;t.role=t.role===v?"":v}
+  if(b.dataset.said){const v=b.dataset.said;t.said=t.said===v?"":v}
+  e.stopPropagation();saveDraft();renderTeam();renderBoard()});
+$("#teamRows").addEventListener("input",e=>{const i=e.target.dataset.tnote;if(i==null)return;const t=form.team[Number(i)];if(t){t.note=e.target.value;saveDraft()}});
+$("#factsPanel").addEventListener("click",e=>{const b=e.target.closest("button.chip");if(!b||b.closest("#teamRows"))return;const F=form.facts;
+  for(const [attr,key] of Object.entries(FACT_CHIPS)){if(b.dataset[attr]!==undefined){const v=b.dataset[attr];F[key]=F[key]===v?"":v}}
+  if(b.dataset.src!==undefined){const v=b.dataset.src,i=F.sources.indexOf(v);if(i>=0)F.sources.splice(i,1);else F.sources.push(v)}
+  saveDraft();renderFacts();renderBoard()});
+[["#fRootCause","rootCause"],["#fAction","actionTaken"],["#fPromised","promised"],["#fOwner","followUpOwner"],["#fSourcesOther","sourcesOther"]].forEach(([sel,k])=>
+  $(sel).addEventListener("input",e=>{form.facts[k]=e.target.value;saveDraft();renderBoard();if(form.aiShown)renderAi()}));
+
+/* ---------- SCORE: linked WIRA tasks ---------- */
+let taskRun=null, taskNote="";
+const caseKey=()=>form.queueId||form.id||"";
+function rosterAgent(name){return roster.agents.find(a=>a.name===name)||null}
+const nameFromEmail=e=>{const m=String(e||"").match(/^([a-z0-9._-]+)@/i);return m?m[1].split(/[._-]+/).filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join(" "):""};
+function prettyWho(s,k){const v=String(s||"").trim();if(!v)return "";if(v==="client"||/^client-/.test(v))return "Client";if(/^(sa-?)?wonka$/i.test(v))return "Wonka";
+  const ag=roster.agents.find(a=>isAgentWho(v,a));if(ag)return ag.name;
+  if(v.includes("@"))return nameFromEmail(v)||v;
+  const n=normWho(v),hit=k&&[k.assignee].concat((k.comments||[]).map(c=>c.who)).find(e=>e&&e.includes("@")&&(normWho(e)===n||(n.length>=15&&normWho(e).startsWith(n))));
+  return hit?nameFromEmail(hit):v.replace(/wondersco(com)?$/,"")}
+const TASK_FIELDS=[["intent","Task intent"],["type","Task type"],["issue","Issue type"],["issueCat","Issue category"],["diagnosis","Diagnosis"],["ideal","Ideal outcome"],["callback","Callback required"],["order","Order"],["assignee","Assigned to"],["pri","Priority"]];
+const capFirst=s=>s?s[0].toUpperCase()+s.slice(1):s;
+function stampEt(at,ref){const s=String(at||"");if(!s)return "";const t=clock12(s.slice(11,16)),d=s.slice(0,10);return d&&d!==String(ref||"").slice(0,10)?shortDate(d)+" · "+t:t}
+function taskTags(k,first){const t=[];if(k.mine)t.push(`By ${first}`);else if(k.commented)t.push(`${first} commented`);else if(k.mentioned)t.push(`Mentions ${first}`);return t}
+function taskHtml(k){
+  const first=(agentName()||"Agent").split(" ")[0],fields=[];
+  fields.push(["Created",`${k.by?esc(prettyWho(k.by,k)):"<span class=\"hint\">Creator not recorded</span>"} · ${esc(stampEt(k.at,form.callDate))}`]);
+  if(k.desc)fields.push(["Description",esc(k.desc)]);
+  if(k.comments&&k.comments.length)fields.push(["Comments",`<ul class="cmts">${k.comments.map(c=>`<li><b>${esc(prettyWho(c.who,k)||"Someone")}</b> ${esc(c.text)}</li>`).join("")}</ul>`]);
+  TASK_FIELDS.forEach(([f,l])=>{const v=k[f];if(v!=null&&v!=="")fields.push([l,esc(f==="assignee"?prettyWho(v,k):v)])});
+  if(k.fcrAgent!=null||k.fcrClient!=null)fields.push(["FCR",esc([k.fcrAgent!=null?`Agent ${k.fcrAgent?"yes":"no"}`:"",k.fcrClient!=null?`Client ${k.fcrClient?"yes":"no"}`:""].filter(Boolean).join(" · "))]);
+  if(k.closed)fields.push(["Closed",esc(stampEt(k.closed,k.at))]);
+  return `<div class="task"><div class="thead"><a class="tid" href="${esc(wiraUrl(k.id))}" target="_blank" rel="noopener">${esc(k.id)} ↗</a>${k.cat?`<span class="tcat">${esc(k.cat)}</span>`:""}${k.status?`<span>${esc(capFirst(k.status))}${k.sub?" · "+esc(k.sub):""}</span>`:""}<span>· ${esc(capFirst(whenTask(k)))}</span>${taskTags(k,first).map(x=>`<span class="ttag">${esc(x)}</span>`).join("")}</div>
+    <div class="ttitle">${esc(k.title||"Untitled")}</div><dl class="tfields">${fields.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${b}</dd>`).join("")}</dl></div>`;
+}
+function renderTasks(){
+  const legs=legsOfDoc(form),list=validTasks(form.tasks),run=!!(taskRun&&taskRun.key===caseKey());
+  $("#tasksWrap").hidden=!legs.length&&!list;
+  if($("#tasksWrap").hidden)return;
+  const first=(agentName()||"Agent").split(" ")[0],can=!!(mcp&&legs.length);
+  const mine=list?list.filter(k=>k.mine).length:0;
+  $("#tasksSum").textContent=list&&list.length?`${list.length} task${list.length===1?"":"s"}`+(mine?` · ${mine} by ${first}`:""):"";
+  const btn=label=>can?`<button type="button" class="btn small" id="taskFind"${run?" disabled":""}>${run?"Checking WIRA…":label}</button>`:"";
+  if(list&&list.length){$("#tasksPanel").innerHTML=list.map(taskHtml).join("")+(taskNote||can?`<div class="tnone" style="border-top:1px solid var(--line)"><span>${esc(taskNote)}</span>${btn("Check again")}</div>`:"");return}
+  $("#tasksPanel").innerHTML=`<div class="tnone"><span>${esc(taskNote||(run?"":list?"No linked task":"Not checked yet"))}</span>${btn(list?"Check again":"Find tasks")}</div>`;
+}
+$("#tasksPanel").addEventListener("click",e=>{if(e.target.closest("#taskFind"))findTasks()});
+$("#callChg").addEventListener("click",()=>{callOpen=true;renderSteps()});
+$("#chainPanel").addEventListener("click",e=>{if(e.target.closest("[data-hidlegs]")){showHidden=!showHidden;renderChain();return}
+  const v=e.target.closest("[data-lv]");if(v){listenView=v.dataset.lv;renderChain();return}
+  if(e.target.closest("[data-txretry]")){txNote="";renderChain()}});
+/* query WIRA for a set of cases [{key, code, legs:[{id,t0,t1}], ag}] → Map key → task docs */
+async function fetchTasks(cases,title){
+  const o=TASKS,out=new Map();cases=cases.filter(c=>c.legs&&c.legs.length);if(!cases.length)return out;
+  let from=null,to=null;cases.forEach(c=>{const [a,b]=taskDays(c.legs,o);if(!from||a<from)from=a;if(!to||b>to)to=b});
+  const codes=[...new Set(cases.map(c=>c.code).filter(validCode))].sort(),creators=[...new Set(cases.flatMap(c=>c.ag?c.ag.creators:[]))].sort();
+  let scan=[];
+  if(codes.length)scan=scan.concat((await ldRowsBy((f,t,v)=>taskScanConfig(o,"wira_tasks_restaurant_unique_code",f,t,v),from,to,codes,title+" · tasks")).rows);
+  if(creators.length)scan=scan.concat((await ldRowsBy((f,t,v)=>taskScanConfig(o,"wira_tasks_task_created_by",f,t,v),from,to,creators,title+" · tasks by agent")).rows);
+  const rows=taskRows(scan),links=new Map(),need=new Set();
+  cases.forEach(c=>{const l=linkTasks(c,rows,c.ag,o);links.set(c.key,l);l.forEach(x=>need.add(x.id))});
+  const detail=new Map(),ids=[...need];
+  for(let i=0;i<ids.length;i+=o.chunk){(await ldQuery(taskDetailConfig(o,from,to,ids.slice(i,i+o.chunk)),title+" · task details")).forEach(r=>{const id=String(r.wira_tasks_wira_task_id||"");if(id&&!detail.has(id))detail.set(id,r)})}
+  cases.forEach(c=>out.set(c.key,links.get(c.key).filter(l=>detail.has(l.id)).map(l=>taskDoc(detail.get(l.id),l,c.ag,o))));
+  return out;
+}
+async function findTasks(){
+  const key=caseKey(),legs=legsOfDoc(form);if(taskRun||!mcp||!legs.length)return;
+  taskRun={key};taskNote="";renderTasks();
+  try{
+    const m=await fetchTasks([{key:key||"draft",code:form.restaurantId.trim().toUpperCase(),legs,ag:rosterAgent(agentName())}],"QA Desk · "+(form.restaurantId||"call"));
+    const tasks=m.get(key||"draft")||[],now=new Date().toISOString();
+    if(caseKey()===key){form.tasks=tasks;form.tasksAt=now;saveDraft()}
+    if(db&&form.queueId&&key===form.queueId){try{await db.collection("queue").doc(form.queueId).update({tasks,tasksAt:now})}catch(e){}}
+    if(db&&key&&key===form.id){try{await db.collection("audits").doc(form.id).update({tasks,tasksAt:now})}catch(e){}}
+  }catch(e){taskNote=pullErr(e,"Try again")}
+  finally{taskRun=null;renderTasks();renderAi()}
+}
+
+/* ---------- SCORE: Slack threads where the team coordinated the case ---------- */
+let slackRun=null, slackNote="";
+const SLACK="Slack";
+function etWall(ms){if(!ET_FMT)return ms-4*36e5;const p={};ET_FMT.formatToParts(new Date(ms)).forEach(x=>p[x.type]=x.value);return Date.UTC(+p.year,+p.month-1,+p.day,(+p.hour)%24,+p.minute,+p.second)}
+function etToUtcMs(wall){let g=wall+4*36e5;for(let i=0;i<2;i++)g+=wall-etWall(g);return g}
+function payloadText(res,key){let p=res&&res.payload;if(typeof p==="string"){try{p=JSON.parse(p)}catch(e){return p}}if(p&&typeof p==="object"){const v=p[key]??p.result??p.text;return typeof v==="string"?v:JSON.stringify(v||"")}return ""}
+/* Slack search results come back as text blocks: "Channel: #x (ID: C…)", "From: Name <email> …", "Message_ts: …", "Reply count: …", "Permalink: [link](…)", "Text: …" */
+function parseSlackSearch(txt){return String(txt||"").split(/###\s*Result\s+\d+\s+of\s+\d+/).slice(1).map(b=>{const g=re=>{const m=b.match(re);return m?m[1].trim():""};
+  const url=g(/Permalink:\s*\[[^\]]*\]\(([^)]+)\)/),tts=(url.match(/thread_ts=([\d.]+)/)||[])[1];
+  return {channel:g(/Channel:\s*#?([^\n(]+?)\s*\(ID:/),channelId:g(/Channel:[^\n]*\(ID:\s*([A-Z0-9]+)\)/),author:g(/From:\s*([^<\n(]+)/),ts:g(/Message_ts:\s*([\d.]+)/),
+    threadTs:tts||g(/Message_ts:\s*([\d.]+)/),replies:Number(g(/Reply count:\s*(\d+)/))||0,url:url.replace(/\\\//g,"/"),text:g(/Text:\s*\n?([\s\S]*)$/).replace(/\n+-{3,}\s*$/,"")}}).filter(r=>r.channelId&&r.threadTs)}
+function parseSlackThread(txt){const t=String(txt||"").replace(/^THREAD:\s*/,""),cut=t.indexOf("\n\n> ");const head=cut<0?t:t.slice(0,cut),rest=cut<0?"":t.slice(cut+2);
+  const hm=head.match(/^([\s\S]*?)\s*\[([^\]<]+?)\s*(?:<[^>]*>)?\]\s*$/);const out={text:capText(hm?hm[1]:head,700),author:hm?hm[2].trim():"",replies:[]};
+  rest.split(/\n(?=> )/).forEach(x=>{const m=x.replace(/^> /,"").match(/^([^<:\n]+?)\s*(?:<[^>]*>)?:\s*([\s\S]*)$/);if(m)out.replies.push({who:m[1].trim(),text:capText(m[2],500)})});
+  out.replies=out.replies.filter(r=>r.text.trim()).slice(0,30);return out}
+const slackClean=s=>String(s||"").replace(/<!subteam\^[A-Z0-9]+>/g,"@team").replace(/<@[A-Z0-9]+\|([^>]+)>/g,"@$1").replace(/<(https?:[^|>]+)\|([^>]+)>/g,"$2").replace(/<(https?:[^>]+)>/g,"$1");
+async function findSlack(){
+  const key=caseKey(),c=validChain(form.chain);if(slackRun||!mcp||!c)return;
+  const lc=liveChain(c),t0=Date.parse(lc.legs[0].at+"Z"),last=lc.legs[lc.legs.length-1],t1=Date.parse(last.at+"Z")+(Number(last.sec)||0)*1000;
+  const after=String(Math.floor(etToUtcMs(t0-2*36e5)/1000)),before=String(Math.floor(etToUtcMs(t1+8*36e5)/1000));
+  const team=(form.type==="case"&&form.team.length?form.team.map(t=>t.name):[agentName()]).filter(n=>n&&!/^SA pool/.test(n));
+  const firsts=team.map(n=>n.split(" ")[0].toLowerCase());
+  slackRun={key};slackNote="";renderSlack();
+  try{
+    const kws=[[form.restaurantId.trim().toUpperCase()].filter(Boolean),form.restaurantName?['"'+form.restaurantName.replace(/"/g,"")+'"']:[]].filter(k=>k.length);
+    const hits=new Map();
+    for(const keywords of kws){const res=await mcp.callTool(SLACK,"slack_search_public",{keywords,after,before,include_context:false,response_format:"detailed",limit:20});
+      parseSlackSearch(payloadText(res,"results")).forEach(r=>{if(/^proj-flag|alert/i.test(r.channel))return;const k=r.channelId+"/"+r.threadTs;if(!hits.has(k))hits.set(k,r)})}
+    const cand=[...hits.values()].sort((a,b)=>b.replies-a.replies).slice(0,8),threads=[];
+    for(const r of cand){let th={text:capText(r.text,700),author:r.author,replies:[]};
+      if(r.replies>0||r.threadTs!==r.ts){try{th=parseSlackThread(payloadText(await mcp.callTool(SLACK,"slack_read_thread",{channel_id:r.channelId,message_ts:r.threadTs,response_format:"concise"}),"messages"))}catch(e){if(LD_ACCESS.includes(e&&e.code))throw e}}
+      const who=[th.author].concat(th.replies.map(x=>x.who)).map(x=>String(x).toLowerCase()),blob=(th.text+" "+th.replies.map(x=>x.text).join(" ")).toLowerCase();
+      const teamIn=firsts.filter(f=>who.some(w=>w.startsWith(f))||blob.includes("@"+f)).length;
+      threads.push({channel:r.channel,channelId:r.channelId,ts:r.threadTs,url:r.url,author:th.author,text:th.text,replies:th.replies,team:teamIn,
+        at:new Date(etWall(Number(r.threadTs)*1000)).toISOString().slice(0,19)})}
+    const keep=threads.filter(t=>t.team>0||/operation|support|escalat/i.test(t.channel)).sort((a,b)=>b.team-a.team||String(a.at).localeCompare(String(b.at))).slice(0,5);
+    const now=new Date().toISOString();
+    if(caseKey()===key){form.slack=keep;form.slackAt=now;saveDraft()}
+    const ids=new Set([form.queueId].concat(form.caseIds).filter(Boolean));
+    if(db&&caseKey()===key)for(const qid of ids)if(queue.some(q=>q.id===qid)){try{await db.collection("queue").doc(qid).update({slack:keep,slackAt:now})}catch(e){}}
+    if(db&&key&&audits.some(a=>a.id===key)){try{await db.collection("audits").doc(key).update({slack:keep,slackAt:now})}catch(e){}}
+  }catch(e){const c=e&&e.code;slackNote=c==="server_not_connected"?"Add the Slack connector in claude.ai Settings → Connectors, then try again.":c==="not_in_manifest"||c==="consent_required"?"Slack is off for this page. Allow it in the page's permissions, then try again.":
+    c==="needs_reauth"?"Reconnect Slack in claude.ai Settings → Connectors, then try again.":c==="tool_error"?"Slack refused the search"+(e.message?": "+String(e.message).slice(0,120):"."):"Couldn't reach Slack. Try again."}
+  finally{slackRun=null;renderSlack();renderAi()}
+}
+function slackHtml(t){const team=(form.type==="case"&&form.team.length?form.team.map(x=>x.name):[agentName()]).map(n=>n.split(" ")[0].toLowerCase());
+  const mark=w=>team.some(f=>String(w).toLowerCase().startsWith(f));
+  return `<div class="task"><div class="thead"><a class="tid" href="${esc(safeUrl(t.url)||"#")}" target="_blank" rel="noopener">#${esc(t.channel)} ↗</a><span>${esc(stampEt(t.at,form.callDate))}</span>${t.replies.length?`<span>· ${t.replies.length} repl${t.replies.length===1?"y":"ies"}</span>`:""}</div>
+    <div class="ttitle" style="font-weight:500"><b>${esc(t.author||"Someone")}</b> ${esc(slackClean(t.text))}</div>
+    ${t.replies.length?`<ul class="cmts">${t.replies.map(r=>`<li${mark(r.who)?' class="me"':""}><b>${esc(r.who)}</b> ${esc(slackClean(r.text))}</li>`).join("")}</ul>`:""}</div>`}
+function renderSlack(){
+  const w=$("#slackWrap"),c=validChain(form.chain),list=validSlack(form.slack),run=!!(slackRun&&slackRun.key===caseKey());
+  w.hidden=!(form.type==="case"||(list&&list.length));if(w.hidden)return;
+  $("#slackSum").textContent=list&&list.length?`${list.length} thread${list.length===1?"":"s"}`:"";
+  const can=!!(mcp&&c),btn=l=>can?`<button type="button" class="btn small" id="slackFind"${run?" disabled":""}>${run?"Searching Slack…":l}</button>`:"";
+  $("#slackPanel").innerHTML=(list&&list.length?list.map(slackHtml).join(""):"")+`<div class="tnone"${list&&list.length?' style="border-top:1px solid var(--line)"':""}><span>${esc(slackNote||(run?"":list?(list.length?"":"No thread found"):"Not checked yet"))}</span>${btn(list?"Check again":"Find threads")}</div>`;
+}
+$("#slackPanel").addEventListener("click",e=>{if(e.target.closest("#slackFind"))findSlack()});
+
+/* ---------- SCORE: what Claude got ---------- */
+let aiRun=null, aiNote="", sampleOk=true;
+const ET_L=L(ERROR_TYPES), YN_L=L(YESNO), FA_ALL={...FA_L}, FC_ALL={...FC_L};
+const CMP=[["rootCause","Root cause","text"],["faultAgent","Fault · agent said","enum",FA_ALL],["faultCorrect","Fault · actual","enum",FC_ALL],["errorType","Error type","enum",ET_L],
+  ["singleTouch","Resolved without another team","enum",YN_L],["actionTaken","Action taken","text"],["promised","Promised to client","text"],["followUpOwner","Follow-up owner","text"]];
+function aiLegs(){const c=validChain(form.chain);
+  if(c)return liveChain(c).legs.filter(l=>l.id).map(l=>({id:String(l.id),at:l.at,sec:l.sec,who:l.who,graded:isGraded(l),dir:l.dir,party:l.party}));
+  const id=form.callId.trim();if(!id)return [];
+  return [{id,at:form.callDate&&form.callTime?form.callDate+"T"+form.callTime+":00":"",sec:form.durationSec,who:agentName(),graded:true,dir:"in",party:"caller"}]}
+function matchOf(k){const row=CMP.find(r=>r[0]===k),A=form.aiFacts||{},you=String(form.facts[k]||"").trim(),cl=String(A[k]||"").trim();
+  if(row[2]==="enum")return you&&cl?{v:you===cl?"same":"diff",auto:true}:{v:"",auto:true};
+  return {v:form.factsMatch[k]||"",auto:false}}
+function aiTally(){let n=0,s=0;CMP.forEach(([k])=>{const m=matchOf(k);if(m.v){n++;if(m.v==="same")s++}});return {n,s}}
+function cmpVal(row,v,isYou){if(!v)return `<span class="nil">–</span>`;return esc(row[2]==="enum"?(row[3][v]||v):v)}
+const PST_L={kept:"Kept",not_kept:"Not kept",cant_tell:"Can't tell"};
+function factById(A,id){const F=A.facts;if(!F)return null;return F.timeline.find(t=>t.id===id)||F.promises.find(p=>p.id===id)||null}
+function citeHtml(A,k){const ids=(A.cites&&A.cites[k])||[];if(!ids.length)return "";
+  return `<span class="cites">${ids.map(id=>{const f=factById(A,id);return `<a href="#fact-${esc(id)}" class="cite" title="${esc(f?(f.who?f.who+": ":"")+f.what:"")}">${esc(id)}</a>`}).join("")}</span>`}
+function factsHtml(A){const F=A.facts;if(!F||!F.timeline)return "";
+  const tl=F.timeline.map(t=>`<li id="fact-${esc(t.id)}" class="fact ${t.kind}"><span class="fid num">${esc(t.id)}</span><span class="fwhen num">${esc(t.when)}</span><span class="fsrc">${esc(t.src)}</span><span class="fwhat"><b>${esc(t.who)}</b> ${esc(t.what)}</span></li>`).join("");
+  const pr=F.promises.length?F.promises.map(p=>`<li id="fact-${esc(p.id)}" class="promise"><span class="fid num">${esc(p.id)}</span><span class="fwhat"><b>${esc(p.who)}</b> → ${esc(p.to)}: ${esc(p.what)}${p.by?` <span class="hint">by ${esc(p.by)}</span>`:""}<span class="hint"> · ${esc(p.src)}</span>${p.why?`<span class="why">${esc(p.why)}${(p.cites||[]).length?" · "+p.cites.map(esc).join(", "):""}</span>`:""}</span><span class="pst ${esc(p.status)}">${esc(PST_L[p.status]||"")}</span></li>`).join(""):`<li class="promise none">No promises were made on the calls, tasks or Slack.</li>`;
+  return `<div class="factrec"><div class="fhd"><span class="lbl-sm">Facts</span></div><ol class="flist">${tl}</ol>
+    <div class="fhd"><span class="lbl-sm">Promises</span></div><ol class="flist">${pr}</ol></div>`}
+function renderAi(){
+  const p=$("#aiPanel"),A=validAi(form.aiFacts),run=!!(aiRun&&aiRun.key===caseKey()),can=!!(sampleFn&&sampleOk&&mcp&&aiLegs().length);
+  p.hidden=!A&&!run&&!can&&!aiNote;if(p.hidden){p.innerHTML="";return}
+  const meta=A?[A.at?"Read "+stampOf(A.at):"",A.calls?`${A.calls} call${A.calls===1?"":"s"}`:"",A.tasks!=null?`${A.tasks} task${A.tasks===1?"":"s"}`:""].filter(Boolean).join(" · "):"";
+  if(run){p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row"><span class="hint">${esc(aiRun.step)}</span><button type="button" class="btn small" id="aiStop">Stop</button></div></div>`;return}
+  if(!A){p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row">${aiNote?`<span class="hint">${esc(aiNote)}</span>`:""}${can?`<button type="button" class="btn small primary" id="aiRead">Read the calls</button>`:""}</div></div>`;return}
+  if(!form.aiShown){p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row"><span class="hint">${esc(meta)}</span><button type="button" class="btn small primary" id="aiShow">Show</button></div></div>`;return}
+  const t=aiTally();
+  const rows=CMP.map(row=>{const [k,lab,kind]=row,m=matchOf(k);
+    const mt=kind==="enum"?(m.v?`<span class="mauto ${m.v}">${m.v==="same"?"Same":"Different"}</span>`:""):
+      `<button type="button" class="mchip same" data-m="${k}" data-v="same" aria-pressed="${m.v==="same"}">Same</button><button type="button" class="mchip diff" data-m="${k}" data-v="diff" aria-pressed="${m.v==="diff"}">Different</button>`;
+    const why=(k==="faultCorrect"&&A.faultWhy?`<span class="why">${esc(A.faultWhy)}</span>`:"")+citeHtml(A,k);
+    return `<div class="cmprow"><span class="lab">${esc(lab)}</span><div class="you">${cmpVal(row,String(form.facts[k]||"").trim(),true)}</div><div class="cl">${cmpVal(row,String(A[k]||"").trim(),false)}${why}</div><div class="mt">${mt}</div></div>`}).join("");
+  p.innerHTML=`<div class="aihead"><h3>What Claude got</h3><div class="row">${t.n?`<span class="hint">${t.s} of ${t.n} match</span>`:""}<button type="button" class="btn small" id="aiHide">Hide</button></div></div>
+    ${factsHtml(A)}
+    ${A.summary?`<div class="aisum">${A.facts?`<span class="lbl-sm sumlbl">Conclusions</span>`:""}${esc(A.summary)}</div>`:""}
+    <div class="cmprow h"><span></span><span>You</span><span>Claude</span><span></span></div>${rows}
+    ${A.gaps?`<div class="aigaps"><span class="lbl-sm">Couldn't tell</span><div>${esc(A.gaps)}</div></div>`:""}
+    <div class="aifoot"><span>${esc(meta)}${aiNote?" · "+esc(aiNote):""}</span>${can?`<button type="button" class="btn small" id="aiRead">Read again</button>`:""}</div>`;
+}
+$("#aiPanel").addEventListener("click",e=>{
+  if(e.target.closest("#aiRead")){readCalls();return}
+  if(e.target.closest("#aiStop")){if(aiRun&&aiRun.ctl)aiRun.ctl.abort();return}
+  if(e.target.closest("#aiShow")){form.aiShown=true;saveDraft();renderAi();return}
+  if(e.target.closest("#aiHide")){form.aiShown=false;saveDraft();renderAi();return}
+  const m=e.target.closest("[data-m]");if(m){const k=m.dataset.m,v=m.dataset.v;if(form.factsMatch[k]===v)delete form.factsMatch[k];else form.factsMatch[k]=v;saveDraft();renderAi()}
+});
+function aiErr(e){const c=e&&e.code;
+  if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c)){sampleOk=false;return "Claude can't read calls in this view."}
+  return c==="rate_limited"?"Claude is busy or your usage limit is reached. Try again later.":c==="session_expired"?"Sign in to claude.ai again, then try.":
+    c==="refused"?"Claude declined to read these calls.":c==="prompt_too_large"?"These calls are too long to read in one go.":
+    c==="invalid_json"||c==="empty_completion"||c==="ai_shape"?"Claude's answer came back in the wrong shape. Try again.":c==="no_text"?"No transcripts for these calls yet.":
+    c==="upstream_error"?"Claude didn't finish. Try again.":
+    LD_ACCESS.includes(c)||["tool_error","ld_failed","ld_timeout","ld_text","ld_shape","server_unavailable"].includes(c)?pullErr(e,"Try again"):"Claude didn't finish. Try again."}
+async function readCalls(){
+  const key=caseKey(),legs=aiLegs();if(aiRun||!sampleFn||!mcp||!legs.length)return;
+  const ctl=new AbortController();aiRun={key,ctl,step:"Getting transcripts…"};aiNote="";renderAi();
+  try{
+    const ts=legs.map(l=>ldTs(l.at)).filter(x=>!isNaN(x)),from=ts.length?etDay(Math.min(...ts)):form.callDate,to=ts.length?etDay(Math.max(...ts)):form.callDate;
+    if(!from)throw {code:"no_text"};
+    await fetchTx(legs);
+    if(ctl.signal.aborted)return;
+    const tx=txCache;
+    const withText=legs.filter(l=>(tx.get(l.id)||"").trim()).length;if(!withText)throw {code:"no_text"};
+    const tasks=validTasks(form.tasks)||[];
+    const input={agent:agentName(),kind:form.kind||(form.type==="mgr"?"MGR":"CL"),restaurant:form.restaurantName,code:form.restaurantId,date:form.callDate,
+      legs:legs.map(l=>Object.assign({},l,{text:tx.get(l.id)||""})),tasks,team:form.type==="case"?form.team.map(t=>t.name):[],slack:validSlack(form.slack)||[]};
+    aiRun.step="1 of 2 · Writing down the facts…";renderAi();
+    const F=cleanFacts(await sampleFn.json(factsPrompt(input),{signal:ctl.signal,modelTier:"default"}),input.legs);if(!F)throw {code:"ai_shape"};
+    if(caseKey()===key&&listenView==="tx")renderChain();
+    aiRun.step="2 of 2 · Drawing conclusions from the facts…";renderAi();
+    const f=cleanAnalysis(await sampleFn.json(analysisPrompt(input,F),{signal:ctl.signal,modelTier:"default"}),F);if(!f)throw {code:"ai_shape"};
+    const ai=Object.assign(f,{v:FACTS2_V,at:new Date().toISOString(),calls:legs.length,withText,tasks:tasks.length,by:myId||null});
+    if(caseKey()===key){form.aiFacts=ai;form.aiShown=true;saveDraft()}
+    if(db&&key&&key===form.queueId){try{await db.collection("queue").doc(key).update({aiFacts:ai})}catch(e){}}
+    else if(db&&key&&queue.some(q=>q.id===key)){try{await db.collection("queue").doc(key).update({aiFacts:ai})}catch(e){}}
+    if(db&&key&&audits.some(a=>a.id===key)){try{await db.collection("audits").doc(key).update({aiFacts:ai})}catch(e){}}
+  }catch(e){if(!(e&&e.code==="cancelled"))aiNote=aiErr(e)}
+  finally{aiRun=null;renderAi();if(listenView==="tx")renderChain()}
+}
+
+/* ---------- SCORE: rubric ---------- */
+function flatItems(){return itemsOf(CUR,form.type)}
+function reasonRequired(id){const s=form.scores[id];if(s==null)return false;return alwaysFor(form.type).includes(id)||(s!=="na"&&s<3)}
+function noteVisible(id){return alwaysFor(form.type).includes(id)||reasonRequired(id)||openNotes.has(id)||!!(form.notes[id]||"").trim()}
+function noteHtml(id){
+  if(!noteVisible(id))return `<button type="button" class="notebtn" data-addnote="${id}">+ Note</button>`;
+  const need=reasonRequired(id)&&!(form.notes[id]||"").trim();
+  return `<textarea class="reason${need?" need":""}" data-note="${id}" id="note-${id}" rows="1" placeholder="Why this score?">${esc(form.notes[id]||"")}</textarea>`;
+}
+function critHtml(it,i){const s=form.scores[it.id];
+  const opts=[0,1,2,3].map(v=>`<button type="button" class="opt" data-id="${it.id}" data-v="${v}" aria-pressed="${s===v}"><b>${v}</b><span>${esc(it.lv[v])}</span></button>`).join("")+
+    `<button type="button" class="opt" data-id="${it.id}" data-v="na" aria-pressed="${s==="na"}"><b>NA</b><span>${esc(it.na)}</span></button>`;
+  return `<div class="crit${i===active?" active":""}${isClosed(it,i)?" closed":""}" data-i="${i}" id="crit-${it.id}"><div class="head"><span class="cid">${it.id}</span><span class="ttl">${esc(it.label)}</span><span class="wt">${pctW(it.w)}</span></div><div class="fold" id="fold-${it.id}">${foldHtml(it.id)}</div><div class="opts">${opts}</div><div class="notewrap" id="nw-${it.id}">${noteHtml(it.id)}</div></div>`;
+}
+/* a scored criterion with its reason in folds to one line unless it's the one you're on */
+function isClosed(it,i){return i!==active&&!needsWork(it)&&!openNotes.has(it.id)}
+function foldHtml(id){const s=form.scores[id];if(s==null)return "";const n=(form.notes[id]||"").trim();
+  return `<span class="sbadge v${s}">${s==="na"?"NA":s}</span><span class="rs">${esc(n)}</span>`}
+function renderRubric(){let idx=0;
+  $("#rubric").innerHTML=rub(CUR,form.type).map((sec,si)=>{const w=sec.items.reduce((a,i)=>a+i.w,0);
+    return `<div class="qsec rsec" data-sec="${si}" style="margin-top:14px"><div class="qhd"><span class="qnum"></span><span class="qttl">${esc(sec.name)}</span><span class="qans" data-secans="${si}">${pctW(w)} of score</span></div><div>`+sec.items.map(it=>critHtml(it,idx++)).join("")+`</div></div>`}).join("");
+  renderSteps();
+}
+function updateCrit(id){
+  const el=document.getElementById("crit-"+id);if(!el)return;const s=form.scores[id];
+  el.querySelectorAll(".opt").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v==="na"?s==="na":s===Number(b.dataset.v))));
+  const nw=document.getElementById("nw-"+id),ta=nw.querySelector("textarea");
+  if(noteVisible(id)&&ta)ta.classList.toggle("need",reasonRequired(id)&&!ta.value.trim());else nw.innerHTML=noteHtml(id);
+  const f=document.getElementById("fold-"+id);if(f)f.innerHTML=foldHtml(id);
+}
+function paintActive(){const items=flatItems();$("#rubric").querySelectorAll(".crit").forEach(c=>{const i=Number(c.dataset.i);c.classList.toggle("active",i===active);c.classList.toggle("closed",!!items[i]&&isClosed(items[i],i))})}
+function focusNote(id){if(!document.getElementById("note-"+id)){openNotes.add(id);updateCrit(id)}const t=document.getElementById("note-"+id);if(t){t.focus({preventScroll:true});t.scrollIntoView({block:"nearest",behavior:"smooth"})}}
+function needsWork(it){return form.scores[it.id]==null||(reasonRequired(it.id)&&!(form.notes[it.id]||"").trim())}
+function gotoNext(){const items=flatItems();let n=items.findIndex((it,i)=>i>active&&needsWork(it));if(n<0)n=items.findIndex(needsWork);if(n<0)return;active=n;paintActive();
+  document.getElementById("crit-"+items[n].id)?.scrollIntoView({block:"nearest",behavior:"smooth"})}
+function setScore(id,v,fromKey){
+  form.scores[id]=(!fromKey&&form.scores[id]===v)?undefined:v; if(form.scores[id]===undefined)delete form.scores[id];
+  saveDraft();updateCrit(id);renderBoard();
+  if(form.scores[id]!==undefined&&reasonRequired(id)&&!(form.notes[id]||"").trim())focusNote(id);
+  else if(!fromKey)paintActive();
+  else if(fromKey)gotoNext();
+}
+$("#rubric").addEventListener("click",e=>{
+  const o=e.target.closest(".opt");if(o){active=Number(o.closest(".crit").dataset.i);paintActive();setScore(o.dataset.id,o.dataset.v==="na"?"na":Number(o.dataset.v),false);return}
+  const a=e.target.closest("[data-addnote]");if(a){focusNote(a.dataset.addnote);return}
+  const c=e.target.closest(".crit");if(c&&!e.target.closest("textarea")){active=Number(c.dataset.i);paintActive()}
+});
+$("#rubric").addEventListener("input",e=>{const t=e.target.closest("[data-note]");if(!t)return;form.notes[t.dataset.note]=t.value;{const f=document.getElementById("fold-"+t.dataset.note);if(f)f.innerHTML=foldHtml(t.dataset.note)}
+  t.classList.toggle("need",reasonRequired(t.dataset.note)&&!t.value.trim());saveDraft();renderBoard()});
+$("#rubric").addEventListener("focusin",e=>{const c=e.target.closest(".crit");if(c){active=Number(c.dataset.i);paintActive()}});
+$("#rubric").addEventListener("keydown",e=>{const t=e.target.closest("[data-note]");if(!t)return;
+  if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();t.blur();gotoNext()}else if(e.key==="Escape"){t.blur()}});
+document.addEventListener("keydown",e=>{
+  if(tab!=="score")return;const t=e.target;if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable))return;
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  const items=flatItems(),it=items[active];if(!it)return;
+  let v=null;if(["0","1","2","3"].includes(e.key))v=Number(e.key);else if(e.key==="n"||e.key==="N")v="na";
+  if(v!==null){e.preventDefault();setScore(it.id,v,true);return}
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();active=Math.max(0,Math.min(items.length-1,active+(e.key==="ArrowDown"?1:-1)));paintActive();
+    document.getElementById("crit-"+items[active].id)?.scrollIntoView({block:"nearest",behavior:"smooth"})}
+});
+
+/* ---------- SCORE: board & save ---------- */
+function targetWeek(){const q=form.queueId&&queue.find(x=>x.id===form.queueId);if(q&&q.week)return q.week;if(form.callDate)return iso(mondayOf(parseIso(form.callDate)));return form.week||null}
+function missingList(){
+  const m=[],F=form.facts,items=flatItems(),c=calc(CUR,form.type,form.scores);
+  if(!agentName())m.push([form.agent==="__ae"?"AE name":"Agent",form.agent?"otherAgent":"f-agent"]);
+  if(!safeUrl(form.link))m.push(["Call link","fLink"]);
+  if(!form.restaurantId.trim())m.push(["Restaurant ID","fRid"]);
+  if(!form.callDate)m.push(["Call date","fDate"]);
+  if(!form.reviewer.trim())m.push(["Reviewer","fReviewer"]);
+  if(!form.gut)m.push(["Gut call","f-gut"]);
+  if(!F.rootCause.trim())m.push(["Root cause","fRootCause"]);
+  if(!F.faultCorrect)m.push(["Fault: actual","f-faultCorrect"]);
+  if(form.type==="case"){if(!form.team.some(t=>t.role==="owner"))m.push(["Case owner","f-team"])}
+  else{if(F.faultCorrect!=="no_error"&&!F.faultAgent)m.push(["Fault: agent said","f-faultAgent"]);
+    if(!F.singleTouch)m.push(["Resolved without another team","f-singleTouch"])}
+  if(!F.sources.length&&!F.sourcesOther.trim())m.push(["Checked to know this","f-sources"]);
+  const uns=items.filter(it=>form.scores[it.id]==null);
+  if(uns.length)m.push([uns.length+" score"+(uns.length>1?"s":""),"crit-"+uns[0].id]);
+  const nr=items.filter(it=>reasonRequired(it.id)&&!(form.notes[it.id]||"").trim());
+  if(nr.length)m.push([nr.length+" reason"+(nr.length>1?"s":""),"note-"+nr[0].id]);
+  if(c.complete&&c.total==null)m.push(["A scored criterion","crit-"+items[0].id]);
+  return m;
+}
+function canSave(){return !!db&&dbReady&&!missingList().length}
+function jumpTo(id){
+  if(id.startsWith("note-")){focusNote(id.slice(5));return}
+  const el=document.getElementById(id);if(!el)return;
+  if(el.closest("#s-call")&&!callOpen){callOpen=true;renderSteps()}
+  if(id.startsWith("crit-")){active=Number(el.dataset.i);paintActive();if(document.activeElement)document.activeElement.blur()}
+  el.scrollIntoView({block:"center",behavior:"smooth"});
+  const f=el.matches("input,textarea,select")?el:el.querySelector("input,textarea,select,button.chip");
+  if(f&&!id.startsWith("crit-"))f.focus({preventScroll:true});
+  const box=el.matches("input,textarea,select")?el:el;box.classList.remove("flash");void box.offsetWidth;box.classList.add("flash");
+}
+function renderBoard(){
+  const c=calc(CUR,form.type,form.scores),show=c.total,miss=missingList();
+  $("#bigScore").innerHTML=(show==null?"–":fmt(show))+"<small>%</small>";
+  $("#bigScore").style.color=c.complete&&show!=null?bandColor(show):"var(--ink)";
+  $("#boardFor").textContent=(form.id?"Editing · ":form.replaces?"Re-scoring · ":"")+(agentName()||"New audit");
+  const sub=[];
+  if(form.gut)sub.push(`<span class="pill none">Gut: ${esc(GUT_L[form.gut])}</span>`);
+  sub.push(`<span>${c.complete&&c.total!=null?"Final score":"Running score"}</span>`);
+  $("#boardSub").innerHTML=sub.join("");
+  $("#scoredCount").textContent=c.done+" of "+c.n+" scored"+(c.na?` · ${c.na} NA`:"");
+  $("#progBar").style.width=(c.done/c.n*100)+"%";
+  $("#secRows").innerHTML=c.secs.map(s=>`<div class="secrow"><span>${esc(s.name)}</span><span class="num">${s.pct==null?"–":fmt(s.pct)+"%"}</span><div class="bar"><i style="width:${s.pct??0}%"></i></div></div>`).join("");
+  const ok=canSave(),ready=!!db&&dbReady;
+  $("#saveBtn").disabled=!ready;$("#mbSave").disabled=!ready;
+  $("#saveBtn").classList.toggle("primary",ok);$("#mbSave").classList.toggle("primary",ok);
+  $("#saveBtn").textContent=$("#mbSave").textContent=form.id?"Update audit":"Save audit";
+  $("#mbScore").textContent=(show==null?"–":fmt(show))+"%";$("#mbCount").textContent=c.done+" of "+c.n+" scored";
+  const tw=targetWeek();
+  $("#saveHint").textContent=!db?"Saving isn't available in this view.":!dbReady?"Loading the audit log…":(!miss.length&&tw?"Files under "+weekLabel(tw):"");
+  renderSteps();
+}
+/* step headers: number the visible steps, mark the finished ones green, and show each step's answer at a glance */
+function renderSteps(){
+  const miss=new Set(missingList().map(m=>m[1])),F=form.facts,c=calc(CUR,form.type,form.scores);
+  const callDone=!["f-agent","otherAgent","fLink","fRid","fDate","fReviewer","f-gut"].some(k=>miss.has(k));
+  const factsDone=!["fRootCause","f-faultCorrect","f-faultAgent","f-singleTouch","f-sources","f-team"].some(k=>miss.has(k));
+  const set=(el,done,ans)=>{if(!el)return;el.classList.toggle("done",!!done);const a=el.querySelector(".qans");if(a&&ans!=null)a.textContent=ans};
+  const fold=callDone&&!callOpen;$("#s-call").classList.toggle("folded",fold);$("#callChg").hidden=!fold;
+  set($("#s-call"),callDone,[agentName()&&agentName().split(" ")[0],typeLabel(form.type),form.gut?"Gut: "+GUT_L[form.gut]:""].filter(Boolean).join(" · "));
+  const own=form.type==="case"&&form.team.find(t=>t.role==="owner");
+  set($("#s-facts"),factsDone,form.type==="case"?[own?"Owner: "+shortWho(own.name):"",F.faultCorrect?"Fault: "+FC_L[F.faultCorrect]:""].filter(Boolean).join(" · "):F.faultCorrect?`Fault: ${FA_L[F.faultAgent]||"–"} → ${FC_L[F.faultCorrect]}`:"");
+  set($("#s-take"),!!form.take.trim(),form.take.trim()?"Written":"Optional");$("#s-take").classList.toggle("opt",!form.take.trim());
+  const items=flatItems();
+  rub(CUR,form.type).forEach((sec,si)=>{const el=document.querySelector(`.rsec[data-sec="${si}"]`);if(!el)return;
+    const its=items.filter(it=>sec.items.some(x=>x.id===it.id)),left=its.filter(needsWork).length,p=c.secs[si]&&c.secs[si].pct;
+    set(el,!left,left?`${its.length-left} of ${its.length}`+(p!=null?` · ${fmt(p)}%`:""):(p!=null?fmt(p)+"%":"All NA"))});
+  let n=0;document.querySelectorAll("#steps .qsec").forEach(el=>{const q=el.querySelector(".qnum");if(!q)return;if(el.hidden){q.innerHTML="";return}q.innerHTML=`<span>${++n}</span>`});
+}
+function renderForm(){renderMeta();renderFacts();renderRubric();renderBoard()}
+
+async function saveAudit(){
+  if(db&&dbReady&&!canSave()){const m=missingList();if(m.length){jumpTo(m[0][1]);toast("Still to do: "+m[0][0]+(m.length>1?` + ${m.length-1} more`:""))}return}
+  if(!canSave())return;
+  const c=calc(CUR,form.type,form.scores),items=flatItems(),F=form.facts;
+  const id=form.id||newId("a"),existing=audits.find(a=>a.id===id),now=new Date().toISOString();
+  const rec={schema:2,rubric:CUR,week:targetWeek(),callDate:form.callDate,agent:agentName(),role:roleOf(),type:form.type,
+    link:safeUrl(form.link),restaurantId:form.restaurantId.trim().toUpperCase(),callId:form.callId.trim(),reviewer:form.reviewer.trim(),gut:form.gut,
+    scores:Object.fromEntries(items.map(it=>[it.id,form.scores[it.id]??null])),
+    notes:Object.fromEntries(items.map(it=>[it.id,(form.notes[it.id]||"").trim()]).filter(([k,v])=>v)),
+    facts:{rootCause:F.rootCause.trim(),faultAgent:F.faultCorrect==="no_error"&&!F.faultAgent?"":F.faultAgent,faultCorrect:F.faultCorrect,errorType:F.errorType,
+      actionTaken:F.actionTaken.trim(),promised:F.promised.trim(),followUpOwner:F.followUpOwner.trim(),singleTouch:F.singleTouch,sources:F.sources.slice(),sourcesOther:F.sourcesOther.trim()},
+    take:form.take.trim(),total:r1(c.total),sections:c.secs.map(s=>r1(s.pct)),
+    dims:{communication:r1(c.dims.communication),investigation:r1(c.dims.investigation),resolution:r1(c.dims.resolution)},naCount:c.na,
+    queueId:form.queueId||null,replaces:form.replaces||null,
+    kind:form.kind||"",source:form.source||(form.queueId?"paste":"manual"),restaurantName:form.restaurantName||"",callTime:form.callTime||"",durationSec:form.durationSec??null,chain:validChain(form.chain),
+    tasks:validTasks(form.tasks),tasksAt:form.tasksAt||null,aiFacts:validAi(form.aiFacts),factsMatch:validMatch(form.factsMatch),
+    team:form.type==="case"?validTeam(form.team):[],caseIds:form.type==="case"?form.caseIds.slice():[],slack:validSlack(form.slack),slackAt:form.slackAt||null,
+    createdAt:existing?.createdAt||now,updatedAt:now,by:existing?.by||myId||null,updatedBy:myId||null};
+  $("#saveBtn").disabled=true;$("#mbSave").disabled=true;
+  try{
+    await db.collection("audits").doc(id).set(rec);
+    for(const qid of new Set([form.queueId].concat(rec.caseIds).filter(Boolean)))if(queue.some(x=>x.id===qid)){try{await db.collection("queue").doc(qid).update({auditId:id,score:rec.total})}catch(e){}}
+    const keep={reviewer:form.reviewer,type:form.type};
+    const nextUp=nextQueued(rec.agent,rec.week,rec.queueId);
+    form=Object.assign(blankForm(),keep,AGENTS.includes(rec.agent)&&rec.role==="sa"?{agent:rec.agent}:{});openNotes=new Set();active=0;lastParsed={};
+    if(nextUp){loadQueueItem(nextUp,true);toast(`Saved ${fmt(rec.total)}% · next ${rec.agent} call loaded`)}
+    else{callOpen=true;saveDraft();renderForm();toast(`Saved · ${rec.agent} · ${fmt(rec.total)}% · ${weekLabel(rec.week)}`)}
+    renderAll();window.scrollTo({top:0,behavior:"smooth"});
+  }catch(e){
+    toast(e&&e.code==="invalid_argument"?"You don't have edit access to this audit log.":e&&e.code==="quota_exceeded"?"The audit log is full. Export, then delete old weeks.":"Couldn't save. Try again.");
+    renderBoard();
+  }
+}
+$("#saveBtn").onclick=saveAudit;$("#mbSave").onclick=saveAudit;
+let resetArm=false,resetT=null;
+$("#resetBtn").onclick=()=>{const dirty=Object.keys(form.scores).length||form.link||form.facts.rootCause;
+  if(!resetArm&&dirty){resetArm=true;$("#resetBtn").textContent="Confirm clear";clearTimeout(resetT);resetT=setTimeout(()=>{resetArm=false;$("#resetBtn").textContent="Clear"},3000);return}
+  resetArm=false;clearTimeout(resetT);$("#resetBtn").textContent="Clear";form=Object.assign(blankForm(),{reviewer:form.reviewer});openNotes=new Set();active=0;lastParsed={};callOpen=true;saveDraft();renderForm()};
+
+/* ---------- QUEUE ---------- */
+$("#qAgent").innerHTML=`<option value="">Detect from pasted text</option>`+AGENTS.map(a=>`<option>${esc(a)}</option>`).join("");
+$("#qType").innerHTML=`<option value="">Detect from pasted text</option>`+TYPES.map(t=>`<option value="${t.k}">${t.label}</option>`).join("");
+$("#qPaste").addEventListener("paste",e=>{
+  const html=e.clipboardData&&e.clipboardData.getData("text/html");if(!html)return;
+  const doc=new DOMParser().parseFromString(html,"text/html"),lines=[],seen=new Set();
+  let blocks;try{blocks=doc.querySelectorAll("tr, p, li, div:not(:has(div,p,li,tr))")}catch(err){blocks=doc.querySelectorAll("tr, p, li")}
+  (blocks.length?blocks:[doc.body]).forEach(b=>{
+    if(b.tagName!=="TR"&&b.closest("tr"))return;
+    const hrefs=[...b.querySelectorAll("a[href]")].map(a=>a.href).filter(h=>/^https?:/.test(h));
+    const cells=b.tagName==="TR"?[...b.children].map(c=>c.textContent.trim().replace(/\s+/g," ")):[b.textContent.trim().replace(/\s+/g," ")];
+    const text=cells.filter(Boolean).join("\t"),line=(hrefs[0]&&!text.includes(hrefs[0])?hrefs[0]+"\t":"")+text;
+    if(line.trim()&&!seen.has(line)){seen.add(line);lines.push(line)}
+  });
+  if(lines.some(l=>/https?:\/\//.test(l))){e.preventDefault();const ta=$("#qPaste");ta.value=(ta.value?ta.value+"\n":"")+lines.join("\n");parsePreview()}
+});
+function parseQueue(text){
+  const fixedA=$("#qAgent").value,fixedT=$("#qType").value;let cur=null;const out=[];
+  text.split(/\r?\n/).forEach(raw=>{
+    const line=raw.trim();if(!line)return;
+    const m=line.match(/https?:\/\/[^\s<>|"]+/),ag=detectAgent(line);
+    if(!m){if(ag)cur=ag;return}
+    const link=m[0].replace(/[),.;]+$/,""),rest=line.replace(m[0],"");
+    const info=rest.split(/\t|\s\|\s|\s{2,}/).map(s=>s.trim()).filter(s=>s&&!AGENTS.includes(s)).join(" · ");
+    const p=parseLink(link);
+    out.push({link,agent:fixedA||ag||cur||"",type:fixedT||detectType(rest)||"call",callDate:parseDateLoose(rest,week)||"",restaurantId:p.restaurantId||"",callId:p.callId||"",info:info.slice(0,400)});
+  });
+  return out;
+}
+function parsePreview(){const rows=parseQueue($("#qPaste").value),missing=rows.filter(r=>!r.agent).length;
+  $("#qPreview").textContent=rows.length?`${rows.length} call${rows.length>1?"s":""} found`+(missing?` · ${missing} without an agent`:""):"";
+  $("#qAdd").disabled=!rows.length||!!missing||!db||!dbReady}
+$("#qPaste").addEventListener("input",parsePreview);$("#qAgent").addEventListener("change",parsePreview);$("#qType").addEventListener("change",parsePreview);
+$("#qAdd").onclick=async()=>{
+  const rows=parseQueue($("#qPaste").value);if(!rows.length)return;
+  const existing=new Set(queue.filter(q=>q.week===week).map(q=>q.link)),fresh=rows.filter(r=>!existing.has(r.link));let n=0;
+  $("#qAdd").disabled=true;
+  const base=queue.filter(q=>q.week===week).reduce((m,q)=>Math.max(m,(q.pos??0)+1),0);
+  try{for(const r of fresh){await db.collection("queue").doc(newId("q")).set({...r,week,pos:base+n,source:"paste",auditId:null,score:null,addedAt:new Date().toISOString()});n++}
+    $("#qPaste").value="";parsePreview();toast(`Added ${n} call${n===1?"":"s"}`+(rows.length-fresh.length?` · ${rows.length-fresh.length} already queued`:""));
+  }catch(e){toast(n?`Added ${n}, then saving stopped. Try the rest again.`:"Couldn't add calls. Try again.");parsePreview()}
+};
+const qOrder=(a,b)=>(a.pos??1e9)-(b.pos??1e9)||(a.addedAt||"").localeCompare(b.addedAt||"");
+function nextQueued(agent,wk,skip){return queue.filter(q=>q.week===wk&&q.agent===agent&&!q.auditId&&q.id!==skip).sort(qOrder)[0]}
+/* a case pulls together every sampled call whose talked legs overlap: one set of legs, one team, graded once */
+function caseGroupOf(q){const wk=queue.filter(x=>x.week===q.week&&x.type==="case");for(const g of groupCases(wk).values())if(g.some(x=>x.id===q.id))return g;return [q]}
+function caseFromQueue(q){
+  const g=caseGroupOf(q).slice().sort(qOrder),sampled=[...new Set(g.map(x=>x.agent))],legs=new Map();
+  g.forEach(x=>((x.chain&&x.chain.legs)||[]).forEach(l=>{if(l&&l.id&&!legs.has(l.id))legs.set(l.id,Object.assign({},l,{sampled:l.id===x.callId||!!l.sampled}))}));
+  const all=[...legs.values()].sort((a,b)=>String(a.at).localeCompare(String(b.at))),helpers=caseTeam(all.map(l=>Object.assign({},l,{graded:false,own:false})));
+  all.forEach(l=>{l.graded=l.own=sampled.includes(l.who)||TEAM_GROUPS.includes(l.group)&&talked(l);if(sampled.includes(l.who))l.group="graded"});
+  const names=[...new Set(sampled.concat(helpers,all.filter(l=>talked(l)&&l.group==="graded").map(l=>l.who)))];
+  const t0=all[0],t1=all[all.length-1],spanSec=Math.round((Date.parse(t1.at+"Z")+(t1.sec||0)*1000-Date.parse(t0.at+"Z"))/1000);
+  const tasks=new Map();g.forEach(x=>(x.tasks||[]).forEach(k=>{if(!tasks.has(k.id))tasks.set(k.id,k)}));
+  const slack=g.map(x=>x.slack).find(Array.isArray)||null;
+  return {type:"case",caseIds:g.map(x=>x.id),team:names.map(n=>({name:n,role:"",said:"",note:""})),
+    chain:Object.assign({},q.chain,{legs:all,count:all.length,spanSec,agents:names.length}),
+    tasks:[...tasks.values()].sort((a,b)=>String(a.at).localeCompare(String(b.at))),slack:validSlack(clone(slack)),
+    aiFacts:validAi(clone(g.map(x=>x.aiFacts).find(validAi)||null))}
+}
+function loadQueueItem(q,quiet){
+  const a=q.auditId&&audits.find(x=>x.id===q.auditId);if(a){loadAudit(a);return}
+  const p=parseLink(q.link);
+  form=Object.assign(blankForm(),{reviewer:form.reviewer},agentFields(q.agent,null),{type:q.type||"call",link:q.link,restaurantId:q.restaurantId||p.restaurantId||"",
+    callId:q.callId||p.callId||"",callDate:q.callDate||"",queueId:q.id,week:q.week,
+    kind:q.kind||"",source:q.source||"paste",restaurantName:q.restaurantName||"",callTime:q.callTime||"",durationSec:q.durationSec??null,chain:validChain(clone(q.chain||null)),
+    tasks:validTasks(clone(q.tasks??null)),tasksAt:q.tasksAt||null,aiFacts:validAi(clone(q.aiFacts||null)),factsMatch:{},aiShown:false,
+    slack:validSlack(clone(q.slack??null)),slackAt:q.slackAt||null});
+  if(q.type==="case")Object.assign(form,caseFromQueue(q));
+  lastParsed=p;openNotes=new Set();active=0;taskNote="";aiNote="";slackNote="";callOpen=false;saveDraft();
+  if(quiet){renderForm()}else{setTab("score");window.scrollTo({top:0})}
+}
+function loadAudit(a){
+  form=Object.assign(blankForm(),agentFields(a.agent,a.role),{id:a.id,type:a.type||"call",link:a.link||"",restaurantId:a.restaurantId||"",callId:a.callId||"",callDate:a.callDate||"",
+    reviewer:a.reviewer||form.reviewer,gut:a.gut||"",scores:Object.fromEntries(Object.entries(a.scores||{}).filter(([k,v])=>v!=null)),notes:{...(a.notes||{})},
+    facts:Object.assign(blankFacts(),clone(a.facts||{})),take:a.take||"",queueId:a.queueId||null,week:a.week,replaces:a.replaces||null,
+    kind:a.kind||"",source:a.source||"",restaurantName:a.restaurantName||"",callTime:a.callTime||"",durationSec:a.durationSec??null,chain:validChain(clone(a.chain||null)),
+    tasks:null,tasksAt:null,aiFacts:null,factsMatch:validMatch(a.factsMatch)});
+  const q=a.queueId&&queueAll.find(x=>x.id===a.queueId);
+  form.tasks=validTasks(clone(a.tasks??(q?q.tasks:null)??null));form.tasksAt=a.tasksAt||(q&&q.tasksAt)||null;
+  form.aiFacts=validAi(clone(a.aiFacts||(q&&q.aiFacts)||null));form.aiShown=!!form.aiFacts;taskNote="";aiNote="";slackNote="";
+  form.team=validTeam(clone(a.team||[]));form.caseIds=Array.isArray(a.caseIds)?a.caseIds.slice():(a.queueId?[a.queueId]:[]);form.slack=validSlack(clone(a.slack??(q?q.slack:null)??null));form.slackAt=a.slackAt||null;
+  if(!Array.isArray(form.facts.sources))form.facts.sources=[];
+  lastParsed=parseLink(form.link);openNotes=new Set();active=0;callOpen=false;saveDraft();setTab("score");window.scrollTo({top:0});
+}
+/* tasks or Claude's read that land on the open call's queue doc (another device, or the weekly pull) */
+function mergeOpen(){const q=form.queueId&&queueAll.find(x=>x.id===form.queueId);if(!q)return;let ch=false;
+  if(form.tasks==null&&Array.isArray(q.tasks)){form.tasks=validTasks(clone(q.tasks));form.tasksAt=q.tasksAt||null;ch=true}
+  if(!form.aiFacts&&validAi(q.aiFacts)){form.aiFacts=clone(q.aiFacts);ch=true}
+  if(ch){saveDraft();if(tab==="score"){renderTasks();renderAi()}}}
+function rescoreV1(a){
+  const p=parseLink(a.link||"");
+  form=Object.assign(blankForm(),{reviewer:form.reviewer},agentFields(a.agent,a.role),{type:a.type||"call",link:a.link||"",restaurantId:p.restaurantId||"",callId:p.callId||"",
+    callDate:a.callDate||"",week:a.week,replaces:a.id});
+  lastParsed=p;openNotes=new Set();active=0;saveDraft();setTab("score");window.scrollTo({top:0});
+}
+/* call chain display, shared by queue cards and the score form */
+const openChains=new Set(),openHid=new Set();
+function fmtDur(s){s=Math.max(0,Math.round(Number(s)||0));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+function fmtSpan(s){s=Math.max(0,Math.round(Number(s)||0));return s<60?s+" sec":Math.round(s/60)+" min"}
+function clock12(t){const m=String(t||"").match(/^(\d{1,2}):(\d{2})/);if(!m)return "";const h=+m[1];return (h%12||12)+":"+m[2]+(h<12?" AM":" PM")}
+const recUrl=id=>`${GD}/callrecordings?callIds=${encodeURIComponent(id)}`;
+const shortWho=w=>AGENTS.includes(w)?w.split(" ")[0]:w;
+const isGraded=l=>!!(l&&(l.graded??l.own));
+const GROUP_TAG={sa:"SA",crt:"CRT",csr:"CSR"};
+function chainSummary(c){c=liveChain(c);if(!c)return "";const n=c.legs.length,ctx=c.legs.filter(l=>!isGraded(l)).length;
+  return n===1?"Single call":`${n} calls · ${fmtSpan(c.spanSec)}`+(ctx?` · ${ctx} for context`:"")}
+const playAllUrl=ids=>`${GD}/callrecordings?callIds=${ids.map(encodeURIComponent).join(",")}`;
+function timelineHtml(c){const n=c.legs.length,tot=c.legs.reduce((t,l)=>t+(Number(l.sec)||0),0);
+  return `<div class="tline" role="img" aria-label="${esc(`${n} calls end to end, ${fmtDur(tot)}`)}">`+c.legs.map((l,i)=>`<i class="${isGraded(l)?"g":""}" style="flex:${Math.max(1,Number(l.sec)||0)} 1 0" title="${esc(`${i+1} · ${l.who||""} · ${fmtDur(l.sec)}`)}"></i>`).join("")+`</div>`}
+let showHidden=false;
+const TALK_L={voicemail:"Voicemail",silent:"No one talked"};
+function legsHtml(c,all){const hid=c.legs.filter(l=>!talked(l)).length,legs=all?c.legs:c.legs.filter(talked);
+  return legsList(legs)+(hid?`<button type="button" class="hidlegs" data-hidlegs="1">${all?"Hide":"Show"} ${hid} voicemail / no-answer call${hid===1?"":"s"}</button>`:"")}
+function legsList(legs){return `<ol class="legs">`+legs.map((l,i)=>{const t=String(l.at||""),dir=l.dir==="in"?"←":l.dir==="out"?"→":"·",g=isGraded(l),tag=g?"":GROUP_TAG[l.group]||"";
+  return `<li class="leg${l.sampled?" sampled":""}${g?" graded":" other"}${talked(l)?"":" off"}"><span class="num idx">${i+1}</span><span class="num">${esc(clock12(t.slice(11,16)))}</span><span class="who" title="${esc((l.who||"")+(l.dir==="in"?" from ":l.dir==="out"?" to ":" ")+(l.party||""))}">${esc(shortWho(l.who||"Unknown"))}${tag?`<span class="gtag">${tag}</span>`:""}${talked(l)?"":`<span class="gtag">${esc(TALK_L[l.talk]||"")}</span>`} <span class="dir">${dir} ${esc(shortWho(l.party||""))}</span></span><span class="num">${fmtDur(l.sec)}</span>${l.id?`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">Rec ↗</a>`:"<span></span>"}</li>`}).join("")+`</ol>`}
+function qItemHtml(q,i){
+  const u=safeUrl(q.link),ld=q.source==="lightdash",c=liveChain(q.chain),isCase=q.type==="case";
+  const title=ld?(q.restaurantName||q.restaurantId||"No restaurant"):`Call ${i+1}`,meta=[];
+  if(!q.kind)meta.push(`<span>${esc(typeLabel(q.type))}</span>`);
+  if(q.restaurantId&&title!==q.restaurantId)meta.push(`<span class="num">${esc(q.restaurantId)}</span>`);
+  if(q.callDate)meta.push(`<span>${esc(shortDate(q.callDate))}${q.callTime?" · "+esc(clock12(q.callTime)):""}</span>`);
+  if(q.durationSec!=null)meta.push(`<span class="num">${fmtDur(q.durationSec)}</span>`);
+  if(q.short)meta.push(`<span class="stag">Under 60s</span>`);
+  if(isCase)meta.push(`<span class="ctag">Case · ${esc(caseTeam(q.chain.legs).map(shortWho).join(", "))}</span>`);
+  if(Array.isArray(q.tasks)&&q.tasks.length)meta.push(`<span>${q.tasks.length} task${q.tasks.length===1?"":"s"}</span>`);
+  if(ld&&q.callId)meta.push(`<a href="${esc(recUrl(q.callId))}" target="_blank" rel="noopener">Recording ↗</a>`);
+  const multi=c&&c.legs.length>1&&c.legs.every(l=>l.id);
+  if(multi)meta.push(`<a href="${esc(playAllUrl(c.legs.map(l=>l.id)))}" target="_blank" rel="noopener">Play all ↗</a>`);
+  const chain=multi?`<details class="chain" data-chain="${esc(q.id)}"${openChains.has(q.id)?" open":""}><summary>${esc(chainSummary(q.chain))}</summary>${timelineHtml(c)}${legsHtml(q.chain,openHid.has(q.id))}</details>`:"";
+  return `<div class="qitem"><div><div class="qtitle">${q.kind?`<span class="kind k-${esc(q.kind)}">${esc(q.kind)}</span>`:""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(title)} ↗</a>`:`<span>${esc(title)}</span>`}</div>
+    <div class="qmeta">${meta.join("")}</div>${q.info?`<div class="info">${esc(q.info)}</div>`:""}</div>
+    <div class="qact">${q.auditId?`<span class="pill ${band(q.score)}">${fmt(q.score)}%</span><button type="button" class="btn small" data-q="${esc(q.id)}">Edit</button>`:`<button type="button" class="btn small primary" data-q="${esc(q.id)}">Score</button>`}
+    <button type="button" class="btn small danger" data-qdel="${esc(q.id)}">Remove</button></div>${chain}</div>`;
+}
+function renderQueue(){
+  const wk=queue.filter(q=>q.week===week),p=pulls[week],pulled=!!(p&&p.status==="done"),counts=(p&&p.counts)||{};
+  const agents=[...new Set(AGENTS.concat(wk.map(q=>q.agent)))];
+  const cards=agents.map(a=>{const items=wk.filter(q=>q.agent===a).sort(qOrder),cnt=counts[a];
+    if(!items.length&&!(pulled&&cnt))return "";
+    const done=items.filter(q=>q.auditId).length,few=cnt&&cnt.eligible<PULL.perAgent;
+    const sub=[items.length?`${done} of ${items.length} scored`:"",few?`${cnt.eligible} eligible`:""].filter(Boolean).join(" · ");
+    return `<div class="panel qcard"><h3><span>${esc(a)}</span><span class="num hint">${sub}</span></h3><div style="margin-top:8px">`+
+      (items.length?items.map(qItemHtml).join(""):`<div class="qempty">No eligible calls</div>`)+`</div></div>`}).join("");
+  const groups=[...groupCases(wk.filter(q=>q.type==="case")).values()].map(g=>g.slice().sort(qOrder));
+  const casesHtml=groups.length?`<div class="panel qcard qcases"><h3><span>Cases</span><span class="num hint">${groups.filter(g=>g.every(q=>q.auditId)).length} of ${groups.length} scored · graded once as a team</span></h3><div style="margin-top:8px">`+
+    groups.sort((a,b)=>(a[0].callDate+a[0].callTime).localeCompare(b[0].callDate+b[0].callTime)).map(g=>{const q=g[0],f=caseFromQueue(q),lc=liveChain(f.chain),done=g.every(x=>x.auditId);
+      return `<div class="qitem"><div><div class="qtitle"><span class="kind k-case">CASE</span><span>${esc(q.restaurantName||q.restaurantId||"No restaurant")}</span></div>
+        <div class="qmeta"><span>${esc(shortDate(q.callDate))} · ${esc(clock12(q.callTime))}</span><span>${lc.legs.length} calls · ${fmtSpan(f.chain.spanSec)}</span><span>Team: ${esc(f.team.map(t=>shortWho(t.name)).join(", "))}</span>${(q.slack||[]).length?`<span>${q.slack.length} Slack thread${q.slack.length===1?"":"s"}</span>`:""}</div>
+        <div class="info">Sampled for ${esc([...new Set(g.map(x=>x.agent))].join(", "))}</div></div>
+        <div class="qact">${done?`<span class="pill ${band(q.score)}">${fmt(q.score)}%</span><button type="button" class="btn small" data-q="${esc(q.id)}">Edit</button>`:`<button type="button" class="btn small primary" data-q="${esc(q.id)}">Score case</button>`}</div></div>`}).join("")+`</div></div>`:"";
+  $("#qGrid").innerHTML=(casesHtml+cards)||`<div class="panel empty" style="grid-column:1/-1">No calls queued for ${weekLabel(week)}.</div>`;
+  const open=wk.filter(q=>!q.auditId).length;$("#qCount").textContent=open?String(open):"";
+  renderPull();parsePreview();
+}
+$("#qGrid").addEventListener("toggle",e=>{const d=e.target;if(!(d instanceof HTMLDetailsElement)||!d.dataset.chain)return;if(d.open)openChains.add(d.dataset.chain);else openChains.delete(d.dataset.chain)},true);
+$("#qGrid").addEventListener("click",async e=>{
+  const hb=e.target.closest("[data-hidlegs]");if(hb){const d=hb.closest("details.chain");if(d){const id=d.dataset.chain;if(openHid.has(id))openHid.delete(id);else openHid.add(id);renderQueue()}return}
+  const s=e.target.closest("[data-q]");if(s){const q=queue.find(x=>x.id===s.dataset.q);if(q)loadQueueItem(q);return}
+  const d=e.target.closest("[data-qdel]");if(!d)return;
+  if(d.dataset.arm!=="1"){d.dataset.arm="1";d.textContent="Confirm";setTimeout(()=>{if(d.isConnected){d.dataset.arm="";d.textContent="Remove"}},3000);return}
+  const q=queueAll.find(x=>x.id===d.dataset.qdel);
+  try{if(q&&q.source==="lightdash")await db.collection("queue").doc(q.id).update({removed:true,removedAt:new Date().toISOString()});
+    else await db.collection("queue").doc(d.dataset.qdel).delete()}catch(err){toast("Couldn't remove it.")}
+});
+
+/* ---------- QUEUE: weekly sample from Lightdash ---------- */
+let roster=makeRoster(ROSTER_DEFAULT), rosterReady=false, pulls={}, pullsReady=false, pullRun=null, mayAuto=false, autoTried=false;
+const pullNote={}, tabId=newId("t"), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const ET_FMT=(()=>{try{return new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"})}catch(e){return null}})();
+function etNowMs(){if(!ET_FMT)return Date.now()-4*36e5;const p={};ET_FMT.formatToParts(new Date()).forEach(x=>p[x.type]=x.value);return Date.UTC(+p.year,+p.month-1,+p.day,(+p.hour)%24,+p.minute,+p.second)}
+function weekReadyAt(w){const [y,m,d]=String(w).split("-").map(Number);return Date.UTC(y,m-1,d+7,PULL.readyHours)}
+function latestClosedWeek(){const n=etNowMs(),d=new Date(n),mon=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-((d.getUTCDay()+6)%7));
+  const last=new Date(mon-7*864e5).toISOString().slice(0,10);return n>=weekReadyAt(last)?last:new Date(mon-14*864e5).toISOString().slice(0,10)}
+function readyLabel(w){const t=new Date(weekReadyAt(w));return t.toLocaleDateString("en-US",{timeZone:"UTC",weekday:"short",month:"short",day:"numeric"})+", "+t.toLocaleTimeString("en-US",{timeZone:"UTC",hour:"numeric"})+" ET"}
+const pullFresh=p=>Date.now()-Date.parse(p.startedAt||p.at||0)<6*6e4;
+function backedOff(w){const b=store.get("qa.pull.wait");return !!(b&&b[w]>Date.now())}
+function backoff(w,hours){const b=store.get("qa.pull.wait")||{};b[w]=Date.now()+hours*36e5;store.set("qa.pull.wait",b)}
+
+const LD_ACCESS=["needs_reauth","server_not_connected","selection_required","not_in_manifest","blocked_by_policy","approval_required","consent_required","not_granted","capability_disabled","capability_removed","user_changed"];
+async function ldCall(tool,input){
+  const res=await mcp.callTool(PULL.server,tool,input);
+  let p=res&&res.payload;if(typeof p==="string"){try{p=JSON.parse(p)}catch(e){throw {code:"ld_text",message:p.slice(0,180)}}}
+  const r=p&&typeof p==="object"?(p.result&&typeof p.result==="object"?p.result:p):null;
+  if(!r||!r.status)throw {code:"ld_shape",message:"Unexpected reply from Lightdash."};
+  return r;
+}
+async function ldQuery(cfg,title){
+  let r=await ldCall("run_metric_query",{projectUuid:PULL.project,title,description:"QA Desk weekly sample",queryConfig:cfg});
+  const t0=Date.now();let misses=0;
+  while(r.status==="running"){
+    if(!r.queryUuid)throw {code:"ld_shape",message:"Lightdash didn't return a query id."};
+    if(Date.now()-t0>300000)throw {code:"ld_timeout"};
+    await sleep(Math.min(Math.max(Number(r.nextPollAfterMs)||1000,500),5000));
+    try{r=await ldCall("get_query_result",{projectUuid:PULL.project,queryUuid:r.queryUuid});misses=0}
+    catch(e){if(e&&e.retryable&&++misses<=3){await sleep((Number(e.retryAfterMs)||2000)+Math.random()*800);continue}throw e}
+  }
+  if(r.status!=="done")throw {code:"ld_failed",message:r.error||("query "+r.status)};
+  return Array.isArray(r.rows)?r.rows:[];
+}
+/* a query that comes back full may be cut off: split the dates, then the values, until it isn't */
+async function ldRowsBy(mk,from,to,values,title){
+  const rows=await ldQuery(mk(from,to,values),title);
+  if(rows.length<PULL.cap)return {rows,full:false};
+  let a,b;
+  if(from<to){const n=Math.round((Date.parse(to)-Date.parse(from))/864e5),mid=addDaysU(from,Math.floor(n/2));
+    a=await ldRowsBy(mk,from,mid,values,title);b=await ldRowsBy(mk,addDaysU(mid,1),to,values,title)}
+  else if(values.length>1){const h=Math.ceil(values.length/2);a=await ldRowsBy(mk,from,to,values.slice(0,h),title);b=await ldRowsBy(mk,from,to,values.slice(h),title)}
+  else return {rows,full:true};
+  return {rows:a.rows.concat(b.rows),full:a.full||b.full};
+}
+const ldRows=(field,from,to,values,title)=>ldRowsBy((f,t,v)=>ldConfig(PULL,field,f,t,v),from,to,values,title);
+async function ldWeek(field,w,windows,values,title){let rows=[],full=false;
+  for(const [x,y] of windows){const r=await ldRows(field,addDaysU(w,x),addDaysU(w,y),values,title);rows=rows.concat(r.rows);full=full||r.full}
+  return {rows,full}}
+/* read each leg's transcript: voicemail / nobody-talked legs are set aside; a sampled call where another SA, SA seat or CRT talked becomes a case */
+async function classifyDocs(docs){
+  const legs=docs.flatMap(d=>(d.chain&&d.chain.legs)||[]),ids=[...new Set(legs.map(l=>l.id).filter(Boolean))];if(!ids.length)return;
+  const ts=legs.map(l=>ldTs(l.at)).filter(x=>!isNaN(x)),from=etDay(Math.min(...ts)),to=etDay(Math.max(...ts)),tx=new Map();
+  for(let i=0;i<ids.length;i+=150)(await ldQuery(transcriptConfig(from,to,ids.slice(i,i+150)),"QA Desk · transcripts for sorting")).forEach(r=>tx.set(String(r.calls_conversation_id||""),String(r.asr_transcript_call_transcript||"")));
+  docs.forEach(d=>{d.chain.legs.forEach(l=>{l.talk=tx.has(l.id)?legTalk(tx.get(l.id)):"talk"});
+    const team=caseTeam(d.chain.legs);if(team.length){d.callType=d.type;d.type="case";d.team=team}})}
+function pullErr(e,again){const c=e&&e.code,m=String((e&&e.message)||"").replace(/\s+/g," ").slice(0,180),A=again||"Pull again",a=A.toLowerCase();
+  return c==="server_not_connected"?`Add the Lightdash connector in claude.ai Settings → Connectors, then ${a}.`:
+    c==="needs_reauth"?`Reconnect Lightdash in claude.ai Settings → Connectors, then ${a}.`:
+    c==="selection_required"?`Pick which Lightdash connector this page should use, then ${a}.`:
+    c==="not_in_manifest"||c==="consent_required"?`Lightdash is off for this page. Allow it in the page's permissions, then ${a}.`:
+    c==="blocked_by_policy"||c==="approval_required"?"Your organization blocks Lightdash queries from this page.":
+    c==="not_granted"||c==="capability_disabled"||c==="capability_removed"||c==="user_changed"?"Lightdash isn't available in this view.":
+    c==="server_unavailable"?`Lightdash didn't respond. ${A} in a minute.`:
+    c==="upstream_error"&&e.retryable?`Lightdash is waiting for your OK. ${A} to allow it.`:
+    c==="tool_error"||c==="ld_failed"?"Lightdash refused the query"+(m?": "+m:"."):
+    c==="ld_timeout"?`Lightdash took too long. ${A}.`:
+    c==="ld_text"||c==="ld_shape"?"Lightdash sent a reply this page can't read.":
+    c==="invalid_argument"?"You can't add calls to this queue.":
+    c==="quota_exceeded"?"The QA Desk storage is full. Export, then delete old weeks.":
+    c==="resource_exhausted"||c==="unavailable"?`The queue is busy. ${A} in a minute.`:
+    again?`That stopped. ${A}.`:"The pull stopped. Pull again."}
+async function runPull(w,auto){
+  if(pullRun||!db||!mcp)return;
+  const ref=db.doc("pulls/"+w),holder=myId||tabId,o=PULL,R=roster;
+  pullRun={week:w,step:"Starting…"};delete pullNote[w];renderPull();
+  const step=s=>{if(pullRun){pullRun.step=s;renderPull()}};
+  const lock=()=>typeof ref.acquire==="function"?ref.acquire({holder,ttlMs:300000}):Promise.resolve({acquired:true});
+  const renew=()=>lock().catch(()=>null);
+  let prev=null,wrote=false;
+  try{
+    const lease=await lock();
+    if(!lease||!lease.acquired){if(!auto)pullNote[w]="Someone else is pulling this week right now.";return}
+    const snap=await ref.get();prev=snap.exists?clone(snap.data()):null;
+    if(auto&&prev&&prev.status==="done")return;
+    if(prev&&prev.status==="done"&&R.agents.every(ag=>queue.filter(q=>q.week===w&&q.agent===ag.name).length>=o.perAgent)){toast(`${weekLabel(w)} already has its sample`);return}
+    await ref.set(Object.assign({},prev||{},{status:"running",week:w,startedAt:new Date().toISOString(),by:myId||null}));wrote=true;
+    step("Pulling Super Agent calls from Lightdash…");
+    const a=await ldWeek("internal_users_user_login_name",w,[[-1,3],[4,7]],R.logins,`QA Desk sample · ${w} · Super Agent calls`);
+    const vals=linkedNumbers(w,scopeRows(normRows(a.rows),R),R,o).concat(R.logins);
+    step("Linking transfers and callbacks…");await renew();
+    let linked=[],partial=a.full;
+    for(let i=0;i<vals.length;i+=o.chunk){const b=await ldWeek("calls_call_phone_detail",w,[[-1,1],[2,4],[5,7]],vals.slice(i,i+o.chunk),`QA Desk sample · ${w} · linked calls`);
+      linked=linked.concat(b.rows);partial=partial||b.full;await renew()}
+    const rows=scopeRows(normRows(a.rows.concat(linked)),R);
+    step("Adding calls to the queue…");
+    const audited=new Set();audits.forEach(x=>{const id=x.callId||parseLink(x.link||"").callId;if(id)audited.add(String(id));((x.chain&&x.chain.legs)||[]).forEach(l=>l&&l.id&&audited.add(String(l.id)))});
+    const plan=choosePicks(w,rows,R,o,queueAll,audited);
+    let taskMap=null,taskErr=null;const cases=[];
+    plan.forEach(pl=>{const ag=R.agents.find(x=>x.name===pl.agent);pl.picks.forEach(e=>{const cd=caseCoded(e,pl.set);cases.push({key:e.S.id,code:cd?cd.code:"",legs:e.legs.map(l=>({id:l.id,t0:l.t0,t1:l.t1})),ag})})});
+    if(cases.length){step("Linking WIRA tasks…");await renew();
+      try{taskMap=await fetchTasks(cases,`QA Desk sample · ${w}`)}catch(e){if(LD_ACCESS.includes(e&&e.code))throw e;taskErr=pullErr(e,"Pull again")}}
+    let pos=queueAll.filter(q=>q.week===w).reduce((m,q)=>Math.max(m,(q.pos??0)+1),0),added=0;const now=new Date().toISOString(),docs=[];
+    for(const pl of plan){const ag=R.agents.find(x=>x.name===pl.agent);
+      for(const e of pl.picks.slice().sort((x,y)=>x.S.t0-y.S.t0))docs.push(["ld-"+e.S.id,queueDoc(e,ag,w,R,pos++,now,taskMap?(taskMap.get(e.S.id)||[]):undefined)])}
+    let talkErr=null;if(docs.length){step("Setting aside voicemail and sorting calls from cases…");await renew();
+      try{await classifyDocs(docs.map(d=>d[1]))}catch(e){if(LD_ACCESS.includes(e&&e.code))throw e;talkErr=pullErr(e,"Pull again")}}
+    step("Adding calls to the queue…");
+    for(const [id,d] of docs){await db.collection("queue").doc(id).set(d);added++}
+    const counts=Object.fromEntries(plan.map(pl=>[pl.agent,{eligible:pl.eligible,short:pl.counts.short,cl:pl.counts.CL,mgr:pl.counts.MGR,de:pl.counts.DE,added:pl.picks.length}]));
+    let population=populationOf(plan,R);if(JSON.stringify(population).length>180000)population=population.map(({ids,...x})=>x);
+    await ref.set({status:"done",week:w,at:new Date().toISOString(),startedAt:null,by:myId||null,added,counts,population,partial:!!partial,
+      rows:{agents:a.rows.length,linked:linked.length},settings:{perAgent:o.perAgent,cl:o.cl,mgrde:o.mgrde,minSec:o.minSec,gapMin:o.gapMin,spanMin:o.spanMin,taskBeforeMin:TASKS.beforeMin,taskAfterMin:TASKS.afterMin},
+      tasks:taskMap?{linked:[...taskMap.values()].reduce((t,l)=>t+l.length,0)}:null,tasksError:taskErr||null,talkError:talkErr||null,cases:docs.filter(d=>d[1].type==="case").length,error:null});
+    toast(added?`Added ${added} call${added===1?"":"s"} for ${weekLabel(w)}`:`${weekLabel(w)} already has its sample`);
+  }catch(e){
+    const c=(e&&e.code)||"error",access=LD_ACCESS.includes(c)||(c==="upstream_error"&&e.retryable);pullNote[w]=pullErr(e);
+    if(auto)backoff(w,access?12:3);
+    if(wrote){try{if(access){if(prev)await ref.set(prev);else await ref.delete()}
+      else await ref.set(Object.assign({},prev||{},{status:prev&&prev.status==="done"?"done":"error",week:w,startedAt:null,error:pullNote[w],errorAt:new Date().toISOString(),by:myId||null}))}catch(e2){}}
+  }finally{pullRun=null;renderPull()}
+}
+function maybeAutoPull(){
+  if(autoTried||pullRun||!mayAuto||!db||!mcp||!dbReady||!queueReady||!pullsReady||!rosterReady)return;
+  const w=latestClosedWeek(),p=pulls[w];
+  if(p&&(p.status==="done"||(p.status==="running"&&pullFresh(p))))return;
+  if(backedOff(w))return;
+  autoTried=true;runPull(w,true);
+}
+function renderPull(){
+  const st=$("#pullStatus"),btn=$("#pullBtn"),w=week,p=pulls[w],run=!!(pullRun&&pullRun.week===w);
+  const closed=etNowMs()>=weekReadyAt(w),busy=!run&&!!p&&p.status==="running"&&pullFresh(p);
+  const n=queue.filter(q=>q.week===w&&q.source==="lightdash").length;
+  st.textContent=run?pullRun.step:pullNote[w]?pullNote[w]:busy?"Pulling from Lightdash…":
+    p&&p.status==="done"?`Pulled ${stampOf(p.at)} · ${n} call${n===1?"":"s"}`+(p.partial?" · some linked calls may be missing":""):
+    p&&p.status==="error"?(p.error||"The last pull stopped."):
+    !closed?"Opens "+readyLabel(w):!db?"Sign in to claude.ai to pull calls.":!mcp?"Lightdash isn't available in this view.":"Not pulled yet";
+  btn.textContent=run||busy?"Pulling…":p&&p.status==="done"?"Pull again":"Pull from Lightdash";
+  btn.disabled=!!pullRun||busy||!closed||!db||!dbReady||!mcp;
+}
+$("#pullBtn").onclick=()=>{if(!pullRun)runPull(week,false)};
+
+/* ---------- DATABASE: every candidate call for the week, sampled or not ---------- */
+let dbAgent="", dbAll=false;
+const ST_L={sampled:"Sampled",scored:"Scored",removed:"Removed",short:"Under 60s",not:"Not sampled"};
+function dbRowOf(x,q){
+  const c=q&&validChain(q.chain),st=q?(q.removed?"removed":q.auditId?"scored":"sampled"):(x&&x.short?"short":"not");
+  return {st,agent:(q&&q.agent)||(x&&x.agent)||"",kind:(q&&q.kind)||(x&&x.kind)||(q?typeLabel(q.type):""),
+    at:x?x.at:(q.callDate?q.callDate+"T"+(q.callTime||"00:00")+":00":""),code:(q&&q.restaurantId)||(x&&x.code)||"",name:(q&&q.restaurantName)||(x&&x.name)||"",
+    sec:q&&q.durationSec!=null?q.durationSec:(x?x.sec:null),n:c?c.legs.length:(x?x.n:null),ctx:c?c.legs.filter(l=>!isGraded(l)).length:(x?x.ctx:null),
+    own:c?(c.ownSec??null):(x?x.own:null),ids:c?c.legs.map(l=>l.id).filter(Boolean):((x&&x.ids)||[]),callId:String((q&&q.callId)||(x&&x.id)||""),
+    link:q?safeUrl(q.link):"",score:q&&q.auditId?q.score:null,short:!!((q&&q.short)||(x&&x.short)),tasks:q&&Array.isArray(q.tasks)?q.tasks.map(k=>k.id):null};
+}
+function dbRows(){
+  const p=pulls[week],pop=p&&Array.isArray(p.population)?p.population:[],wk=queueAll.filter(q=>q.week===week),by=new Map(),seen=new Set(),out=[];
+  wk.forEach(q=>{if(q.callId)by.set(String(q.callId),q)});
+  pop.forEach(x=>{seen.add(x.id);out.push(dbRowOf(x,by.get(x.id)))});
+  wk.forEach(q=>{if(!q.callId||!seen.has(String(q.callId)))out.push(dbRowOf(null,q))});
+  const order=a=>{const i=AGENTS.indexOf(a);return i<0?99:i};
+  return out.sort((a,b)=>order(a.agent)-order(b.agent)||a.agent.localeCompare(b.agent)||String(a.at).localeCompare(String(b.at)));
+}
+const when=at=>{const d=String(at||"").slice(0,10);return d?`${parseIso(d).toLocaleDateString("en-US",{month:"short",day:"numeric"})} · ${clock12(String(at).slice(11,16))}`:""};
+function renderData(){
+  const el=$("#dataBody");if(!el)return;
+  const p=pulls[week],pop=p&&Array.isArray(p.population)?p.population:null,all=dbRows();
+  const agents=[...new Set(AGENTS.concat(all.map(r=>r.agent)).filter(Boolean))];
+  if(dbAgent&&!agents.includes(dbAgent))dbAgent="";
+  const isS=r=>r.st==="sampled"||r.st==="scored";
+  const sampled=all.filter(isS).length;
+  const sum=agents.map(a=>{const r=all.filter(x=>x.agent===a);if(!r.length)return "";
+    const inb=pop?pop.filter(x=>x.agent===a).length:null,ok=pop?pop.filter(x=>x.agent===a&&!x.short).length:null;
+    return `<tr><td><b>${esc(a)}</b></td><td class="n">${inb??"–"}</td><td class="n">${ok??"–"}</td><td class="n">${r.filter(isS).length}</td><td class="n">${r.filter(x=>x.st==="scored").length}</td></tr>`}).join("");
+  const shown=all.filter(r=>(dbAll||isS(r))&&(!dbAgent||r.agent===dbAgent));
+  const rowHtml=r=>{const multi=r.ids.length>1;
+    return `<tr class="${isS(r)?"":"muted"}"><td>${esc(r.agent)}</td><td><span class="st ${r.st}">${ST_L[r.st]}</span>${r.short&&r.st!=="short"?` <span class="stag">Under 60s</span>`:""}</td><td>${r.kind?`<span class="kind k-${esc(r.kind)}">${esc(r.kind)}</span>`:""}</td>
+      <td class="num">${esc(when(r.at))}</td><td class="rest">${esc(r.name||"–")}${r.code?` <span class="num hint">${esc(r.code)}</span>`:""}</td>
+      <td class="n">${r.sec==null?"–":fmtDur(r.sec)}</td><td class="n">${r.n??"–"}${r.ctx?` <span class="hint">· ${r.ctx} context</span>`:""}</td><td class="n">${r.own==null?"–":fmtDur(r.own)}</td>
+      <td class="n">${r.score==null?"–":`<span class="pill ${band(r.score)}">${fmt(r.score)}%</span>`}</td>
+      <td><div class="links">${r.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">Greendot ↗</a>`:""}${r.callId?`<a href="${esc(recUrl(r.callId))}" target="_blank" rel="noopener">Rec ↗</a>`:""}${multi?`<a href="${esc(playAllUrl(r.ids))}" target="_blank" rel="noopener">Play all ↗</a>`:""}</div></td></tr>`};
+  const head=`<div class="dbbar"><div class="hint" style="font-size:13px">${esc(weekLabel(week))} · ${sampled} sampled${pop?` of ${pop.length} inbound CL / MGR / DE calls`:""}</div>
+    <div class="row"><div class="chips" role="group" aria-label="Show"><button type="button" class="chip" data-dbmode="s" aria-pressed="${!dbAll}">Sampled</button><button type="button" class="chip" data-dbmode="a" aria-pressed="${dbAll}">All calls</button></div>
+    <select id="dbAgent" aria-label="Agent" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel)"><option value="">All agents</option>${agents.map(a=>`<option${a===dbAgent?" selected":""}>${esc(a)}</option>`).join("")}</select>
+    <button type="button" class="btn small" id="dbCsv"${shown.length?"":" disabled"}>Download .csv</button></div></div>`;
+  if(!all.length){el.innerHTML=head+`<div class="panel empty">Nothing pulled for ${esc(weekLabel(week))} yet.</div>`;return}
+  el.innerHTML=head+`<div class="panel tblwrap dbsum"><table><thead><tr><th>Agent</th><th class="n">Inbound CL / MGR / DE</th><th class="n">Over 60s</th><th class="n">Sampled</th><th class="n">Scored</th></tr></thead><tbody>${sum}</tbody></table></div>
+    <div class="panel tblwrap dbtbl" style="margin-top:14px"><table><thead><tr><th>Agent</th><th>Status</th><th>Type</th><th>When (ET)</th><th>Restaurant</th><th class="n">Call</th><th class="n">Linked</th><th class="n">Agent talk</th><th class="n">Score</th><th></th></tr></thead>
+    <tbody>${shown.length?shown.map(rowHtml).join(""):`<tr><td colspan="10" class="hint">No calls match.</td></tr>`}</tbody></table></div>`;
+}
+$("#dataBody").addEventListener("click",async e=>{
+  const m=e.target.closest("[data-dbmode]");if(m){dbAll=m.dataset.dbmode==="a";renderData();return}
+  if(!e.target.closest("#dbCsv"))return;
+  if(!downloads){toast("Downloads aren't available in this view.");return}
+  const isS=r=>r.st==="sampled"||r.st==="scored",rows=dbRows().filter(r=>(dbAll||isS(r))&&(!dbAgent||r.agent===dbAgent));
+  const cols=["agent","status","type","started_at_et","restaurant_id","restaurant_name","call_sec","linked_calls","context_calls","agent_talk_sec","score_pct","call_id","linked_call_ids","linked_task_ids","greendot_link"];
+  const q=v=>{const t=v==null?"":String(v);return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t};
+  const csv=[cols.join(",")].concat(rows.map(r=>[r.agent,ST_L[r.st],r.kind,String(r.at).replace("T"," "),r.code,r.name,r.sec,r.n,r.ctx,r.own,r.score,r.callId,r.ids.join(";"),r.tasks?r.tasks.join(";"):"",r.link].map(q).join(","))).join("\n");
+  try{await downloads.save({filename:`qa-desk-calls-${week}.csv`,data:new TextEncoder().encode("\ufeff"+csv)});toast("Saved")}
+  catch(err){const c=err&&err.code;if(c==="declined")return;toast(c==="rate_limited"?"Another save is still open. Finish it first.":"Couldn't save the file.")}
+});
+$("#dataBody").addEventListener("change",e=>{if(e.target.id==="dbAgent"){dbAgent=e.target.value;renderData()}});
+
+/* ---------- RESULTS ---------- */
+function heat(p){return `<span class="heat ${band(p)}">${p==null?"–":fmt(p)}</span>`}
+function faultStats(list){let n=0,m=0;list.forEach(a=>{const F=a.facts||{};if(FAULTED.includes(F.faultCorrect)){n++;if(F.faultAgent===F.faultCorrect)m++}});return {n,m,pct:n?m/n*100:null}}
+function touchStats(list){let n=0,y=0;list.forEach(a=>{const s=a.facts&&a.facts.singleTouch;if(s==="yes"||s==="no"){n++;if(s==="yes")y++}});return {n,y,pct:n?y/n*100:null}}
+function gutDisagree(list){return list.filter(a=>a.gut&&a.total!=null&&band(a.total)!==a.gut)}
+function weakest(list){const by={};list.forEach(a=>Object.entries(a.scores||{}).forEach(([k,v])=>{if(v==null||v==="na")return;const key=a.type+":"+k;(by[key]=by[key]||[]).push(v)}));
+  let w=null;Object.entries(by).forEach(([key,v])=>{const m=avg(v),[t,k]=key.split(":"),wt=wOf(CUR,t,k);if(m<3&&(!w||m<w.m||(m===w.m&&wt>w.wt)))w={t,k,m,wt}});return w}
+function dimAvg(list,k){return avg(list.map(a=>a.dims&&a.dims[k]))}
+function faultCell(a){const F=a.facts||{};if(!F.faultCorrect)return "–";const ok=!FAULTED.includes(F.faultCorrect)?"none":F.faultAgent===F.faultCorrect?"good":"bad";
+  return `<span class="pill fault ${ok}">${esc(FA_L[F.faultAgent]||"–")} → ${esc(FC_L[F.faultCorrect]||"–")}</span>`}
+function callCell(a){const u=safeUrl(a.link);const lab=esc(a.restaurantId||parseLink(a.link).restaurantId||a.callId||"Open");
+  return `${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${lab} ↗</a>`:lab}${a.callDate?`<div class="hint num">${esc(a.callDate)}</div>`:""}`}
+function agentCell(a){return esc(a.agent)+(a.role==="ae"?`<span class="tag">AE</span>`:"")}
+function renderResults(){
+  const v2=audits.filter(a=>a.rubric===CUR),old=audits.filter(a=>a.rubric!==CUR);
+  const wk=v2.filter(a=>a.week===week),prevWk=addDays(week,-7),prev=v2.filter(a=>a.week===prevWk);
+  const wkSA=wk.filter(isSA),prevSA=prev.filter(isSA);
+  $("#rCount").textContent=wk.length?String(wk.length):"";
+  const teamAvg=avg(wkSA.map(a=>a.total)),prevAvg=avg(prevSA.map(a=>a.total)),d=teamAvg!=null&&prevAvg!=null?teamAvg-prevAvg:null;
+  const qWk=queue.filter(q=>q.week===week&&AGENTS.includes(q.agent));
+  const tgtFor=ag=>qWk.filter(q=>q.agent===ag).length||TARGET;
+  const teamTarget=AGENTS.reduce((t,ag)=>t+tgtFor(ag),0);
+  const below=wkSA.filter(a=>a.total<75).length,fa=faultStats(wkSA),st=touchStats(wkSA),gd=gutDisagree(wk),gutN=wk.filter(a=>a.gut&&a.total!=null).length;
+  let h=`<div class="kpis">
+    <div class="panel kpi"><div class="lbl-sm">Team average</div><div class="v" style="color:${bandColor(teamAvg)}">${fmt(teamAvg)}%</div><div class="s">${d==null?"No prior week to compare":`<span class="delta ${d>=0?"up":"down"}">${d>=0?"▲":"▼"} ${fmt(Math.abs(d))}</span> vs ${shortWeek(prevWk)} week`}${wkSA.length?` · ${below} below 75`:""}</div></div>
+    <div class="panel kpi"><div class="lbl-sm">Audits done</div><div class="v">${wkSA.length}<span class="s"> / ${teamTarget}</span></div><div class="s">Target ${TARGET} per Super Agent</div></div>
+    <div class="panel kpi"><div class="lbl-sm">Fault accuracy</div><div class="v">${fa.pct==null?"–":fmt(fa.pct)+"%"}</div><div class="s">${fa.n?`${fa.m} of ${fa.n} calls with a fault`:"No calls with a fault yet"}</div></div>
+    <div class="panel kpi"><div class="lbl-sm">Single touch</div><div class="v">${st.pct==null?"–":fmt(st.pct)+"%"}</div><div class="s">${st.n?`${st.y} of ${st.n} resolved without another team`:"No audits yet"}</div></div>
+    <div class="panel kpi"><div class="lbl-sm">Gut vs score</div><div class="v">${gutN?gd.length:"–"}</div><div class="s">${gutN?`of ${gutN} audits disagree`:"No audits yet"}</div></div>
+  </div>`;
+  if(!v2.length){h+=`<div class="panel empty">No rubric v2 audits yet.</div>`}
+  else{
+    // agent table
+    const wkCalls=wk.filter(a=>a.type!=="case"),prevCalls=prev.filter(a=>a.type!=="case");
+    const extra=[...new Set(wkCalls.filter(a=>!AGENTS.includes(a.agent)).map(a=>a.agent))];
+    h+=`<div class="h2">${weekLabel(week)} by agent <span>≥90 strong · 75–89 watch · &lt;75 coach</span></div><div class="panel tblwrap"><table><thead><tr><th>Agent</th><th class="n">Audits</th><th class="n">Score</th><th class="n">vs prev</th>${DIMS.map(x=>`<th class="n">${x[2]}</th>`).join("")}<th class="n">Fault acc.</th><th>Weakest criterion</th></tr></thead><tbody>`;
+    AGENTS.concat(extra).forEach(ag=>{const r=wkCalls.filter(a=>a.agent===ag),p=prevCalls.filter(a=>a.agent===ag);
+      const s=avg(r.map(a=>a.total)),ps=avg(p.map(a=>a.total)),dd=s!=null&&ps!=null?s-ps:null,f=faultStats(r),w=weakest(r),isAE=r.some(a=>a.role==="ae");
+      h+=`<tr><td><b>${esc(ag)}</b>${isAE?`<span class="tag">AE</span>`:""}</td><td class="n">${r.length}${AGENTS.includes(ag)?`/${tgtFor(ag)}`:""}</td><td class="n">${heat(s)}</td><td class="n">${dd==null?"–":`<span class="delta ${dd>=0?"up":"down"}">${dd>=0?"+":"−"}${fmt(Math.abs(dd))}</span>`}</td>${DIMS.map(x=>`<td class="n">${fmt(dimAvg(r,x[0]))}</td>`).join("")}<td class="n">${f.n?`${f.m}/${f.n}`:"–"}</td><td>${w?`<span class="num hint">${w.k}</span> ${esc(labelOf(CUR,w.t,w.k))} <span class="num hint">avg ${w.m.toFixed(1)}</span>`:`<span class="hint">${r.length?"All 3s":"–"}</span>`}</td></tr>`});
+    h+=`</tbody></table></div>`;
+    // cases: graded once as a team, kept apart from the per-agent call scores
+    const wkCases=wk.filter(a=>a.type==="case");
+    if(wkCases.length){h+=`<div class="h2">${weekLabel(week)} cases <span>Team effort · each agent's part below the score</span></div><div class="panel tblwrap"><table><thead><tr><th>Case</th><th class="n">Score</th><th>Owner</th><th>Team</th><th>Fault</th><th></th></tr></thead><tbody>`+
+      wkCases.map(a=>{const T=validTeam(a.team),own=T.filter(t=>t.role==="owner").map(t=>t.name),F=a.facts||{};
+        return `<tr><td>${callCell(a)}<div class="hint">${esc(a.restaurantName||"")}</div></td><td class="n">${heat(a.total)}</td><td>${esc(own.join(", ")||"–")}</td>
+          <td>${T.map(t=>`<div><b>${esc(t.name)}</b>${t.role?` <span class="tag">${t.role==="owner"?"Owner":"Helped"}</span>`:""}${t.said?` <span class="hint">told caller: ${esc(FA_L[t.said]||t.said)}</span>`:""}${t.note?`<div class="hint">${esc(t.note)}</div>`:""}</div>`).join("")}</td>
+          <td>${esc(FC_L[F.faultCorrect]||"–")}</td><td><button type="button" class="btn small" data-edit="${a.id}">Open</button></td></tr>`}).join("")+`</tbody></table></div>`}
+    // SA vs AE
+    const ae=v2.filter(a=>a.role==="ae");
+    if(ae.length){const sa=v2.filter(isSA);const row=(n,l)=>`<tr><td><b>${n}</b></td><td class="n">${l.length}</td><td class="n">${heat(avg(l.map(a=>a.total)))}</td>${DIMS.map(x=>`<td class="n">${fmt(dimAvg(l,x[0]))}</td>`).join("")}<td class="n">${(()=>{const f=faultStats(l);return f.pct==null?"–":fmt(f.pct)+"%"})()}</td></tr>`;
+      h+=`<div class="h2">Super Agents vs AEs <span>All weeks</span></div><div class="panel tblwrap"><table><thead><tr><th>Group</th><th class="n">Audits</th><th class="n">Score</th>${DIMS.map(x=>`<th class="n">${x[1]}</th>`).join("")}<th class="n">Fault acc.</th></tr></thead><tbody>${row("Super Agents",sa)}${row("AEs",ae)}</tbody></table></div>`}
+    // trend
+    const weeks=[...new Set(v2.map(a=>a.week).concat([week]))].sort().filter(w=>w<=week).slice(-6);
+    const cell=l=>`<td class="n">${l.length?heat(avg(l.map(a=>a.total))):'<span class="hint">–</span>'}</td>`;
+    h+=`<div class="h2">Week on week</div><div class="panel tblwrap"><table><thead><tr><th>Agent</th>${weeks.map(w=>`<th class="n">${shortWeek(w)}</th>`).join("")}</tr></thead><tbody>`+
+      AGENTS.map(ag=>`<tr><td>${esc(ag)}</td>${weeks.map(w=>cell(v2.filter(a=>a.week===w&&a.agent===ag))).join("")}</tr>`).join("")+
+      `<tr><td><b>Team</b></td>${weeks.map(w=>cell(v2.filter(a=>a.week===w&&isSA(a)))).join("")}</tr>`+
+      (ae.length?`<tr><td>AEs</td>${weeks.map(w=>cell(v2.filter(a=>a.week===w&&a.role==="ae"))).join("")}</tr>`:"")+`</tbody></table></div>`;
+    // criteria
+    if(wkSA.length){
+      const by={};wkSA.forEach(a=>Object.entries(a.scores||{}).forEach(([k,v])=>{if(v==null)return;const key=a.type+":"+k,o=by[key]=by[key]||{sc:[],na:0,n:0};o.n++;if(v==="na")o.na++;else o.sc.push(v)}));
+      const multi=new Set(wkSA.map(a=>a.type)).size>1;
+      const rows=Object.entries(by).map(([key,o])=>{const [t,k]=key.split(":"),m=avg(o.sc);return {t,k,m,pct:m==null?null:m/3*100,na:o.na,n:o.n}})
+        .sort((a,b)=>(a.pct??101)-(b.pct??101)||wOf(CUR,b.t,b.k)-wOf(CUR,a.t,a.k));
+      h+=`<div class="h2">Where the team loses points</div><div class="panel">`+
+        rows.map(r=>`<div class="critbar"><span class="num hint">${r.k}</span><span>${esc(labelOf(CUR,r.t,r.k))}${multi?` <span class="hint">· ${typeLabel(r.t)}</span>`:""} <span class="hint num">· ${pctW(wOf(CUR,r.t,r.k))}</span></span><div class="track"><i style="width:${r.pct==null?0:Math.max(r.pct,2)}%;background:${bandColor(r.pct)}"></i></div><span class="num" style="text-align:right">${r.m==null?"–":r.m.toFixed(2)}</span><span class="num hint nar" style="text-align:right">${r.na?`NA ${Math.round(r.na/r.n*100)}%`:""}</span></div>`).join("")+`</div>`;
+    }
+    // gut vs score
+    if(gd.length){
+      h+=`<div class="h2">Gut call disagrees with score <span>${gd.length} of ${gutN}</span></div><div class="panel tblwrap"><table><thead><tr><th>Agent</th><th>Call</th><th>Gut</th><th class="n">Score</th><th></th></tr></thead><tbody>`+
+        gd.map(a=>`<tr><td>${agentCell(a)}</td><td>${callCell(a)}</td><td><span class="pill ${a.gut}">${esc(GUT_L[a.gut])}</span></td><td class="n">${heat(a.total)}</td><td><button type="button" class="btn small" data-edit="${a.id}">Open</button></td></tr>`).join("")+`</tbody></table></div>`;
+    }
+    // list
+    h+=`<div class="h2">Audits for ${weekLabel(week)} <span>${wk.length} saved</span></div>`+(wk.length?`<div class="panel tblwrap"><table><thead><tr><th>Agent</th><th>Type</th><th>Call</th><th class="n">Score</th><th>Gut</th><th>Fault</th><th>Coaching note</th><th></th></tr></thead><tbody>`+
+      wk.slice().sort((a,b)=>a.agent.localeCompare(b.agent)||(a.createdAt||"").localeCompare(b.createdAt||"")).map(a=>`<tr><td>${agentCell(a)}</td><td>${typeLabel(a.type)}</td><td>${callCell(a)}</td><td class="n">${heat(a.total)}</td><td>${a.gut?`<span class="pill ${a.gut}">${esc(GUT_L[a.gut])}</span>`:"–"}</td><td>${faultCell(a)}</td><td style="max-width:280px;min-width:160px">${esc(a.take||"")}</td>
+        <td><div class="row" style="flex-wrap:nowrap"><button type="button" class="btn small" data-edit="${a.id}">Edit</button><button type="button" class="btn small danger" data-del="${a.id}">Delete</button></div></td></tr>`).join("")+`</tbody></table></div>`:`<div class="panel empty">Nothing saved for this week. Use the arrows up top to look at another week.</div>`);
+  }
+  // older rubric
+  if(old.length){
+    const rescored=new Set(v2.map(a=>a.replaces).filter(Boolean));
+    h+=`<details class="panel older"><summary><span>Rubric v1 audits <span class="hint num">${old.length}</span></span></summary><div class="tblwrap"><table><thead><tr><th>Agent</th><th>Week</th><th>Call</th><th class="n">v1 score</th><th></th></tr></thead><tbody>`+
+      old.slice().sort((a,b)=>(a.week||"").localeCompare(b.week||"")||a.agent.localeCompare(b.agent)).map(a=>`<tr><td>${esc(a.agent)}</td><td class="num">${esc(shortWeek(a.week))}</td><td>${callCell(a)}</td><td class="n">${heat(a.total)}</td>
+        <td><div class="row" style="flex-wrap:nowrap">${rescored.has(a.id)?`<span class="pill good">Re-scored</span>`:`<button type="button" class="btn small" data-rescore="${a.id}">Re-score</button>`}<button type="button" class="btn small danger" data-del="${a.id}">Delete</button></div></td></tr>`).join("")+`</tbody></table></div></details>`;
+  }
+  const keepOpen=$("#resBody details.older")?.open;
+  $("#resBody").innerHTML=h;
+  if(keepOpen&&$("#resBody details.older"))$("#resBody details.older").open=true;
+}
+$("#resBody").addEventListener("click",async e=>{
+  const ed=e.target.closest("[data-edit]");if(ed){const a=audits.find(x=>x.id===ed.dataset.edit);if(a)loadAudit(a);return}
+  const rs=e.target.closest("[data-rescore]");if(rs){const a=audits.find(x=>x.id===rs.dataset.rescore);if(a)rescoreV1(a);return}
+  const b=e.target.closest("[data-del]");if(!b)return;
+  if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirm";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent="Delete"}},3000);return}
+  const a=audits.find(x=>x.id===b.dataset.del);
+  try{await db.collection("audits").doc(b.dataset.del).delete();
+    for(const qid of new Set([a&&a.queueId].concat((a&&a.caseIds)||[]).filter(Boolean)))if(queue.some(q=>q.id===qid)){try{await db.collection("queue").doc(qid).update({auditId:null,score:null})}catch(err){}}
+    toast("Audit deleted")}catch(err){toast("Couldn't delete it.")}
+});
+
+/* ---------- export ---------- */
+const AUDIT_COLS=["audit_id","rubric_version","week_start","call_date","agent","agent_role","interaction_type","restaurant_id","call_id","call_link","reviewer",
+  "gut_call","total_pct","score_band","gut_matches_score","dim_communication_pct","dim_investigation_pct","dim_resolution_pct",
+  "section_prof_comms_pct","section_resolution_pct","section_ownership_pct","criteria_scored","criteria_na",
+  "root_cause","fault_agent","fault_actual","fault_match","error_type","action_taken","promised_to_client","follow_up_owner","single_touch","sources_checked",
+  "coaching_note","replaces_audit_id","queue_id","created_at","updated_at","created_by",
+  "restaurant_name","call_kind","call_time_et","sample_source","chain_calls","chain_span_sec","chain_talk_sec","chain_agent_talk_sec","chain_call_ids",
+  "linked_task_ids","claude_facts_version","claude_read_at","claude_fields_marked","claude_fields_same","case_owner","case_team","slack_threads"];
+const SCORE_COLS=["audit_id","rubric_version","week_start","agent","interaction_type","criterion_id","criterion_key","criterion","section","dimension","weight_pct","score","is_na","score_pct","weighted_points","reason"];
+const RUBRIC_COLS=["rubric_version","interaction_type","criterion_id","criterion_key","section","dimension","weight_pct","criterion","level_0","level_1","level_2","level_3","na_when","scale","na_rule"];
+/* one row per call in an audit's linked call, in order: the audio a reviewer or the AI plays end to end; graded = the audited agent's own calls */
+const LINK_COLS=["audit_id","rubric_version","week_start","agent","sampled_call_id","part","call_id","started_at_et","duration_sec","handled_by","handled_by_login","group","graded","direction","other_party","recording_url","talked"];
+const GROUP_X={graded:"graded_agent",sa:"super_agent",pool:"sa_pool",crt:"crt",csr:"csr",other:"other"};
+/* one row per WIRA task linked to an audit's calls, with what was entered on it */
+const TASK_COLS=["audit_id","week_start","agent","sampled_call_id","task_id","created_at_et","timing","minutes","during_call","created_by","by_graded_agent","graded_agent_commented","graded_agent_mentioned",
+  "task_category","task_intent","task_type","title","description","comments","status","sub_status","priority","closed_at_et","issue_type","issue_category","diagnosis","ideal_outcome",
+  "callback_required","fcr_agent","fcr_client","order_number","assigned_to","wira_url"];
+/* one row per case-fact field: the reviewer's answer next to Claude's, and whether they match (auto for the chip fields, marked by the reviewer for text) */
+/* cases: one row per agent on the case (role, what they told the caller about fault, what they did) */
+const TEAM_COLS=["audit_id","week_start","case_score_pct","restaurant_id","member","role","told_caller_fault","fault_actual","said_matches_actual","note"];
+const CMP_COLS=["audit_id","week_start","agent","sampled_call_id","field","yours","claude","match","match_source","claude_facts_version","claude_read_at"];
+function buildTables(){
+  const A=[AUDIT_COLS],S=[SCORE_COLS],R=[RUBRIC_COLS],Lk=[LINK_COLS],T=[TASK_COLS],Cm=[CMP_COLS],Tm=[TEAM_COLS];
+  audits.slice().sort((a,b)=>(a.week||"").localeCompare(b.week||"")||(a.agent||"").localeCompare(b.agent||"")||(a.createdAt||"").localeCompare(b.createdAt||"")).forEach(a=>{
+    const ver=verOf(a),c=calc(ver,a.type,a.scores||{}),F=a.facts||{},lp=parseLink(a.link||""),ch=validChain(a.chain),tk=validTasks(a.tasks),ai=validAi(a.aiFacts);
+    const cmpN=(()=>{let n=0,s=0;if(ai)CMP.forEach(([k,lab,kind])=>{const you=String(F[k]||"").trim(),cl=String(ai[k]||"").trim();const v=kind==="enum"?(you&&cl?(you===cl?"same":"diff"):""):((a.factsMatch||{})[k]||"");if(v){n++;if(v==="same")s++}});return {n,s}})();
+    const role=a.role||(AGENTS.includes(a.agent)?"sa":"other");
+    const src=(F.sources||[]).map(k=>SRC_L[k]||k).concat(F.sourcesOther?[F.sourcesOther]:[]).join("; ");
+    A.push([a.id,ver,a.week||"",a.callDate||"",a.agent||"",ROLE_X[role]||role,typeX(a.type),a.restaurantId||lp.restaurantId||"",a.callId||lp.callId||"",a.link||"",a.reviewer||"",
+      a.gut||"",r1(c.total),BAND_NAME[band(c.total)]||"",a.gut&&c.total!=null?band(c.total)===a.gut:null,
+      r1(c.dims.communication),r1(c.dims.investigation),r1(c.dims.resolution),r1(c.secs[0]&&c.secs[0].pct),r1(c.secs[1]&&c.secs[1].pct),r1(c.secs[2]&&c.secs[2].pct),c.done-c.na,c.na,
+      F.rootCause||"",F.faultAgent||"",F.faultCorrect||"",FAULTED.includes(F.faultCorrect)?F.faultAgent===F.faultCorrect:null,F.errorType||"",F.actionTaken||"",F.promised||"",F.followUpOwner||"",
+      F.singleTouch==="yes"?true:F.singleTouch==="no"?false:null,src,a.take||"",a.replaces||"",a.queueId||"",a.createdAt||"",a.updatedAt||"",a.by||"",
+      a.restaurantName||"",a.kind||"",a.callTime||"",a.source||(a.queueId?"paste":"manual"),
+      ch?(ch.count||ch.legs.length):null,ch?(ch.spanSec??null):null,ch?(ch.talkSec??null):null,ch?(ch.ownSec??null):null,ch?ch.legs.map(l=>l.id).join(";"):"",
+      tk?tk.map(k=>k.id).join(";"):"",ai?ai.v||"":"",ai?ai.at||"":"",ai?cmpN.n:null,ai?cmpN.s:null,
+      validTeam(a.team).filter(t=>t.role==="owner").map(t=>t.name).join("; "),validTeam(a.team).map(t=>t.name).join("; "),(validSlack(a.slack)||[]).map(t=>t.url).join(" ")]);
+    validTeam(a.team).forEach(t=>Tm.push([a.id,a.week||"",r1(c.total),a.restaurantId||"",t.name,t.role||"",t.said||"",F.faultCorrect||"",t.said&&F.faultCorrect?t.said===F.faultCorrect:null,t.note||""]));
+    const sid=a.callId||lp.callId||"";
+    (tk||[]).forEach(k=>T.push([a.id,a.week||"",a.agent||"",sid,k.id,String(k.at||"").replace("T"," "),k.when||"",k.min??null,k.leg??null,k.by||"",k.mine??null,!!k.commented,!!k.mentioned,
+      k.cat||"",k.intent||"",k.type||"",k.title||"",k.desc||"",(k.comments||[]).map(c=>`${c.who||"someone"}: ${c.text}`).join(" | "),k.status||"",k.sub||"",k.pri||"",String(k.closed||"").replace("T"," "),
+      k.issue||"",k.issueCat||"",k.diagnosis||"",k.ideal||"",k.callback||"",k.fcrAgent??null,k.fcrClient??null,k.order||"",k.assignee||"",wiraUrl(k.id)]));
+    if(ai){CMP.forEach(([k,lab,kind,labels])=>{const you=String(F[k]||"").trim(),cl=String(ai[k]||"").trim(),auto=kind==="enum",m=auto?(you&&cl?(you===cl?"same":"different"):""):((a.factsMatch||{})[k]==="same"?"same":(a.factsMatch||{})[k]==="diff"?"different":"");
+        Cm.push([a.id,a.week||"",a.agent||"",sid,k,you,cl,m,m?(auto?"auto":"reviewer"):"",ai.v||"",ai.at||""])});
+      [["summary",ai.summary],["faultWhy",ai.faultWhy],["gaps",ai.gaps]].forEach(([k,v])=>{if(v)Cm.push([a.id,a.week||"",a.agent||"",sid,k,"",v,"","",ai.v||"",ai.at||""])})}
+    if(ch)ch.legs.forEach((l,i)=>{const g=isGraded(l);Lk.push([a.id,ver,a.week||"",a.agent||"",a.callId||lp.callId||"",i+1,l.id||"",String(l.at||"").replace("T"," "),l.sec??null,
+      l.who||"",l.login||"",GROUP_X[g?"graded":l.group]||"",g,l.dir==="in"?"inbound":l.dir==="out"?"outbound":"",l.party||"",l.id?recUrl(l.id):"",l.talk||"talk"])});
+    itemsOf(ver,a.type).forEach(it=>{const s=a.scores?a.scores[it.id]:null,isNa=s==="na",scored=s!=null&&s!=="";
+      const p=!scored?null:isNa?(ver==="v1"?1:null):pts(ver,Number(s));
+      S.push([a.id,ver,a.week||"",a.agent||"",typeX(a.type),it.id,it.key,it.label,it.section,it.dim,r1(it.w*100),scored&&!isNa?Number(s):null,isNa,p==null?null:r1(p*100),p==null?null:Math.round(p*it.w*10000)/100,(a.notes&&a.notes[it.id])||""]);
+    });
+  });
+  Object.keys(RUBRICS).forEach(ver=>TYPES.filter(t=>ver===CUR||t.k!=="case").forEach(t=>itemsOf(ver,t.k).forEach(it=>R.push([ver,t.x,it.id,it.key,it.section,it.dim,r1(it.w*100),it.label,
+    it.lv[0]??"",it.lv[1]??"",it.lv[2]??"",it.lv[3]??"",it.na||"",RUBRICS[ver].scale,RUBRICS[ver].naLabel]))));
+  return {A,S,R,Lk,T,Cm,Tm};
+}
+const XLSX_SRC=["https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js","https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"];
+let xlsxP=null;
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.async=true;s.onload=()=>res();s.onerror=()=>{s.remove();rej()};document.head.appendChild(s)})}
+function loadXlsx(){if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(!xlsxP)xlsxP=(async()=>{for(const src of XLSX_SRC){try{await loadScript(src);if(window.XLSX)return window.XLSX}catch(e){}}xlsxP=null;throw {code:"load_failed"}})();return xlsxP}
+function buildWorkbook(X){const {A,S,R,Lk,T,Cm,Tm}=buildTables(),wb=X.utils.book_new();
+  const wide={call_link:40,root_cause:40,coaching_note:40,criterion:48,reason:40,level_0:30,level_1:30,level_2:30,level_3:30,promised_to_client:28,action_taken:28,sources_checked:28,restaurant_name:28,chain_call_ids:40,recording_url:40,sampled_call_id:38,call_id:38,handled_by:20,started_at_et:20,
+    title:36,description:48,comments:48,wira_url:36,yours:40,claude:40,linked_task_ids:24,created_by:24,task_category:28};
+  [[A,"audits"],[S,"scores"],[R,"rubric"],[Lk,"linked_calls"],[T,"linked_tasks"],[Cm,"case_facts_compare"],[Tm,"case_team"]].forEach(([rows,name])=>{const ws=X.utils.aoa_to_sheet(rows);ws["!cols"]=rows[0].map(h=>({wch:wide[h]||Math.min(24,Math.max(10,h.length+2))}));X.utils.book_append_sheet(wb,ws,name)});
+  return wb}
+const XLSX_MIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",FOLDER_MIME="application/vnd.google-apps.folder";
+function fileFrom(res){let p=res&&res.payload;if(typeof p==="string"){try{p=JSON.parse(p)}catch(e){p={}}}p=p||{};const f=p.file||p;const id=f.id||f.fileId||null;return {id,url:safeUrl(f.viewUrl||f.webViewLink||f.alternateLink)||null}}
+function gd(tool,input){return mcp.callTool("Google Drive",tool,input)}
+async function makeFolder(title,parentId){const input={title,contentMimeType:FOLDER_MIME};if(parentId)input.parentId=parentId;
+  const f=fileFrom(await gd("create_file",input));if(!f.id)throw {code:"tool_error",message:"Google Drive didn't return the folder."};return {id:f.id,url:f.url||`https://drive.google.com/drive/folders/${f.id}`}}
+const AUTH_CODES=["needs_reauth","server_not_connected","selection_required","not_in_manifest","blocked_by_policy","approval_required","not_granted","capability_disabled","capability_removed"];
+function driveErr(e){const c=e&&e.code;
+  return c==="server_not_connected"?"Add the Google Drive connector in claude.ai Settings → Connectors, then try again.":
+    c==="needs_reauth"?"Reconnect Google Drive in claude.ai Settings → Connectors, then try again.":
+    c==="selection_required"?"Pick which Google Drive connector this page should use, then try again.":
+    c==="not_in_manifest"?"Google Drive is turned off for this page. Allow it from the page's permissions to export.":
+    c==="blocked_by_policy"||c==="approval_required"?"Your organization blocks creating Drive files from here. Use Download .xlsx instead.":
+    c==="too_large"?"The export is too big to send to Drive from here. Use Download .xlsx instead.":
+    c==="load_failed"?"Couldn't load the spreadsheet builder. Check your connection and try again.":
+    c==="tool_error"?"Google Drive refused the file: "+((e&&e.message)||"unknown error"):
+    c==="not_granted"||c==="capability_disabled"||c==="capability_removed"?"Google Drive isn't available in this view. Use Download .xlsx instead.":
+    "Google Drive didn't respond. Try again in a moment."}
+function stampOf(at){try{return new Date(at).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})}catch(e){return at}}
+function renderExportStatus(){const st=$("#gsStatus"),m=exportMeta;if(exporting)return;
+  if(exportNote){st.textContent=exportNote;return}
+  if(!m||!safeUrl(m.url)){st.innerHTML="";return}
+  st.innerHTML=`Latest export · ${esc(stampOf(m.at))} · ${esc(m.count)} audits · <a href="${esc(safeUrl(m.url))}" target="_blank" rel="noopener">Open ↗</a>`+(safeUrl(m.folderUrl)?` · <a href="${esc(safeUrl(m.folderUrl))}" target="_blank" rel="noopener">Folder ↗</a>`:"")}
+$("#gsBtn").onclick=async()=>{
+  const st=$("#gsStatus");
+  if(!audits.length){toast("Nothing to export yet.");return}
+  if(!mcp){exportNote="Google Drive isn't reachable from this view. Use Download .xlsx instead.";renderExportStatus();return}
+  exportNote="";exporting=true;$("#gsBtn").disabled=true;const meta=Object.assign({},exportMeta||{});
+  try{
+    st.textContent="Building the export…";
+    const X=await loadXlsx(),wb=buildWorkbook(X),b64=X.write(wb,{bookType:"xlsx",type:"base64",compression:true});
+    let content=b64;
+    if(b64.length>950000){const lt=await mcp.listTools().catch(()=>null);
+      if(lt&&lt.fileArgs)content={$file:{data:new Uint8Array(X.write(wb,{bookType:"xlsx",type:"array",compression:true})),name:"qa-desk-export.xlsx",type:XLSX_MIME}};else throw {code:"too_large"}}
+    let folderId=meta.folderId||null,folderUrl=meta.folderUrl||null,oldFolderId=meta.oldFolderId||null;
+    if(!folderId){st.textContent="Creating the QA Desk exports folder…";
+      let f=null;
+      try{f=await makeFolder("QA Desk exports",meta.parentId||null)}catch(e){if(AUTH_CODES.includes(e&&e.code))throw e;
+        if(meta.parentId){try{f=await makeFolder("QA Desk exports",null)}catch(e2){if(AUTH_CODES.includes(e2&&e2.code))throw e2}}}
+      if(f){folderId=f.id;folderUrl=f.url;oldFolderId=null}}
+    st.textContent="Uploading to Google Drive…";
+    const input={title:"QA Desk export",base64Content:content,contentMimeType:XLSX_MIME};if(folderId)input.parentId=folderId;
+    let file;
+    try{file=fileFrom(await gd("create_file",input))}
+    catch(e){if(folderId&&e&&e.code==="tool_error"){delete input.parentId;folderId=null;folderUrl=null;oldFolderId=null;file=fileFrom(await gd("create_file",input))}else throw e}
+    if(!file.id)throw {code:"tool_error",message:"Google Drive didn't return the new file."};
+    const url=file.url||`https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+    if(meta.fileId&&meta.fileId!==file.id&&folderId){
+      st.textContent="Moving the previous export to Old exports…";
+      try{if(!oldFolderId){oldFolderId=(await makeFolder("Old exports",folderId)).id}
+        await gd("update_file",{fileId:meta.fileId,title:`QA Desk export · ${stampOf(meta.at)}`,parentId:oldFolderId})}catch(e){}
+    }
+    const next={parentId:meta.parentId||null,folderId,folderUrl,oldFolderId:folderId?oldFolderId:null,fileId:file.id,url,at:new Date().toISOString(),count:audits.length,by:myId||null};
+    exportMeta=next;
+    if(db){try{await db.doc("meta/export").set(next)}catch(e){}}
+    toast(`Exported ${audits.length} audits to Google Drive`);
+  }catch(e){exporting=false;exportNote=driveErr(e);$("#gsBtn").disabled=false;renderExportStatus();return}
+  exporting=false;$("#gsBtn").disabled=false;renderExportStatus();
+};
+$("#xlsxBtn").onclick=async()=>{
+  if(!audits.length){toast("Nothing to export yet.");return}
+  if(!downloads){toast("Downloads aren't available in this view.");return}
+  try{const X=await loadXlsx(),buf=X.write(buildWorkbook(X),{bookType:"xlsx",type:"array",compression:true});
+    await downloads.save({filename:`qa-desk-export-${iso(new Date())}.xlsx`,data:new Uint8Array(buf)});toast("Export saved")}
+  catch(e){const c=e&&e.code;if(c==="declined")return;
+    toast(c==="load_failed"?"Couldn't load the spreadsheet builder. Try again.":c==="extension_not_enabled"?".xlsx downloads aren't available here.":c==="rate_limited"?"Another save is still open. Finish it first.":"Couldn't save the file.")}
+};
+
+/* ---------- render ---------- */
+function renderAll(){
+  $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
+  renderBoard();renderQueue();renderData();renderResults();renderExportStatus();
+}
+const h0=(location.hash||"").slice(1);if(["score","queue","data","results"].includes(h0))tab=h0;
+lastParsed=parseLink(form.link);
+setTab(tab);if(tab!=="score")renderForm();
+
+/* ---------- capabilities ---------- */
+(async()=>{
+  const c=window.claude;if(!c||!c.use){banner("Open this page in Claude to save audits. Scoring still works here, but nothing is stored.");return}
+  const [d,u,m,dl,sm]=await Promise.all(["db","user","mcp","downloads","sample"].map(n=>Promise.resolve().then(()=>c.use(n)).catch(()=>null)));
+  db=d;userCap=u;mcp=m;downloads=dl;sampleFn=typeof sm==="function"?sm:null;if(tab==="score"){renderTasks();renderAi()}
+  if(u){try{myId=await u.id()}catch(e){}try{mayAuto=(await u.canEdit())===true}catch(e){}}
+  if(!db){banner("Sign in to claude.ai to save audits. You can still score a call, but it won't be logged.");renderAll();return}
+  db.collection("audits").onSnapshot(s=>{audits=s.docs.map(x=>({id:x.id,...x.data()}));dbReady=true;renderAll();maybeAutoPull()},()=>banner("Lost the connection to the audit log. Reload the page."));
+  db.collection("queue").onSnapshot(s=>{queueAll=s.docs.map(x=>({id:x.id,...x.data()}));queue=queueAll.filter(q=>!q.removed);queueReady=true;mergeOpen();renderAll();maybeAutoPull()},()=>{});
+  db.collection("pulls").onSnapshot(s=>{pulls=Object.fromEntries(s.docs.map(x=>[x.id,x.data()]));pullsReady=true;renderQueue();renderData();maybeAutoPull()},()=>{pullsReady=true;maybeAutoPull()});
+  db.doc("meta/roster").onSnapshot(s=>{const r=s.exists?s.data():null,sc=r&&r.chainScope,R=r&&Array.isArray(r.agents)?makeRoster(r.agents,sc):null;
+    roster=R&&R.agents.length?R:makeRoster(ROSTER_DEFAULT,sc);rosterReady=true;maybeAutoPull()},()=>{rosterReady=true;maybeAutoPull()});
+  db.doc("meta/export").onSnapshot(s=>{exportMeta=s.exists?s.data():null;renderExportStatus()},()=>{});
+})();
+</script>
