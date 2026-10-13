@@ -160,7 +160,8 @@ const EVIDENCE_RULES = [
   `- Some facts live where Tarro can't see them: the client's own online ordering or website, what their kitchen made, payments taken in store. There the client's own account is acceptable evidence. Note that it is the client's word; do not mark the SA down for not verifying what Tarro has no access to.`,
   `- Linked tasks, orders and recordings were matched automatically and can belong to another case. Use only what matches this chat's request; never judge the SA on another case.`,
   `- This record is not everything the SA could see. The SA works in GreenDot (tickets with item notes, payment records, menu, printer and account settings) and can play recordings that are not linked here. A cant_check claim is not a mistake and costs the SA nothing; only a contradicted claim counts against the SA.`,
-  `- If a point can't be settled only because this record lacks something the SA could see, and the SA's account fits the client's report and any recordings, take the SA's account as the working fact and say it is unverified. Never conclude the SA skipped a check because this record doesn't show it.`];
+  `- If a point can't be settled only because this record lacks something the SA could see, and the SA's account fits the client's report and any recordings, take the SA's account as the working fact and say it is unverified. Never conclude the SA skipped a check because this record doesn't show it.`,
+  `- Chat messages have no times. A call that started after the chat opened happened while the chat was going on; don't place it before or after a message unless a message refers to it, and never fault the SA on an order of events you can't see.`];
 const SCORE_ONCE = [`- Score each flaw once, in the one criterion it belongs to, and nowhere else:`,
   `  a defense or conclusion before checking: First response if it was in the first reply, otherwise Gathered the evidence (never both) · a wrong account of what happened given to the client: Restated · blaming the wrong party for the client's problem: Fault attribution · the wrong action or next step for the client: Resolution path · a wrong number, base or terms: Resolution accuracy · the client left unsure what they get, why or when (including an amount never stated): Solution explained · how the lead was told or asked (summary, recommendation, logic): Escalation · tone, ownership, over-promising: Reply quality.`,
   `  Fault attribution is about the problem the client brought, not the SA's own slips in this chat (a misread request, a wrong first answer); those count once where they happened.`,
@@ -186,7 +187,8 @@ function chatEvidence(k){const c=k.chat,L=[];
   if(k.orderNote)L.push(k.orderNote);
   let budget=CHAT.budget;
   if((k.calls||[]).length){L.push("","LINKED CALL RECORDINGS (the linked order's calls and the same caller's other calls; may be wrong)");k.calls.forEach((l,i)=>{let tx=String(l.text||"").trim();if(tx.length>CHAT.txCap)tx=tx.slice(0,CHAT.txCap)+" …";if(tx.length>budget)tx=tx.slice(0,Math.max(0,budget))+" …";budget-=tx.length;
-    L.push(`\nCALL ${i+1} · ${l.at.replace("T"," ")} ET · ${dur(l.sec)} · agent ${l.agent||"unknown"} · ${l.dir==="out"?"outbound to":"inbound from"} …${String(l.phone).slice(-4)}${l.orders?` · tied to ${l.orders}`:""}\n${tx||"[no transcript]"}`)})}
+    const when=c.at&&l.at?(l.at>=c.at?"after the chat opened":"before the chat opened"):"";
+    L.push(`\nCALL ${i+1} · ${l.at.replace("T"," ")} ET${when?` (${when})`:""} · ${dur(l.sec)} · agent ${l.agent||"unknown"} · ${l.dir==="out"?"outbound to":"inbound from"} …${String(l.phone).slice(-4)}${l.orders?` · tied to ${l.orders}`:""}\n${tx||"[no transcript]"}`)})}
   else L.push("","LINKED CALL RECORDINGS: none found.");
   if((k.slack||[]).length){L.push("","SLACK");k.slack.forEach(t=>{L.push(`#${t.channel} · ${t.author||"someone"}: ${capText(t.text,600)}`);(t.replies||[]).forEach(r=>L.push(`- reply · ${r.who}: ${capText(r.text,300)}`))})}
   if(k.notFound&&k.notFound.length)L.push("","LOOKED FOR BUT NOT IN THE DATA: "+k.notFound.join("; "));
@@ -346,6 +348,8 @@ function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray
 const MARKS=["right","partly","wrong"];
 /* reads {criteria:{id:{why,score}}} (asked since chat-1 b13) or the older {scores, reasons}; returns {scores, reasons, ...} either way */
 function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;const cr=x.criteria&&typeof x.criteria==="object"&&!Array.isArray(x.criteria)?x.criteria:null;
+  /* a reply that never closed "criteria" carries the rest inside it: lift those keys back up */
+  if(cr)["route","wentWell","nextTime","verdictWhy"].forEach(k=>{if(x[k]==null&&cr[k]!=null)x=Object.assign({},x,{[k]:cr[k]})});
   const pick=(k,f)=>{const o={};if(cr)Object.entries(cr).forEach(([id,v])=>{if(v&&typeof v==="object")o[id]=v[k]});return Object.keys(o).length?o:f};
   const sc=pick("score",x.scores&&typeof x.scores==="object"?x.scores:{}),rs=pick("why",x.reasons&&typeof x.reasons==="object"?x.reasons:{});
   const scores={},reasons={};CHAT_RUBRIC.forEach(r=>{const v=sc[r.id];const na=/^\s*(n\/?a|not applicable)\s*$/i.test(String(v))||v==null;

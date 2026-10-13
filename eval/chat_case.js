@@ -18,6 +18,13 @@ const [sid, step] = process.argv.slice(2);
 const opt = Object.fromEntries(process.argv.slice(4).map(a => a.replace(/^--/, '').split('=')));
 const tag = opt.tag || 'run', F = s => path.join(DIR, `${sid}.${tag}.${s}`);
 const rj = f => JSON.parse(fs.readFileSync(f, 'utf8'));
+/* a reply that stops short of its closing braces: append the missing } and ] (strings respected). The page's ask() would need the same */
+function closeJson(t) {
+  const st = []; let str = false, esc = false;
+  for (const ch of t) { if (str) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; continue; }
+    if (ch === '"') str = true; else if (ch === '{' || ch === '[') st.push(ch); else if (ch === '}' || ch === ']') st.pop(); }
+  return t + st.reverse().map(c => (c === '{' ? '}' : ']')).join('');
+}
 /* one blind pass: the prompt file goes to a fresh Claude with no tools and no project context, the JSON reply is saved.
    A reply that isn't valid JSON is retried once (the page's retry does the same); the bad reply is kept as <pass>.bad.txt */
 function blind(pass, attempt = 1) {
@@ -28,6 +35,7 @@ function blind(pass, attempt = 1) {
     { input: fs.readFileSync(F(pass + '.txt')), cwd, maxBuffer: 1e8, timeout: 900000 }).toString();
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
   let out = null; try { if (a >= 0 && b > a) out = JSON.parse(txt.slice(a, b + 1)); } catch (e) { out = null; }
+  if (!out && a >= 0) try { out = JSON.parse(closeJson(txt.slice(a, b + 1))); if (out) console.log(`${pass}: closed unbalanced JSON`); } catch (e) { out = null; }
   if (!out) { fs.writeFileSync(F(pass + '.bad.txt'), txt); if (attempt < 2) { console.log(`${pass}: reply was not valid JSON, retrying once`); return blind(pass, attempt + 1); }
     throw new Error(`${pass}: no valid JSON in the reply: ${txt.slice(0, 300)}`); }
   fs.writeFileSync(F(pass + '.out.json'), JSON.stringify(out, null, 1));

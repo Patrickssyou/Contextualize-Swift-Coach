@@ -78,6 +78,8 @@ ok(/Score each flaw once/.test(gp) && /3 right · 2 right with a small gap/.test
 const g2 = B.cleanChatGrade({ criteria: { fr: { why: 'ok', score: 2 }, amt: { why: 'none given', score: 'N/A' }, esc: { why: 'not needed', score: 'n/a' }, ev: { why: 'x', score: 3 } } });
 ok(g2.scores.fr === 2 && g2.scores.amt === 'na' && g2.scores.esc === 'na' && g2.scores.ev === 3 && g2.reasons.amt === 'none given', 'criteria {why, score} map to scores and reasons; N/A spellings');
 ok(B.cleanChatGrade({ scores: { esc: 'N/A' } }).scores.esc === 'na', 'old shape still read, N/A is not 0');
+const g3 = B.cleanChatGrade({ criteria: { fr: { why: 'a', score: 1 }, route: { facts: { mark: 'wrong', why: 'w' } }, wentWell: ['x'], nextTime: [{ what: 'q', do: 'd' }], verdictWhy: 'v' } });
+ok(g3.scores.fr === 1 && g3.route.facts.mark === 'wrong' && g3.wentWell.length === 1 && g3.nextTime.length === 1 && g3.verdictWhy === 'v', 'unclosed criteria: route and coaching lifted back up');
 
 // prompts carry the route and no real restaurant names baked into code
 const src = fs.readFileSync(path.join(__dirname, '..', 'src/chat.js'), 'utf8');
