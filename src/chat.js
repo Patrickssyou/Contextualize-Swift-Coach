@@ -325,7 +325,7 @@ function cleanChatRefs(x){if(!x||typeof x!=="object")return {};return {tickets:a
 const CHECKS=["supported","contradicted","cant_check"],KINDS=["said","did","internal"];
 function cleanChatFacts(x,calls){if(!x||typeof x!=="object"||Array.isArray(x))return null;
   const callsOut={};arr(x.calls).forEach(k=>{const l=(calls||[])[Number(k&&k.n)-1];if(!l)return;const b=arr(k.bullets).map(t=>chS(t,200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,6);if(b.length)callsOut[l.id]=b});
-  const timeline=arr(x.timeline).filter(t=>t&&t.what).slice(0,80).map((t,i)=>({id:"F"+(i+1),src:chS(t.src,40),when:chS(t.when,20),who:chS(t.who,60),kind:KINDS.includes(String(t.kind).toLowerCase())?String(t.kind).toLowerCase():"said",what:chS(t.what,260)}));
+  const timeline=arr(x.timeline).filter(t=>t&&t.what).slice(0,80).map((t,i)=>({id:"F"+(i+1),src:chS(t.src,40),when:chS(t.when,40),who:chS(t.who,60),kind:KINDS.includes(String(t.kind).toLowerCase())?String(t.kind).toLowerCase():"said",what:chS(t.what,260)}));
   const claims=arr(x.claims).filter(c=>c&&c.claim).slice(0,30).map((c,i)=>{const k=String(c.check||"").toLowerCase().replace(/[\s-]+/g,"_");return {id:"C"+(i+1),src:chS(c.src,20),claim:chS(c.claim,220),check:CHECKS.includes(k)?k:"cant_check",evidence:chS(c.evidence,260)}});
   const promises=arr(x.promises).filter(p=>p&&p.what).slice(0,15).map((p,i)=>({id:"P"+(i+1),src:chS(p.src,20),who:chS(p.who,60),to:chS(p.to,60),what:chS(p.what,160)}));
   if(!timeline.length)return null;return {calls:callsOut,timeline,claims,promises}}
@@ -380,19 +380,35 @@ const chatGradable = c => (c.msgs||[]).some(m=>m.role==="sa");
 function chatPicks(chats,perSA){const by=new Map();
   (chats||[]).filter(chatGradable).forEach(c=>{if(!by.has(c.sa))by.set(c.sa,[]);by.get(c.sa).push(c)});
   const out=[];by.forEach(list=>list.slice().sort((a,b)=>fnv(String(a.sid))-fnv(String(b.sid))).slice(0,perSA).forEach(c=>out.push(c.sid)));return out}
+/* a reply cut short or left open: keep the complete part and close what's open (no second call: the page never retries Claude from code) */
+function repairJson(text){const t=String(text||""),a=t.indexOf("{");if(a<0)return null;
+  const stack=[];let inStr=false,esc=false,lastSafe=-1,safeStack=null;
+  for(let i=a;i<t.length;i++){const ch=t[i];
+    if(inStr){if(esc)esc=false;else if(ch==="\\")esc=true;else if(ch==='"')inStr=false;continue}
+    if(ch==='"'){inStr=true;continue}
+    if(ch==="{"||ch==="[")stack.push(ch==="{"?"}":"]");
+    else if(ch==="}"||ch==="]"){if(stack.pop()!==ch)return null;if(!stack.length){try{return JSON.parse(t.slice(a,i+1))}catch(e){return null}}}
+    if(ch===","||ch==="}"||ch==="]"){lastSafe=ch===","?i:i+1;safeStack=stack.slice()}}
+  if(lastSafe<0||!safeStack)return null;
+  let body=t.slice(a,lastSafe).replace(/,\s*$/,"");
+  for(let i=safeStack.length-1;i>=0;i--)body+=safeStack[i];
+  try{return JSON.parse(body)}catch(e){return null}}
+/* one Claude pass: a reply that isn't valid JSON is repaired from its text when possible */
+async function askPass(deps,prompt,pass){try{return await deps.ask(prompt,pass)}
+  catch(e){if(e&&e.code==="invalid_json"&&e.text){const v=repairJson(e.text);if(v&&typeof v==="object")return v}throw e}}
 /* everything tied to the chat: linked tasks, the order, its recordings and the same caller's other calls, Slack.
    deps: {query(cfg,title) -> rows, ask(prompt,pass) -> parsed JSON, slack(chat,k) -> threads (optional), orderIds (reviewer's pick, optional), step(id,state,note)} */
 async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),day=String(c.at).slice(0,10),from=addDaysU(day,-1),T=`QA Desk · chat ${c.sid}`;
-  const k={chat:c,tasks:[],orders:[],ranked:[],refs:mergeRefs({},{}),calls:[],slack:[],notFound:[],orderNote:""};
+  const k={chat:c,tasks:[],orders:[],allOrders:[],ranked:[],refs:mergeRefs({},{}),calls:[],slack:[],notFound:[],orderNote:""};
   step("tasks","run");
   if(c.code)k.tasks=pickRelated(c,await q(relatedTasksConfig(c.code,from,addDaysU(day,2)),T+" · tasks"));
   step("tasks","done",k.tasks.length?`${k.tasks.length} linked`:"none");
   step("refs","run");
   let refs=textRefs(c.msgs.map(m=>m.text).concat(k.tasks.flatMap(t=>[t.title,t.desc])));
-  k.refs=mergeRefs(refs,deps.ask?cleanChatRefs(await deps.ask(chatRefsPrompt(k),"refs")):{});
+  k.refs=mergeRefs(refs,deps.ask?cleanChatRefs(await askPass(deps,chatRefsPrompt(k),"refs")):{});
   step("refs","done");
   step("orders","run");
-  const orders=c.code?(await q(orderConfig(c.code,from,day),T+" · orders")).map(orderRow):[];
+  const orders=c.code?(await q(orderConfig(c.code,from,day),T+" · orders")).map(orderRow):[];k.allOrders=orders;
   k.ranked=rankOrders(orders,k.refs,c.at);
   const pick=Array.isArray(deps.orderIds)?orders.filter(o=>deps.orderIds.includes(o.id)):linkedOrders(k.ranked);
   k.orders=pick.map((o,i)=>Object.assign({},o,{label:"O"+(i+1)}));
@@ -416,14 +432,17 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
   return k}
 /* the route: facts, analysis, the money in code, then grade and coaching. cal excludes this chat's own calibration case */
 async function gradeChat(k,deps){const step=deps.step||(()=>{}),policy=deps.policy||CHAT_POLICY_EMPTY,cal=(deps.cal||[]).filter(x=>String(x.sid)!==String(k.chat.sid));
-  step("facts","run");const F=cleanChatFacts(await deps.ask(chatFactsPrompt(k),"facts"),k.calls);if(!F)throw {code:"ai_shape",pass:"facts"};
+  step("facts","run");const F=cleanChatFacts(await askPass(deps,chatFactsPrompt(k),"facts"),k.calls);if(!F)throw {code:"ai_shape",pass:"facts"};
   step("facts","done",`${F.timeline.length} facts · ${F.claims.length} claims`);
-  step("analysis","run");const A=cleanChatAnalysis(await deps.ask(chatAnalysisPrompt(k,F,policy,cal),"analysis"),F,policy);if(!A)throw {code:"ai_shape",pass:"analysis"};
+  step("analysis","run");const A=cleanChatAnalysis(await askPass(deps,chatAnalysisPrompt(k,F,policy,cal),"analysis"),F,policy);if(!A)throw {code:"ai_shape",pass:"analysis"};
   step("analysis","done");
   const comp=compFor(A,k.orders,policy),offer=offerCheck(A.saOffer,comp,k.orders);
-  step("grade","run");const G=cleanChatGrade(await deps.ask(chatGradePrompt(k,F,A,comp,offer,cal),"grade"));if(!G)throw {code:"ai_shape",pass:"grade"};
+  step("grade","run");const G=cleanChatGrade(await askPass(deps,chatGradePrompt(k,F,A,comp,offer,cal),"grade"));if(!G)throw {code:"ai_shape",pass:"grade"};
   const pct=chatScore(G.scores),verdict=chatVerdict(pct);step("grade","done",verdict?`${verdict.label} ${pct}%`:"");
   return {F,A,comp,offer,G,pct,verdict}}
+/* where chat data lives in the artifact db. Each week is its own small set of collections, so the page only ever reads one week */
+const CHAT_PATHS = {chats:w=>`chatWeeks/${w}/chats`, audits:w=>`chatWeeks/${w}/audits`, tx:w=>`chatWeeks/${w}/tx`, reviews:w=>`chatWeeks/${w}/reviews`,
+  calib:"chatCalib", policy:"settings/chatPolicy", staff:"settings/staff"};
 /* what goes in the db. chats/<sid>: the queue row (the chat itself, so grading needs no re-query) */
 function chatQueueDoc(c,picked){return Object.assign({v:CHAT_V,week:chatWeek(c.at),picked:!!picked,gradable:chatGradable(c)},c,
   {msgs:(c.msgs||[]).map(m=>Object.assign({},m,{text:capText(m.text,4000)}))})}
@@ -433,6 +452,8 @@ function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
     tasks:k.tasks.map(t=>({sid:t.sid,wid:t.wid,parent:t.parent===c.wid,at:t.at,project:t.project,intent:t.intent,title:t.title,desc:capText(t.desc,800),status:t.status,by:t.by,assigned:t.assigned,url:t.url,comments:t.comments.slice(0,12)})),
     orders:k.orders.map(o=>({label:o.label,id:o.id,ticket:o.ticket,at:o.at,source:o.source,type:o.type,coupon:o.coupon,items:o.items,tax:o.tax,tip:o.tip,other:o.other,total:o.total,callIds:o.callIds})),
     candidates:k.ranked.map(r=>({id:r.order.id,ticket:r.order.ticket,at:r.order.at,type:r.order.type,source:r.order.source,items:r.order.items,total:r.order.total,score:r.score,why:r.why})),
+    /* every order the restaurant had on the chat day and the day before, newest first, for the reviewer's "Change order" */
+    dayOrders:(k.allOrders||[]).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,150).map(o=>({id:o.id,ticket:o.ticket,at:o.at,type:o.type,source:o.source,items:o.items,total:o.total})),
     orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
     calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk"})),
     slack:k.slack,notFound:k.notFound,
@@ -444,4 +465,4 @@ if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(gl
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
-    CHAT_STEPS,chatWeek,pullChatWeek,chatGradable,chatPicks,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc}}
+    CHAT_STEPS,CHAT_PATHS,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc}}

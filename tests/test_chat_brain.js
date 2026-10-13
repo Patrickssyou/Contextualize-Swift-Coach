@@ -134,5 +134,13 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   const rows = await B.pullChatWeek('2026-10-05', ['Christ Aragon'], async cfg => { calls++; const m = cfg.filters.dimensions.match(/inBetween=(\S+),(\S+)/);
     return m[1] === m[2] ? [fx.chatRow] : Array(C.PULL.cap).fill(fx.chatRow); }, { roster: C.ROSTER_DEFAULT });
   ok(calls === 13 && rows.length === 1, `full replies split down to days, duplicates dropped (${calls} queries)`);
+  // a reply cut short is repaired from its text, without asking Claude again
+  ok(JSON.stringify(B.repairJson('Sure: {"a":1,"b":[1,{"c":"x}"}]} done')) === '{"a":1,"b":[1,{"c":"x}"}]}' && B.repairJson('{"x":{"y":1},"z":"cut') .x.y === 1 && B.repairJson('nothing') === null, 'JSON repair');
+  let calls2 = 0;
+  const v = await B.askPass({ ask: async () => { calls2++; throw { code: 'invalid_json', text: '{"timeline":[{"what":"a"}],"claims":[{"claim":"b"' }; } }, 'p', 'facts');
+  ok(calls2 === 1 && v.timeline.length === 1, 'askPass repairs invalid_json once, no second call');
+  let threw = null; try { await B.askPass({ ask: async () => { throw { code: 'rate_limited' }; } }, 'p', 'facts'); } catch (e) { threw = e.code; }
+  ok(threw === 'rate_limited', 'other errors pass through');
+  ok(doc.dayOrders.length === Math.min(150, fx.orderRows.length) && doc.dayOrders[0].at >= doc.dayOrders[doc.dayOrders.length - 1].at && JSON.stringify(doc).length < 80000, `same-day orders kept for the reviewer (${doc.dayOrders.length})`);
   console.log(`chat brain: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });

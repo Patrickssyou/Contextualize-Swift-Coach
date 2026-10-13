@@ -71,19 +71,49 @@ The facts pass then checks **every factual claim the SA made** against this evid
 
 Money is never computed by Claude. Claude picks the policy row and the affected order; the code does the arithmetic and shows the formula.
 
+### Case types
+
+The analysis names the case type first, from what the client asked for (not from linked data). Only **compensation** cases use the policy buckets and the money; for every other type the bucket, affected order and offer stay empty.
+
+| Type | What it covers |
+|---|---|
+| compensation | an order problem that may be Tarro's mistake, or compensation asked for, offered or promised |
+| order_issue | check or correct an order or call (recording request, complaint), no money at stake |
+| customer_recovery | the restaurant decides a credit, refund or remake for its own customer; the SA carries it out |
+| contact_customer | the restaurant asks Tarro to call or update a customer |
+| menu_setup | menu items, prices, modifiers, promos |
+| hours_service | hours, closures, call service or delivery on/off |
+| device_printer | printers, tablets, POS app, receipts |
+| billing_payment | charges, card fees, payouts, statements |
+| order_admin | void, mark paid/unpaid, change type, dispatch or driver |
+| how_to | how to use Tarro's tools |
+| other | anything else |
+
+Week of Oct 5: 85 base chats, of which about 6 (7%) were compensation cases. Order checks, menu setup and contacting customers make up most of the rest.
+
+Fault can also be **none**: nothing went wrong (a plain request). Fault is about who caused the client's problem, not how sure we are and not the SA's own slips in the chat.
+
+### Fair evidence
+
+- Linked tasks, orders and recordings are matched automatically and may belong to another case. The brain uses only what matches this chat and never judges the SA on another case.
+- The record is not everything the SA could see (GreenDot tickets, payments, settings, unlinked recordings). A claim we can't check costs the SA nothing; only a contradicted claim counts.
+- Chat messages have no times. Calls are labelled as before or after the chat opened, and the SA is never faulted on an order of events the data can't show.
+
 ## 4. The chat scorecard (draft, weights sum to 100)
 
-| # | Criterion | Weight | What 3 looks like |
-|---|---|---|---|
-| 1 | First response | 10 | Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence. |
-| 2a | Gathered the evidence | 15 | Reviewed the recording and order before concluding; every factual claim is supported. |
-| 2b | Restated the case correctly | 10 | Told the client what happened, accurately and plainly. |
-| 3 | Fault attribution | 15 | Correct fault, owned clearly when it's Tarro's, pushed back when it isn't. |
-| 4a | Resolution path | 15 | Chose the right policy path for the case. |
-| 4b | Resolution accuracy | 10 | The amount and terms are exactly right (right base, right %, fees handled). |
-| 4c | Solution explained | 5 | The client understands what they get, why, and when. Explains the math when challenged. |
-| 5 | Escalation (0–4, or N/A) | 15 | Level 4 (see below). |
-| 6 | Reply quality | 5 | Clear, warm, professional, owns mistakes, no over-promising. |
+| # | Criterion | Weight | What 3 looks like | N/A when |
+|---|---|---|---|---|
+| 1 | First response | 10 | Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence. | the SA started the chat |
+| 2a | Gathered the evidence | 15 | Checked what the case needed before acting: recording and order for an order problem; setup, settings or account for a request. Every claim holds up. | – |
+| 2b | Restated the case correctly | 10 | Told the client what happened, or confirmed the request back, accurately and plainly. | – |
+| 3 | Fault attribution | 15 | Correct fault, owned clearly when it's Tarro's, pushed back when it isn't. | nothing went wrong (a plain request) |
+| 4a | Resolution path | 15 | The right path for the case type: the policy path for compensation; the right action, team or ticket for a request; the restaurant's decision carried out for a customer credit. | – |
+| 4b | Resolution accuracy | 10 | The amount and terms are exactly right (right base, right %, fees handled; or exactly what the restaurant approved). | no compensation, credit, refund or fee was due, or its amount appears nowhere in the record |
+| 4c | Solution explained | 5 | The client understands what they get, why, and when. Explains the math when challenged. | nothing to explain beyond confirming it was done |
+| 5 | Escalation (0–4) | 15 | Level 4 (see below). | no escalation was needed |
+| 6 | Reply quality | 5 | Clear, warm, professional, owns mistakes, no over-promising. | – |
+
+Marks: 3 right · 2 right with a small gap · 1 attempted but wrong in a way that matters · 0 not done, or the opposite of what was needed. Each flaw is scored once, in the one criterion it belongs to; a slip the SA corrected counts once, where it happened.
 
 **Escalation ladder** (only when escalation was needed):
 - **0:** needed and not done.
@@ -117,6 +147,19 @@ It ends with *What you did well* (2–3 items) and *What to do next time*. Each 
 Each reviewed case can be saved as a **calibration case**: your verdict, your corrections per criterion, and your reasoning in your words. The analysis and grade passes read the most recent calibration cases as "how the QA lead grades". New lessons apply from the next audit, with no code change.
 
 The **compensation policy** is stored in the app (not in code) and edited there, so rule changes apply immediately.
+
+## 7. Storage
+
+| Path | What |
+|---|---|
+| `chatWeeks/<week>/chats/<sid>` | the week's base chats (the chat itself, messages included), with the pick flag |
+| `chatWeeks/<week>/audits/<sid>` | Claude's pre-grade: context, facts, analysis, money, grade, score |
+| `chatWeeks/<week>/tx/<sid>` | the linked call transcripts |
+| `chatWeeks/<week>/reviews/<sid>` | the QA lead's review: marks, score, verdict, coaching note |
+| `chatCalib/<sid>` | calibration cases |
+| `settings/chatPolicy`, `settings/staff` | the compensation policy; who's who beyond the SA roster |
+
+Each week is its own set of collections, so the page reads one week at a time. Claude is never asked twice for the same pass: a reply that isn't valid JSON is repaired from its text, and if that fails the chat is marked and the reviewer can re-grade. Re-grade asks Claude fresh (no cached answers).
 
 ## Calibration cases
 
