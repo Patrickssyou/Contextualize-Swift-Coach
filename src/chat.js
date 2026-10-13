@@ -542,10 +542,10 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
   const ids=[...new Set(k.orders.flatMap(o=>o.callIds))];let calls=[];
   if(ids.length)calls=(await q(callsByIdsConfig(ids,from,day),T+" · order recordings")).map(callRow);
   /* the caller is the order's customer. A phone in the chat text can be the restaurant's own (the client's WIRA author id carries it), and a regular customer's earlier orders are other cases:
-     calls from the same number count from 2 hours before the linked order */
+     calls from the same number count from 2 hours before the linked order (12 hours before the chat when no order is linked) */
   const own10=new Set(c.msgs.filter(m=>m.role==="client").map(m=>String(m.author||"").replace(/\D/g,"").slice(-10)).filter(x=>x.length===10));
   const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone).filter(ph=>!own10.has(String(ph).replace(/\D/g,"").slice(-10))))];
-  const lo=k.orders.length?ldTs(k.orders[0].at)-2*36e5:-Infinity;
+  const lo=k.orders.length?ldTs(k.orders[0].at)-2*36e5:ldTs(c.at)-12*36e5;
   if(phones.length&&c.code)(await q(phoneCallsConfig(phones,from,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(l)});
   const t0=k.orders.length?ldTs(k.orders[0].at):ldTs(c.at);
   /* silent and voicemail legs never take one of the slots for calls with talk: they follow the talked ones, at most CHAT.quietCalls of them */
