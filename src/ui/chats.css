@@ -90,6 +90,9 @@ details.tlfold+.fhd{margin-top:14px}
 .vmeta dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-top:2px}
 .vmeta dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .cvnote{font-size:13px;color:var(--s1);background:var(--s1-soft);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
+.vcase{display:flex;flex-direction:column;gap:5px;align-items:flex-start;min-width:0}
+.ctype{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:var(--tp-soft);color:var(--tp);white-space:nowrap}
+.vreq{font-size:13.5px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere}
 .csteps{list-style:none;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:5px;font-size:13px;background:var(--accent-soft);border-radius:10px}
 .cst{display:grid;grid-template-columns:18px minmax(0,1fr);gap:0 6px;align-items:baseline}
 .cst .hint{grid-column:2;font-size:12px}
@@ -109,6 +112,12 @@ details.tlfold+.fhd{margin-top:14px}
 .bwho .bn{margin-left:auto;font-size:11px}
 .btext{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.45}
 .ntag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:1px 6px;border-radius:4px;background:var(--s2);color:var(--on-fill);white-space:nowrap}
+.bub.other{align-self:center;border-radius:14px;background:var(--bg)}
+/* workflow bots: a small centred system line, not a bubble */
+.sysline{align-self:center;max-width:min(90%,560px);display:flex;flex-wrap:wrap;justify-content:center;gap:2px 8px;align-items:baseline;padding:4px 12px;border-radius:10px;background:var(--soft);font-size:12px;color:var(--muted);text-align:center;scroll-margin-top:80px;min-width:0}
+.syswho{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.systext{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.sysline .bn{font-size:11px;opacity:.8}
 @media (max-width:560px){.bub{max-width:90%}}
 
 /* context */
@@ -133,6 +142,22 @@ details.tlfold+.fhd{margin-top:14px}
 .ocand:hover{border-color:var(--accent)}
 .ocand.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 .owhy{flex-basis:100%;color:var(--muted);font-size:12px}
+.ophd{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.oq{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13.5px}
+.oq:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.olist{max-height:320px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.orow{display:grid;grid-template-columns:80px 148px minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:7px 10px;font-size:13px;color:var(--ink);border-radius:0}
+.orow:first-child{border-top:0}
+.orow:hover{background:var(--soft)}
+.orow.on{box-shadow:inset 3px 0 0 var(--accent);background:var(--accent-soft)}
+.otime,.otype{color:var(--muted);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.otot{font-weight:600;text-align:right}
+.onone{padding:10px}
+@media (max-width:560px){.orow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"tk tot" "time time" "type type";gap:0 10px}
+  .otk{grid-area:tk}.otot{grid-area:tot}.otime{grid-area:time}.otype{grid-area:type}}
+.rfields{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:0;font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.rfields dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-top:2px}
+.rfields dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .nf{margin:0;padding-left:18px;font-size:13px}
 .nf li{margin:2px 0}
 
@@ -164,6 +189,7 @@ details.tlfold+.fhd{margin-top:14px}
 .cline.off{background:var(--s1-soft);color:var(--s1)}
 .cline.none{background:var(--soft);color:var(--muted)}
 .cline.appr{background:var(--s2-soft);color:var(--s2);font-family:var(--f-body);font-weight:600}
+.adl dd.aline{grid-column:1/-1;color:var(--muted);font-size:13.5px;padding:6px 10px;border-radius:8px;background:var(--soft)}
 @media (max-width:640px){.adl{grid-template-columns:minmax(0,1fr);gap:2px}.adl dd{margin-bottom:12px}}
 
 /* scorecard */
