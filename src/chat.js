@@ -2,7 +2,7 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3};
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6};
 const CHAT_V = "chat-1";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
@@ -64,17 +64,17 @@ function chatMessages(comments,commentors,ctx){ctx=ctx||{};
     else if(staff[p]){role=staff[p].role||"staff";name=staff[p].name||titleCase(p)}
     else if(rosterNames.includes(titleCase(p).toLowerCase())){role="sa_other";name=titleCase(p)}
     else if(!w){role="staff";name="Unknown"}
-    return {n:i+1,author:w,role,name,text:String(t).trim(),internal:false,inferred:false}});
+    return {n:i+1,author:w,role,name,raw:String(t).trim(),text:mdPlain(t).trim(),internal:false,inferred:false}});
   /* the client's sign-off names them ("This is Sam") */
   const sign=out.filter(m=>m.role==="client").map(m=>(m.text.match(/\b(?:[Tt]his is|[Ii]t'?s|[Rr]egards,?|[Tt]hanks,?|[Ff]rom|-)\s+([A-Z][a-z]{1,20})\b/)||[])[1]).find(Boolean);
   if(sign)out.forEach(m=>{if(m.role==="client")m.name=sign});
   /* internal notes are inferred: WIRA has no flag */
   out.forEach(m=>{if(m.role==="client")return;
     const toClient=GREET_RE.test(m.text)||(sign&&new RegExp("\\b"+sign+"\\b").test(m.text));
-    if(MENTION_RE.test(m.text))m.internal=true;
+    if(MENTION_RE.test(m.raw)||MENTION_RE.test(m.text))m.internal=true;
     else if(m.role!=="sa"&&!toClient)m.internal=true;
     else if(m.role!=="sa"&&THIRD_RE.test(m.text))m.internal=true;
-    m.inferred=m.internal});
+    m.inferred=m.internal;delete m.raw});
   return out}
 function chatTranscript(c){return (c.msgs||[]).map(m=>`M${m.n} · ${ROLE_L[m.role]||m.role}${m.role==="client"?"":" — "+m.name}${m.role==="sa"?" (audited)":""}${m.internal?" [internal note, inferred]":""}: ${capText(m.text,1600)}`).join("\n")}
 
@@ -125,8 +125,8 @@ function linkedOrders(ranked){if(!ranked.length)return [];const top=ranked[0];
   if(top.score<4)return [];if(ranked[1]&&ranked[1].score>=top.score-1)return [];return [top.order]}
 function callsByIdsConfig(ids,from,to){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
   filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_conversation_id equals=${ids.map(ldVal).join(",")}`}}}
-function phoneCallsConfig(phones,from,to){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
-  filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_call_phone_detail equals=${phones.map(ldVal).join(",")}`}}}
+function phoneCallsConfig(phones,from,to,code){return {exploreName:PULL.explore,dimensions:CALL_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:PULL.cap,
+  filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_call_phone_detail equals=${phones.map(ldVal).join(",")}`+(code?` AND restaurants_unique_code equals=${ldVal(code)}`:"")}}}
 function callRow(x){return {id:String(x.calls_conversation_id||""),at:String(x.calls_call_started_at_est||"").slice(0,19),sec:Number(x.calls_call_duration_in_seconds)||0,
   agent:cleanAgent(x.internal_users_full_name||""),login:String(x.internal_users_user_login_name||""),dir:x.calls_call_type==="outbound_call"?"out":"in",
   phone:String(x.calls_call_phone_detail||""),text:String(x.asr_transcript_call_transcript||"")}}
@@ -244,14 +244,14 @@ function chatAnalysisPrompt(k,F,policy,cal){const sa=k.chat.sa||"the SA",P=(poli
     `ORDERS`,(k.orders||[]).map(o=>`${o.label} · ticket ${o.ticket||"?"} · ${o.type||o.source} · items ${money(o.items)}, tax ${money(o.tax)}${o.tip?`, tip ${money(o.tip)}`:""}, total ${money(o.total)}`).join("\n")||"None linked.",
     ``,`RECORD`,chatFactLines(F)].join("\n")}
 const CHAT_RUBRIC = [
-  {id:"fr",label:"First response",w:10,max:3,d:"Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence."},
+  {id:"fr",label:"First response",w:10,max:3,na:true,d:"Acknowledges the issue, says what they're checking, asks only for what's needed. Does not defend, blame or conclude before checking the evidence."},
   {id:"ev",label:"Gathered the evidence",w:15,max:3,d:"Reviewed the recording and the order before concluding; every factual claim is supported."},
   {id:"rs",label:"Restated the case correctly",w:10,max:3,d:"Told the client what happened, accurately and plainly."},
   {id:"fa",label:"Fault attribution",w:15,max:3,d:"Correct fault; owned clearly when it's Tarro's; pushed back when it isn't."},
   {id:"path",label:"Resolution path",w:15,max:3,d:"Chose the right policy path for the case."},
   {id:"amt",label:"Resolution accuracy",w:10,max:3,d:"The amount and terms are exactly right: right base (items only), right %, fees handled."},
-  {id:"expl",label:"Solution explained",w:5,max:3,d:"The client understands what they get, why and when; explains the math when challenged."},
-  {id:"esc",label:"Escalation",w:15,max:4,d:"0 needed but not done · 1 tagged the lead · 2 + a summary the lead will read (chat or ticket) · 3 + a recommended solution, asking the lead's opinion · 4 + the recommendation is correct, with clear logic. N/A when no escalation was needed."},
+  {id:"expl",label:"Solution explained",w:5,max:3,na:true,d:"The client understands what they get, why and when; explains the math when challenged."},
+  {id:"esc",label:"Escalation",w:15,max:4,na:true,d:"0 needed but not done · 1 tagged the lead · 2 + a summary the lead will read (chat or ticket) · 3 + a recommended solution, asking the lead's opinion · 4 + the recommendation is correct, with clear logic. N/A when no escalation was needed."},
   {id:"tone",label:"Reply quality",w:5,max:3,d:"Clear, warm, professional; owns mistakes; no over-promising."}];
 const VERDICTS = [["great",90,"Great"],["good",80,"Good"],["okay",65,"Okay"],["needs_work",50,"Needs work"],["miss",0,"Miss"]];
 function chatGradePrompt(k,F,A,comp,offer,cal){const sa=k.chat.sa||"the SA";
@@ -260,7 +260,7 @@ function chatGradePrompt(k,F,A,comp,offer,cal){const sa=k.chat.sa||"the SA";
     ``,`The QA lead's route: (1) establish the case facts, (2) analyze them and attribute fault, (3) give the right solution, (4) reply well. Judge each step.`,
     ``,`SCORECARD (0-3 unless noted; "na" only where it says so):`,
     ...CHAT_RUBRIC.map(r=>`- ${r.id} · ${r.label}${r.max!==3?` (0-${r.max})`:""}: ${r.d}`),
-    `- "na" is allowed for fr (no first response to judge), expl (nothing to explain) and esc (no escalation needed).`,
+    `- "na" is allowed only for: ${CHAT_RUBRIC.filter(r=>r.na).map(r=>r.id).join(", ")} (when the criterion doesn't apply to this chat).`,
     ``,`Rules:`,
     `- Every reason cites facts (F#, C#, M#) and says exactly what was right or wrong, in one sentence.`,
     `- Use the calibration cases: they are how the QA lead grades.`,
@@ -311,7 +311,7 @@ function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray
 const MARKS=["right","partly","wrong"];
 function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;const sc=x.scores&&typeof x.scores==="object"?x.scores:{},rs=x.reasons&&typeof x.reasons==="object"?x.reasons:{};
   const scores={},reasons={};CHAT_RUBRIC.forEach(r=>{const v=sc[r.id];const na=String(v).toLowerCase()==="na"||v==null;
-    scores[r.id]=na&&["fr","expl","esc"].includes(r.id)?"na":Math.max(0,Math.min(r.max,Math.round(Number(v)||0)));reasons[r.id]=chS(rs[r.id],300)});
+    scores[r.id]=na&&r.na?"na":Math.max(0,Math.min(r.max,Math.round(Number(v)||0)));reasons[r.id]=chS(rs[r.id],300)});
   const rt=x.route&&typeof x.route==="object"?x.route:{},route={};["facts","analysis","solution","escalation"].forEach(k=>{const v=rt[k]&&typeof rt[k]==="object"?rt[k]:{};
     route[k]={mark:MARKS.includes(String(v.mark).toLowerCase())?String(v.mark).toLowerCase():"partly",why:chS(v.why,300)}});
   return {scores,reasons,route,wentWell:arr(x.wentWell).map(t=>chS(t,200)).filter(Boolean).slice(0,4),
@@ -321,8 +321,85 @@ function cleanChatGrade(x){if(!x||typeof x!=="object"||Array.isArray(x))return n
 function chatScore(scores){let got=0,den=0;CHAT_RUBRIC.forEach(r=>{const v=scores&&scores[r.id];if(v==="na"||v==null||v==="")return;den+=r.w;got+=r.w*Math.min(r.max,Number(v))/r.max});
   return den?Math.round(got/den*1000)/10:null}
 function chatVerdict(pct){if(pct==null)return null;const v=VERDICTS.find(([,min])=>pct>=min)||VERDICTS[VERDICTS.length-1];return {id:v[0],label:v[2]}}
+/* ---------- 6. The week, and one chat end to end (the page, the eval and the tests all run these) ---------- */
+const CHAT_STEPS = [["tasks","Linked tasks"],["refs","Order clues"],["orders","Orders"],["calls","Recordings"],["slack","Slack"],["facts","Case facts"],["analysis","Analysis"],["grade","Grade and coaching"]];
+/* Monday-start week of an Eastern wall-clock timestamp */
+function chatWeek(at){const d=String(at||"").slice(0,10),[y,m,dd]=d.split("-").map(Number);if(!y||!m||!dd)return "";return addDaysU(d,-((new Date(Date.UTC(y,m-1,dd)).getUTCDay()+6)%7))}
+/* the week's base chats; a reply that comes back full may be cut off, so split the dates until it isn't */
+async function pullChatWeek(w,assignees,query,ctx){
+  const get=async(a,b)=>{const rows=await query(chatBaseConfig(a,b,assignees),`QA Desk · chats ${a} to ${b}`);
+    if(rows.length<PULL.cap||a>=b)return rows;const n=Math.round((Date.parse(b)-Date.parse(a))/864e5),mid=addDaysU(a,Math.floor(n/2));
+    return (await get(a,mid)).concat(await get(addDaysU(mid,1),b))};
+  const seen=new Set();
+  return (await get(w,addDaysU(w,6))).map(x=>chatRow(x,ctx)).filter(c=>c.wid&&!seen.has(c.wid)&&!!seen.add(c.wid)&&isBaseChat(c))}
+/* a chat can be graded once the assigned SA has replied in it */
+const chatGradable = c => (c.msgs||[]).some(m=>m.role==="sa");
+/* N gradable chats per SA, in a stable random order (the same week always gives the same picks) */
+function chatPicks(chats,perSA){const by=new Map();
+  (chats||[]).filter(chatGradable).forEach(c=>{if(!by.has(c.sa))by.set(c.sa,[]);by.get(c.sa).push(c)});
+  const out=[];by.forEach(list=>list.slice().sort((a,b)=>fnv(String(a.sid))-fnv(String(b.sid))).slice(0,perSA).forEach(c=>out.push(c.sid)));return out}
+/* everything tied to the chat: linked tasks, the order, its recordings and the same caller's other calls, Slack.
+   deps: {query(cfg,title) -> rows, ask(prompt,pass) -> parsed JSON, slack(chat,k) -> threads (optional), orderIds (reviewer's pick, optional), step(id,state,note)} */
+async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),day=String(c.at).slice(0,10),from=addDaysU(day,-1),T=`QA Desk · chat ${c.sid}`;
+  const k={chat:c,tasks:[],orders:[],ranked:[],refs:mergeRefs({},{}),calls:[],slack:[],notFound:[],orderNote:""};
+  step("tasks","run");
+  if(c.code)k.tasks=pickRelated(c,await q(relatedTasksConfig(c.code,from,addDaysU(day,2)),T+" · tasks"));
+  step("tasks","done",k.tasks.length?`${k.tasks.length} linked`:"none");
+  step("refs","run");
+  let refs=textRefs(c.msgs.map(m=>m.text).concat(k.tasks.flatMap(t=>[t.title,t.desc])));
+  k.refs=mergeRefs(refs,deps.ask?cleanChatRefs(await deps.ask(chatRefsPrompt(k),"refs")):{});
+  step("refs","done");
+  step("orders","run");
+  const orders=c.code?(await q(orderConfig(c.code,from,day),T+" · orders")).map(orderRow):[];
+  k.ranked=rankOrders(orders,k.refs,c.at);
+  const pick=Array.isArray(deps.orderIds)?orders.filter(o=>deps.orderIds.includes(o.id)):linkedOrders(k.ranked);
+  k.orders=pick.map((o,i)=>Object.assign({},o,{label:"O"+(i+1)}));
+  const close=k.ranked.filter(r=>r.score>=3);
+  if(!k.orders.length&&close.length)k.orderNote=`Possible orders, none clear enough to link: ${close.slice(0,3).map(r=>`ticket ${r.order.ticket||"?"} (total ${money(r.order.total)}; ${r.why.join(", ")})`).join("; ")}.`;
+  step("orders","done",k.orders.length?k.orders.map(o=>`ticket ${o.ticket||"?"}`).join(", "):close.length?"not clear":"none");
+  step("calls","run");
+  const ids=[...new Set(k.orders.flatMap(o=>o.callIds))];let calls=[];
+  if(ids.length)calls=(await q(callsByIdsConfig(ids,from,day),T+" · order recordings")).map(callRow);
+  const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone))];
+  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,from,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id))calls.push(l)});
+  const t0=k.orders.length?ldTs(k.orders[0].at):ldTs(c.at);
+  k.calls=calls.filter(l=>l.id).map(l=>({l,own:ids.includes(l.id)?1:0,d:Math.abs(ldTs(l.at)-t0)||0})).sort((a,b)=>b.own-a.own||a.d-b.d)
+    .slice(0,CHAT.maxCalls).map(x=>x.l).sort((a,b)=>a.at.localeCompare(b.at));
+  k.calls.forEach(l=>{const o=k.orders.find(x=>x.callIds.includes(l.id));if(o)l.orders=`${o.label} (ticket ${o.ticket||"?"})`;l.talk=legTalk(l.text)});
+  step("calls","done",k.calls.length?`${k.calls.length} call${k.calls.length===1?"":"s"}`:"none");
+  if(deps.slack){step("slack","run");try{k.slack=(await deps.slack(c,k))||[];step("slack","done",k.slack.length?`${k.slack.length} thread${k.slack.length===1?"":"s"}`:"none")}
+    catch(e){if(deps.isStop&&deps.isStop(e))throw e;k.notFound.push("Slack (the search didn't run)");step("slack","error")}}
+  if(!k.orders.length&&(k.refs.tickets.length||k.refs.amounts.length))k.notFound.push("an order in Tarro's data that clearly matches the chat");
+  if(k.orders.length&&!k.calls.length)k.notFound.push("a call recording for the linked order");
+  return k}
+/* the route: facts, analysis, the money in code, then grade and coaching. cal excludes this chat's own calibration case */
+async function gradeChat(k,deps){const step=deps.step||(()=>{}),policy=deps.policy||CHAT_POLICY_EMPTY,cal=(deps.cal||[]).filter(x=>String(x.sid)!==String(k.chat.sid));
+  step("facts","run");const F=cleanChatFacts(await deps.ask(chatFactsPrompt(k),"facts"),k.calls);if(!F)throw {code:"ai_shape",pass:"facts"};
+  step("facts","done",`${F.timeline.length} facts · ${F.claims.length} claims`);
+  step("analysis","run");const A=cleanChatAnalysis(await deps.ask(chatAnalysisPrompt(k,F,policy,cal),"analysis"),F,policy);if(!A)throw {code:"ai_shape",pass:"analysis"};
+  step("analysis","done");
+  const comp=compFor(A,k.orders,policy),offer=offerCheck(A.saOffer,comp,k.orders);
+  step("grade","run");const G=cleanChatGrade(await deps.ask(chatGradePrompt(k,F,A,comp,offer,cal),"grade"));if(!G)throw {code:"ai_shape",pass:"grade"};
+  const pct=chatScore(G.scores),verdict=chatVerdict(pct);step("grade","done",verdict?`${verdict.label} ${pct}%`:"");
+  return {F,A,comp,offer,G,pct,verdict}}
+/* what goes in the db. chats/<sid>: the queue row (the chat itself, so grading needs no re-query) */
+function chatQueueDoc(c,picked){return Object.assign({v:CHAT_V,week:chatWeek(c.at),picked:!!picked,gradable:chatGradable(c)},c,
+  {msgs:(c.msgs||[]).map(m=>Object.assign({},m,{text:capText(m.text,4000)}))})}
+/* chatAudits/<sid>: the context, the passes, the score. Transcripts go in chatTx/<sid> to keep this doc small */
+function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
+  return {v:CHAT_V,sid:c.sid,wid:c.wid,url:c.url,week:chatWeek(c.at),at:c.at,sa:c.sa,restaurant:c.restaurant,code:c.code,initiator:c.initiator,title:c.title,frt:c.frt,clientName:c.clientName,
+    tasks:k.tasks.map(t=>({sid:t.sid,wid:t.wid,parent:t.parent===c.wid,at:t.at,project:t.project,intent:t.intent,title:t.title,desc:capText(t.desc,800),status:t.status,by:t.by,assigned:t.assigned,url:t.url,comments:t.comments.slice(0,12)})),
+    orders:k.orders.map(o=>({label:o.label,id:o.id,ticket:o.ticket,at:o.at,source:o.source,type:o.type,coupon:o.coupon,items:o.items,tax:o.tax,tip:o.tip,other:o.other,total:o.total,callIds:o.callIds})),
+    candidates:k.ranked.map(r=>({id:r.order.id,ticket:r.order.ticket,at:r.order.at,type:r.order.type,source:r.order.source,items:r.order.items,total:r.order.total,score:r.score,why:r.why})),
+    orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
+    calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk"})),
+    slack:k.slack,notFound:k.notFound,
+    facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,grade:R.G,pct:R.pct,verdict:R.verdict?R.verdict.id:null,
+    gradedAt:meta.at||new Date().toISOString(),by:meta.by||null}}
+function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:l.id,text:capText(l.text,CHAT.txCap)}))}}
 /* CHAT-CORE END */
 if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(globalThis,core);
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
-    chatFactLines,calibLines,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2}}
+    chatFactLines,calibLines,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
+    CHAT_STEPS,chatWeek,pullChatWeek,chatGradable,chatPicks,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc}}

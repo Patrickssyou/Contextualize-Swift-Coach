@@ -17,25 +17,25 @@ const policy = rj(path.join(ROOT, 'data/chats/policy_pack.json'));
 const calAll = fs.existsSync(path.join(ROOT, 'data/chats/calibration.json')) ? rj(path.join(ROOT, 'data/chats/calibration.json')) : [];
 const cal = opt.calib === 'none' ? [] : calAll.filter(c => c.sid !== sid);
 
-function assemble() {
+/* the same runner the page uses (chatContext), fed from the saved fixture instead of Lightdash */
+async function assemble() {
   const fx = rj(path.join(DIR, sid + '.json'));
-  const roster = (B.ROSTER_DEFAULT || require('../src/core.js').ROSTER_DEFAULT);
+  const roster = require('../src/core.js').ROSTER_DEFAULT;
   const chat = B.chatRow(fx.chatRow, { roster });
-  const tasks = B.pickRelated(chat, fx.relRows || []);
-  const orders = (fx.orderRows || []).map(B.orderRow);
-  const texts = chat.msgs.map(m => m.text).concat(tasks.flatMap(t => [t.title, t.desc]));
-  let refs = B.textRefs(texts);
-  if (fs.existsSync(F('refs.out.json'))) refs = B.mergeRefs(refs, B.cleanChatRefs(rj(F('refs.out.json'))));
-  else refs = B.mergeRefs(refs, {});
-  const ranked = B.rankOrders(orders, refs, chat.at), linked = B.linkedOrders(ranked);
-  linked.forEach((o, i) => o.label = 'O' + (i + 1));
-  const ids = new Set(linked.flatMap(o => o.callIds));
-  const calls = (fx.callRows || []).map(B.callRow).filter(c => ids.has(c.id) || linked.length).sort((a, b) => a.at.localeCompare(b.at));
-  calls.forEach(c => { const o = linked.find(x => x.callIds.includes(c.id)); if (o) c.orders = `${o.label} (ticket ${o.ticket})`; });
-  return { chat, tasks, orders: linked, ranked, refs, calls, slack: fx.slack || [], notFound: fx.notFound || [], review: fx.review };
+  const query = async (cfg, title) => {
+    if (/ · tasks$/.test(title)) return fx.relRows || [];
+    if (/ · orders$/.test(title)) return fx.orderRows || [];
+    if (/ · order recordings$/.test(title)) return (fx.callRows || []).filter(r => cfg.filters.dimensions.includes(r.calls_conversation_id));
+    if (/ · same caller$/.test(title)) return (fx.callRows || []).filter(r => cfg.filters.dimensions.includes(r.calls_call_phone_detail));
+    return []; };
+  const ask = async () => fs.existsSync(F('refs.out.json')) ? rj(F('refs.out.json')) : {};
+  const k = await B.chatContext(chat, { query, ask, orderIds: fx.orderIds });
+  k.slack = fx.slack || []; k.notFound = k.notFound.concat(fx.notFound || []); k.review = fx.review;
+  return k;
 }
 
-const k = assemble();
+(async () => {
+const k = await assemble();
 if (step === 'refs') { fs.writeFileSync(F('refs.txt'), B.chatRefsPrompt(k)); console.log('wrote', F('refs.txt')); }
 if (step === 'facts') {
   console.log('refs', JSON.stringify(k.refs));
@@ -69,3 +69,4 @@ if (step === 'report') {
   Object.entries(G.route).forEach(([k2, v2]) => console.log(`  route ${k2}: ${v2.mark} — ${v2.why}`));
   console.log('went well', G.wentWell); G.nextTime.forEach(n => console.log('NEXT:', n.what, '\n   why:', n.why, '\n   do:', n.do, '\n   model:', n.model));
 }
+})().catch(e => { console.error(e); process.exit(1); });

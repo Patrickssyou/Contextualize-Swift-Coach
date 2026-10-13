@@ -11,6 +11,8 @@ One HTML page, published as a claude.ai artifact: https://claude.ai/artifact/W3z
 - The page reads Lightdash (calls, transcripts, WIRA tasks) and Slack through the viewer's own connectors, stores audits and the weekly queue in the artifact db, and calls Claude through `sample` for the facts and conclusions passes.
 - Only a session with the Artifact tool can publish. Lanes never publish; the main session does, after tests pass.
 
+Two brains live in the page: the call brain in `src/core.js` (parked in its own tab) and the WIRA chat brain in `src/chat.js` (the focus; spec in `docs/brain-wira-chats.md`). The build injects both.
+
 ## Build and test
 
 - `npm run build` → `dist/pizza-support-qa-desk.html` (injects `src/core.js` between the PULL-CORE markers and `src/rubric_v1.json` into `src/template.html`, then syntax-checks the script).
@@ -35,10 +37,10 @@ One main session (Opus) owns the plan, integration, review and publishing. Backg
 
 | Lane | Agent | Owns | Never touches |
 |---|---|---|---|
-| Main | (main session) | `src/template.html` layout and integration, `CLAUDE.md`, releases | – |
-| UI | `ui-builder` | `design/`, `src/ui/` (when split out), `tests/test_ui*.js` | `src/core.js` prompts, `eval/` |
-| Facts quality | `facts-eval` | `eval/`, the prompt functions in `src/core.js` (`factsPrompt`, `analysisPrompt`, `cleanFacts`, `cleanAnalysis`, `caseEvidence`) | `src/template.html` |
-| Evidence | `evidence` | linking and pull functions in `src/core.js` (`buildChain`, `linkTasks`, `legTalk`, `groupCases`, task and transcript configs), `tests/test_pull.js`, `tests/test_cases.js` | prompt functions, `src/template.html` |
+| Main | (main session) | `src/template.html` layout and integration, `CLAUDE.md`, releases; in `src/chat.js` the runner and db shapes (`chatContext`/`gradeChat` signatures, `chatQueueDoc`, `chatAuditDoc`, `chatTxDoc`, `CHAT_STEPS`) | – |
+| UI | `ui-builder` | `design/`, `src/ui/` (when split out), `tests/test_ui*.js`, `tests/mock.js` | `src/core.js` and `src/chat.js`, `eval/` |
+| Facts quality | `facts-eval` | `eval/`, the prompt functions in `src/core.js` (`factsPrompt`, `analysisPrompt`, `cleanFacts`, `cleanAnalysis`, `caseEvidence`) and in `src/chat.js` (`chat*Prompt`, `chatEvidence`, `CHAT_CTX`, `EVIDENCE_RULES`, `CHAT_RUBRIC` text, `cleanChat*`), `tests/test_chat_brain.js` | `src/template.html` |
+| Evidence | `evidence` | linking and pull functions in `src/core.js` (`buildChain`, `linkTasks`, `legTalk`, `groupCases`, task and transcript configs) and in `src/chat.js` (`chatMessages`, `pickRelated`, `textRefs`, `rankOrders`, `linkedOrders`, the query configs), `tests/test_pull.js`, `tests/test_cases.js` | prompt functions, `src/template.html` |
 | Helper | `scribe` | `shots/`, test runs, commits on request | source files |
 
 - If a lane needs a change in a file it doesn't own, it stops and says so in its report.

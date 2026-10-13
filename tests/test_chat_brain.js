@@ -65,4 +65,49 @@ ok([chat.clientName, String(chat.restaurant || '').split(' ')[0], chat.sid].filt
 const k = { chat, tasks, orders: linked, calls: fx.callRows.map(B.callRow), slack: [], notFound: [] };
 const fp = B.chatFactsPrompt(k);
 ok(/CHECK THE SA'S CLAIMS/.test(fp) && /O1 · ticket 65/.test(fp) && /\[internal note, inferred\]/.test(fp), 'facts prompt has claims check, orders and internal notes');
-console.log(`chat brain: ${n} checks passed`);
+// ---- end to end: the same runner the page uses, on the saved case with the saved Claude replies (run r2) ----
+(async () => {
+  ok(B.chatWeek('2026-10-12T19:48:00') === '2026-10-12' && B.chatWeek('2026-10-18T23:59:00') === '2026-10-12' && B.chatWeek('2026-10-11T09:00:00') === '2026-10-05', 'Monday-start weeks');
+  const titles = [];
+  const query = async (cfg, title) => { titles.push(title);
+    if (/ · tasks$/.test(title)) return fx.relRows;
+    if (/ · orders$/.test(title)) return fx.orderRows;
+    if (/ · order recordings$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_conversation_id));
+    if (/ · same caller$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_call_phone_detail));
+    throw new Error('unexpected query ' + title); };
+  const out = p => JSON.parse(fs.readFileSync(path.join(D, `cases/1831362.r2.${p}.out.json`), 'utf8'));
+  const asked = [];
+  const ask = async (prompt, pass) => { asked.push(pass); return pass === 'refs' ? { amounts: [17.73], orderType: 'pickup' } : out(pass); };
+  const steps = [];
+  const deps = { query, ask, policy, cal: JSON.parse(fs.readFileSync(path.join(D, 'calibration.json'), 'utf8')), step: (id, st, note) => steps.push(`${id}:${st}${note ? ':' + note : ''}`) };
+  const k2 = await B.chatContext(chat, deps);
+  ok(k2.tasks.length === 1 && k2.orders.length === 1 && k2.orders[0].ticket === '65' && k2.orders[0].label === 'O1', 'context links the child task and ticket 65');
+  ok(k2.calls.length === 2 && k2.calls[0].at < k2.calls[1].at && k2.calls.every(l => l.orders === 'O1 (ticket 65)'), 'both recordings of the order, in time order');
+  ok(titles.some(t => / · same caller$/.test(t)), 'looks for the same caller');
+  ok(!k2.notFound.length, 'nothing missing');
+  const R = await B.gradeChat(k2, deps);
+  ok(asked.join(',') === 'refs,facts,analysis,grade', 'four passes in route order');
+  ok(R.comp.amount === 16.42 && R.offer.match === 'wrong_base', 'money from code');
+  ok(R.verdict.id === 'okay' && R.pct === 74.2, `end-to-end verdict Okay 74.2 (got ${R.verdict && R.verdict.id} ${R.pct})`);
+  ok(steps.includes('grade:done:Okay 74.2%') && steps.filter(x => /:run$/.test(x)).length === 7, 'steps reported (no Slack hook)');
+  const doc = B.chatAuditDoc(k2, R, { by: 'u_test' }), tx = B.chatTxDoc(k2), qd = B.chatQueueDoc(chat, true);
+  const js = JSON.stringify(doc);
+  ok(js.length < 60000 && !/\d{10}/.test(JSON.stringify(doc.calls)) && doc.calls[0].phone4.length === 4, `audit doc is small (${js.length} bytes) with no full phone numbers`);
+  ok(doc.verdict === 'okay' && doc.week === '2026-10-12' && doc.orders[0].items === 54.72 && doc.grade.nextTime.length > 0, 'audit doc carries the result');
+  ok(tx.calls.length === 2 && tx.calls.every(c => c.text.length > 100), 'transcripts kept apart');
+  ok(qd.picked && qd.gradable && qd.msgs.length === 13 && qd.week === '2026-10-12', 'queue doc');
+  // reviewer overrides the order: none
+  const k3 = await B.chatContext(chat, Object.assign({}, deps, { orderIds: [] }));
+  ok(!k3.orders.length && !k3.calls.length && k3.notFound.length === 1, 'reviewer can unlink the order');
+  // picks: N per SA, stable, gradable only
+  const mk = (sid, sa, sa_msg) => ({ sid, sa, msgs: sa_msg ? [{ role: 'sa' }] : [{ role: 'client' }] });
+  const pool = [...Array(9)].map((_, i) => mk('A' + i, 'Ann', i !== 3)).concat([...Array(3)].map((_, i) => mk('B' + i, 'Bo', true)));
+  const p1 = B.chatPicks(pool, 5), p2 = B.chatPicks(pool.slice().reverse(), 5);
+  ok(p1.filter(x => x[0] === 'A').length === 5 && p1.filter(x => x[0] === 'B').length === 3 && !p1.includes('A3') && p1.slice().sort().join() === p2.slice().sort().join(), 'picks: 5 per SA, stable, only chats the SA replied in');
+  // the week pull splits a full reply
+  let calls = 0;
+  const rows = await B.pullChatWeek('2026-10-05', ['Christ Aragon'], async cfg => { calls++; const m = cfg.filters.dimensions.match(/inBetween=(\S+),(\S+)/);
+    return m[1] === m[2] ? [fx.chatRow] : Array(C.PULL.cap).fill(fx.chatRow); }, { roster: C.ROSTER_DEFAULT });
+  ok(calls === 13 && rows.length === 1, `full replies split down to days, duplicates dropped (${calls} queries)`);
+  console.log(`chat brain: ${n} checks passed`);
+})().catch(e => { console.error(e); process.exit(1); });
