@@ -2,7 +2,8 @@
 // Storage is by week (chatWeeks/<week>/{chats,audits,tx,reviews}); an invented, already-graded week before the case week covers week switching,
 // case types, bot lines, request fields and the game layer's history.
 // The QA ticket (top of Audit): fields, the brain's compensation check, findings with checked quotes, Agree / Not a mistake with live re-scoring,
-// corrections (chatLessons) saved, deleted, listed in Brain and fed to the next grade's prompt.
+// contests (a mark the QA lead disagrees with, and why) from a scorecard row or a finding card, and Not a mistake: both saved as lessons (chatLessons),
+// deleted on withdraw, listed in Brain under What the coach learned and fed to the next grade's prompt.
 // No names or chat text from the real case are written here: the SA, restaurant and messages are read from the fixture at run time.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
 const { openPage, chatWorld, DIR } = require('./mock.js');
@@ -248,14 +249,41 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.locator('#cs-an .cite').first().click(); await page.waitForTimeout(200);
   ok(await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, 'cites scroll to the fact and keep the route');
 
-  // ===== 5. change a mark: % and verdict recompute live
+  // ===== 5. contest from the scorecard: a different mark opens the contest box; the reason is required; saving re-scores live and marks the row
   const marks = Object.assign({}, realA.grade.scores, { amt: 3 });
   const want = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks);
+  ok(await page.locator('.ccrit [data-contest][data-where="row"]').count() === 9 && await page.locator('.tkfind [data-contest]').count() === realA.grade.findings.filter(f => B.CHAT_RUBRIC.some(r => r.id === f.id)).length && await page.locator('#tf-approval [data-contest]').count() === 0,
+    'every scorecard row and every finding with a criterion has a Contest button');
   await page.click('[data-cm="amt"][data-v="3"]'); await page.waitForTimeout(100);
-  ok((await txt(page, '#cvPct')) === want.p + '%' && (await txt(page, '#cvWord')) === want.v && (await txt(page, '#csScoreAns')) === `${want.v} · ${want.p}%`, `one mark changes the score to ${want.v} ${want.p}%`);
-  ok(await page.locator('#was-amt').isVisible() && (await txt(page, '#was-amt')) === 'Claude 1' && await page.locator('#cvClaude').isVisible(), "Claude's original mark shown when changed");
-  ok((await page.locator('#coachText').inputValue()).includes(`— ${want.v} (${want.p}%)`), 'coaching note follows the marks');
-  ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v && (await txt(page, '#tf-amt .tkfs s')) === '1/3' && (await txt(page, '#tf-amt .tkscore')) === '3/3', "the ticket follows the scorecard: score, verdict, the finding's mark");
+  const cbx = page.locator('#cc-amt #cbox');
+  ok(await cbx.isVisible() && (await txt(page, '#cbox .cbclaude')) === '1/3' && (await txt(page, '#cbox .cbwhy')).includes(realA.grade.reasons.amt.slice(0, 40)) && await page.locator('#cbox [data-cv="3"][aria-pressed="true"]').count() === 1 && await page.locator('#cbox [data-cv="na"]').count() === (B.CHAT_RUBRIC.find(r => r.id === 'amt').na ? 1 : 0) && await page.locator('#cbox [data-cv]').count() === 4 + (B.CHAT_RUBRIC.find(r => r.id === 'amt').na ? 1 : 0),
+    "a different mark opens the contest box: Claude's mark and reason, your mark picked, N/A only where allowed");
+  ok(await page.locator('#cbSave').isDisabled() && (await txt(page, '#cvPct')) === RP + '%' && await page.locator('[data-cm="amt"][data-v="1"][aria-pressed="true"]').count() === 1 && await page.evaluate(() => document.activeElement && document.activeElement.id === 'cbWhy'), 'Save is disabled until there is a reason; the mark and score wait; focus goes to Why');
+  await page.fill('#cbWhy', '   '); ok(await page.locator('#cbSave').isDisabled(), 'blank space is not a reason');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cc-amt').scrollIntoView({ block: 'center' }) });
+  const WHY = 'The lead approved $17.73 in the thread before the client was told, so the amount stands.';
+  await page.fill('#cbWhy', WHY); ok(await page.locator('#cbSave').isEnabled(), 'typing a reason arms Save contest');
+  await page.waitForTimeout(80); await page.screenshot({ path: path.join(SH, 'contest-box.png') });
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbox')).backgroundColor) !== 'rgb(255, 255, 255)', 'dark: the contest box takes the dark tokens');
+  await page.screenshot({ path: path.join(SH, 'contest-box-dark.png') }); await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById('cbox').scrollIntoView({ block: 'center' })); await page.waitForTimeout(80);
+  ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbox').getBoundingClientRect().right <= 390), `390px contest box: no horizontal overflow (${await width(page)})`);
+  await page.screenshot({ path: path.join(SH, 'contest-390.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
+  await page.click('#cbSave'); await page.waitForTimeout(100);
+  ok((await txt(page, '#cvPct')) === want.p + '%' && (await txt(page, '#cvWord')) === want.v && (await txt(page, '#csScoreAns')) === `${want.v} · ${want.p}%` && await page.locator('#cbox').count() === 0, `Save contest re-scores live: ${want.v} ${want.p}%`);
+  ok(await page.locator('#cc-amt.contested').count() === 1 && (await txt(page, '#cc-amt .ccon')) === 'CONTESTED' && (await txt(page, '#cc-amt .cfrom s')) === '1/3' && (await txt(page, '#cc-amt .cfrom b')) === '3/3' && (await txt(page, '#cc-amt .cyour')).includes(WHY) && await page.locator('[data-cm="amt"][data-v="3"][aria-pressed="true"]').count() === 1,
+    "the row: Contested, Claude's 1/3 struck, 3/3, the reason underneath");
+  ok((await page.locator('#coachText').inputValue()).includes(`— ${want.v} (${want.p}%)`) && !/\d\. P1 · Resolution accuracy/.test(await page.locator('#coachText').inputValue()), 'coaching note follows the marks; contested to full marks, the finding leaves it');
+  ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v && (await txt(page, '#tf-amt .tkfs s')) === '1/3' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tf-amt .tkcon')) === 'CONTESTED' && (await txt(page, '#tf-amt .tkyour')).includes(WHY), "the ticket follows: score, verdict, the finding's mark struck and contested, the reason");
+  // Cancel leaves everything as it was
+  const crit2 = B.CHAT_RUBRIC.find(r => r.id !== 'amt' && Number.isInteger(realA.grade.scores[r.id]) && realA.grade.scores[r.id] < r.max);
+  await page.click(`[data-cm="${crit2.id}"][data-v="${crit2.max}"]`); await page.waitForTimeout(80);
+  ok(await page.locator(`#cc-${crit2.id} #cbox`).isVisible(), `clicking a different mark on ${crit2.label} opens its box`);
+  await page.click('#cbCancel'); await page.waitForTimeout(80);
+  ok(await page.locator('#cbox').count() === 0 && await page.locator(`[data-cm="${crit2.id}"][data-v="${realA.grade.scores[crit2.id]}"][aria-pressed="true"]`).count() === 1 && (await txt(page, '#cvPct')) === want.p + '%', 'Cancel leaves the mark and the score alone');
 
   // ===== 5b. Not a mistake: full marks on that criterion, the % and verdict recomputed live, a note box; Agree just marks
   const NF = realA.grade.findings.find(f => f.id !== 'amt' && f.id !== 'approval' && typeof f.score === 'number'), NR = B.CHAT_RUBRIC.find(r => r.id === NF.id);
@@ -275,7 +303,23 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const nextP = realA.grade.findings.filter(f => f.id !== 'amt' && f.id !== NF.id).map(f => f.priority).sort()[0];
   ok((await txt(page, '#tkPrio')) === nextP && await page.locator(`#cTicket.${nextP.toLowerCase()}`).count() === 1, `all P1s marked not a mistake: the ticket drops to ${nextP}`);
   await page.click('#tf-amt [data-fmark="not"]'); await page.waitForTimeout(100);
-  ok((await txt(page, '#tkPrio')) === 'P1' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tkPct')) === want2.p + '%' && await page.locator('#tkn-amt').count() === 0, 'un-marking puts the earlier mark back (3, set on the scorecard) and P1');
+  ok((await txt(page, '#tkPrio')) === 'P1' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tkPct')) === want2.p + '%' && await page.locator('#tkn-amt').count() === 0 && await page.locator('#cc-amt.contested').count() === 1, 'un-marking puts the contest back (3/3) with its reason');
+  // ----- 5c. contest from a finding card: pick a mark, give a reason, save
+  const CF = realA.grade.findings.find(f => { const r = B.CHAT_RUBRIC.find(x => x.id === f.id); return r && !['amt', NF.id, fa.id].includes(f.id) && Number.isInteger(f.score) && f.score <= r.max - 2 }), CR = B.CHAT_RUBRIC.find(r => r.id === CF.id), CTO = CF.score + 1;
+  await page.click(`#tf-${CF.id} [data-contest]`); await page.waitForTimeout(100);
+  ok(await page.locator(`#tf-${CF.id} #cbox`).isVisible() && await page.locator('#cbox [data-cv][aria-pressed="true"]').count() === 0 && await page.locator('#cbSave').isDisabled() && (await page.locator(`#tf-${CF.id} [data-contest]`).getAttribute('aria-expanded')) === 'true', `Contest on the ${CF.label} finding opens the box in the card, no mark picked`);
+  await page.click(`#cbox [data-cv="${CTO}"]`);
+  ok(await page.locator('#cbSave').isDisabled() && await page.locator(`#cbox [data-cv="${CTO}"][aria-pressed="true"]`).count() === 1, 'a mark alone does not arm Save');
+  const WHY2 = 'The client asked for the steps and got them in M9.';
+  await page.fill('#cbWhy', WHY2); await page.click('#cbSave'); await page.waitForTimeout(100);
+  const marks3 = Object.assign({}, marks2, { [CF.id]: CTO }), want3 = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks3);
+  ok((await txt(page, `#tf-${CF.id} .tkscore`)) === `${CTO}/${CR.max}` && (await txt(page, `#tf-${CF.id} .tkfs s`)) === `${CF.score}/${CR.max}` && (await txt(page, `#tf-${CF.id} .tkyour`)).includes(WHY2) && await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, '#tkPct')) === want3.p + '%' && (await txt(page, '#cvPct')) === want3.p + '%',
+    `saved from the card: ${CF.label} ${CF.score}/${CR.max} → ${CTO}/${CR.max}, the row contested, ${want3.p}%`);
+  ok(/\d\. P\d · /.test(await page.locator('#coachText').inputValue()) && (await page.locator('#coachText').inputValue()).includes(CF.label), 'a contest below full marks keeps the finding in the coaching note');
+  const plain2 = await page.evaluate(s => chTicketText(chatBy(s), chatAud[s], chatDraft(s)), SID);
+  ok(plain2.includes(`Resolution accuracy · Taxes included · 3/3 · Contested (coach 1/3)`) && plain2.includes(`   Why contested: ${WHY}`), 'the copied ticket carries the contest and its reason');
+  await page.evaluate(id => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById(id).scrollIntoView({ block: 'center' }) }, 'cc-amt'); await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(SH, 'contest-saved.png') });
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
   await page.locator(`#tf-${NF.id}`).scrollIntoViewIfNeeded(); await page.evaluate(id => document.getElementById(id).scrollIntoView({ block: 'center' }), 'tf-' + NF.id); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(SH, 'ticket-notmistake.png') });
@@ -285,14 +329,25 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.fill('#chatReviewer', 'QA lead');
   await page.click('#chatSave'); await page.waitForTimeout(300);
   const rv = await page.evaluate(p => window.__data[p], P('reviews/' + SID));
-  ok(rv && rv.scores.amt === 3 && rv.scores[NF.id] === NR.max && fmt(rv.pct) === want2.p && rv.verdict === B.chatVerdict(rv.pct).id && rv.week === WEEK && rv.sa === SA0 && rv.reviewer === 'QA lead' && rv.by === 'u_test' && rv.coaching.startsWith('Chat ' + SID), 'Save review writes chatReviews/<sid>');
+  ok(rv && rv.scores.amt === 3 && rv.scores[NF.id] === NR.max && rv.scores[CF.id] === CTO && fmt(rv.pct) === want3.p && rv.verdict === B.chatVerdict(rv.pct).id && rv.week === WEEK && rv.sa === SA0 && rv.reviewer === 'QA lead' && rv.by === 'u_test' && rv.coaching.startsWith('Chat ' + SID), 'Save review writes chatReviews/<sid>');
   ok(JSON.stringify(rv.findings) === JSON.stringify({ [NF.id]: { mark: 'not', note: NOTE }, [fa.id]: { mark: 'agree', note: '' } }) || (rv.findings[NF.id].mark === 'not' && rv.findings[NF.id].note === NOTE && rv.findings[fa.id].mark === 'agree' && Object.keys(rv.findings).length === 2), 'the review stores the finding marks: {id: {mark, note}}');
   const LID = `chatLessons/${SID}_${NF.id}`, les = await page.evaluate(p => window.__data[p], LID);
   ok(les && les.sid === SID && les.week === WEEK && les.sa === SA0 && les.crit === NF.id && les.label === NF.label && les.type === NF.type && les.what === NF.what && les.note === NOTE && les.by === 'u_test' && !isNaN(Date.parse(les.at)), `Not a mistake writes ${LID}: sid, week, sa, crit, label, type, what, note, by, at`);
-  ok(await count(page, 'chatLessons') === 3, 'only the finding marked not a mistake becomes a correction');
+  ok(les.kind === 'not' && les.caseType === 'compensation', 'a Not a mistake lesson has kind "not"');
+  ok(JSON.stringify(rv.contests) === JSON.stringify({ amt: { from: '1/3', to: '3/3', reason: WHY }, [CF.id]: { from: `${CF.score}/${CR.max}`, to: `${CTO}/${CR.max}`, reason: WHY2 } }), 'the review stores contests: {crit: {from, to, reason}}');
+  const amtF = realA.grade.findings.find(f => f.id === 'amt'), lc = await page.evaluate(p => window.__data[p], `chatLessons/${SID}_amt`);
+  ok(lc && lc.kind === 'contest' && lc.sid === SID && lc.week === WEEK && lc.sa === SA0 && lc.crit === 'amt' && lc.label === 'Resolution accuracy' && lc.caseType === 'compensation' && lc.type === amtF.type && lc.from === '1/3' && lc.to === '3/3' && lc.reason === WHY && lc.what === realA.grade.reasons.amt && lc.by === 'u_test' && !isNaN(Date.parse(lc.at)),
+    `Save review writes chatLessons/${SID}_amt: kind contest, from, to, reason, caseType, type, what`);
+  const lc2 = await page.evaluate(p => window.__data[p], `chatLessons/${SID}_${CF.id}`);
+  ok(lc2 && lc2.kind === 'contest' && lc2.from === `${CF.score}/${CR.max}` && lc2.to === `${CTO}/${CR.max}` && lc2.reason === WHY2 && lc2.type === CF.type, `and chatLessons/${SID}_${CF.id}`);
+  ok(await count(page, 'chatLessons') === 5, 'two contests and one Not a mistake: three lessons beside the two seeded');
+  await page.evaluate(() => renderBrain());
+  const bl = await page.evaluate(s => [...document.querySelectorAll('#brLessons .lsitem.contest')].map(x => x.textContent.replace(/\s+/g, ' ')).find(t => t.includes('Resolution accuracy') && t.includes('Chat ' + s)) || '', SID);
+  ok(bl.includes('1/3') && bl.includes('3/3') && bl.includes(WHY) && bl.includes(SA0) && bl.includes('Compensation'), 'the Brain lists the contest: criterion · case type, 1/3 → 3/3, the reason, SA, chat');
+  ok(await page.evaluate(s => (document.querySelector(`.crow[data-open="${s}"] .conchip`) || {}).textContent, SID) === 'Contested 2', 'the queue row shows Contested 2');
   const xp1 = await page.evaluate(() => gameStats().xp);
   ok(xp1 - xp0 === 10, `review adds 10 XP (${xp0} → ${xp1})`);
-  ok(/Saved .* · \+10 XP · 1 of 9 · 1 correction/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9 · 1 correction, offers Next chat');
+  ok(/Saved .* · \+10 XP · 1 of 9 · 3 lessons/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9 · 3 lessons, offers Next chat');
   ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE, 'after saving, the ticket shows the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }
@@ -332,6 +387,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const rg = await page.evaluate(n => window.__prompts.slice(n).filter(p => /You are Swift Coach/.test(p.input)).map(p => p.input), pq);
   const rgc = rg.length ? rg[0].slice(rg[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
   ok(rg.length === 2 && rgc.includes(NOTE) && rgc.includes(NF.label) && rgc.indexOf(NOTE) < rgc.indexOf(LS_NEW.note), "after a re-grade the new correction is in the grade prompt, newest first");
+  ok(rgc.includes(`Resolution accuracy · ${amtF.type} (compensation case): the coach gave 1/3, the QA lead says 3/3. Why: ${WHY}`) && rgc.includes(`the QA lead says ${CTO}/${CR.max}. Why: ${WHY2}`), "the re-grade's prompt has the contests: the coach gave X, the QA lead says Y. Why: …");
   ok((await txt(page, '.ordcard')).includes('Ticket ' + tgt.ticket) && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'the picked order is linked as your pick');
   // → No order: re-grade without the order, money card gone
   await page.click('#ordChange'); await page.waitForTimeout(100);
@@ -351,8 +407,16 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator(`#tf-${NF.id}.not`).count() === 1, 'the saved mark survives a re-grade');
   await page.click(`#tf-${NF.id} [data-fmark="not"]`); await page.waitForTimeout(100);
   ok(await page.locator(`#tf-${NF.id}.not`).count() === 0 && (await txt(page, `#tf-${NF.id} .tkscore`)) === `${markL(NF.score)}/${NR.max}`, `un-marking puts ${NF.label} back to ${markL(NF.score)}`);
+  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, `#tf-${CF.id} .tkscore`)) === `${CTO}/${CR.max}`, 'the saved contest survives a re-grade');
+  await page.click(`[data-contest="${CF.id}"][data-where="row"]`); await page.waitForTimeout(80);
+  ok((await page.locator('#cbWhy').inputValue()) === WHY2 && await page.locator('#cbWithdraw').isVisible(), 'reopening a contest shows its reason and Withdraw');
+  await page.click('#cbWithdraw'); await page.waitForTimeout(80);
+  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 0 && await page.locator(`[data-cm="${CF.id}"][data-v="${CF.score}"][aria-pressed="true"]`).count() === 1 && await page.locator('#cbox').count() === 0, `Withdraw puts ${CF.label} back on Claude's ${CF.score}`);
+  const nLs = await count(page, 'chatLessons');
   await page.click('#chatSave'); await page.waitForTimeout(300);
-  ok(!(await page.evaluate(p => window.__data[p], LID)) && await count(page, 'chatLessons') === 2 && !(await page.evaluate(p => window.__data[p].findings, P('reviews/' + SID)))[NF.id], 'un-marking and saving deletes the correction and the mark');
+  const rv2 = await page.evaluate(p => window.__data[p], P('reviews/' + SID));
+  ok(!(await page.evaluate(p => window.__data[p], LID)) && !rv2.findings[NF.id], 'un-marking and saving deletes the Not a mistake lesson and the mark');
+  ok(!(await page.evaluate(p => window.__data[p], `chatLessons/${SID}_${CF.id}`)) && !(rv2.contests || {})[CF.id] && await count(page, 'chatLessons') === nLs - 2, 'withdrawing and saving deletes the contest lesson and the review\'s contest');
 
   // ===== 9. next chat, dark, phone widths
   await page.click('#cvNext'); await page.waitForTimeout(200);
@@ -405,15 +469,16 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await shot(page, 'chats-brain.png');
   // corrections: newest first, with what the coach said, the note, the SA, the date and the chat
   const lsi = page.locator('#brLessons .lsitem');
-  ok(await lsi.count() === 2 && (await txt(page, '#brLessons .bhd')).includes('Corrections') && (await txt(page, '#brLessons .bhd .num')) === '2', 'Brain: Corrections with a count');
-  const ls0 = (await lsi.first().innerText()).replace(/\s+/g, ' ');
-  ok(ls0.includes(LS_NEW.label) && ls0.includes(LS_NEW.type) && ls0.includes(LS_NEW.what) && ls0.includes(LS_NEW.note) && ls0.includes('Mara Quill') && ls0.includes('Chat 9900901') && (await lsi.nth(1).innerText()).includes(LS_OLD.note), 'each correction: label · type, what the coach said, the note, SA, date, chat; newest first');
+  const nL = await count(page, 'chatLessons');
+  ok(await lsi.count() === nL && (await txt(page, '#brLessons .bhd h2')) === 'What the coach learned' && (await txt(page, '#brLessons .bhd .num')) === String(nL) && (await txt(page, '#brLessons .lsuse')) === 'Every new grade reads the newest 20.', 'Brain: What the coach learned, a count and the one-line note');
+  const lsN = page.locator('#brLessons .lsitem', { hasText: LS_NEW.note }), ls0 = (await lsN.innerText()).replace(/\s+/g, ' ');
+  ok(await lsN.locator('.tknot').count() === 1 && ls0.includes(LS_NEW.label) && ls0.includes(LS_NEW.type) && ls0.includes(LS_NEW.what) && ls0.includes(LS_NEW.note) && ls0.includes('Mara Quill') && ls0.includes('Chat 9900901') && await page.evaluate(([a, b]) => { const t = [...document.querySelectorAll('#brLessons .lsitem')].map(x => x.textContent); return t.findIndex(x => x.includes(a)) < t.findIndex(x => x.includes(b)) }, [LS_NEW.note, LS_OLD.note]), 'a Not a mistake lesson: label, the note, what the coach said, SA, date, chat; newest first');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('brLessons').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(120);
-  await page.screenshot({ path: path.join(SH, 'brain-corrections.png') });
+  await page.screenshot({ path: path.join(SH, 'brain-learned.png') });
   const ldel = page.locator('#brLessons [data-lsdel="9900901_tone"]');
   await ldel.click(); ok(await page.evaluate(() => !!window.__data['chatLessons/9900901_tone']) && (await ldel.innerText()) === 'Confirm', 'delete asks to confirm');
   await ldel.click(); await page.waitForTimeout(200);
-  ok(!(await page.evaluate(() => window.__data['chatLessons/9900901_tone'])) && await lsi.count() === 1 && (await txt(page, '#brLessons .bhd .num')) === '1', 'delete removes a correction');
+  ok(!(await page.evaluate(() => window.__data['chatLessons/9900901_tone'])) && await lsi.count() === nL - 1 && (await txt(page, '#brLessons .bhd .num')) === String(nL - 1), 'delete removes a lesson');
   const bi = W.policy.comp.buckets.findIndex(x => x.id === 'made_twice_one_paid');
   await page.fill(`[data-bpct="${bi}"]`, '35'); await page.fill('#polLimit', '30');
   ok(await page.locator('#polSave').isEnabled() && await page.locator('#polUndo').isVisible(), 'editing the policy arms Save');

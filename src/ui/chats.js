@@ -1,13 +1,15 @@
 /* ---------- CHATS: the WIRA chat audit area (Queue · Audit · Brain). The brain is src/chat.js; this is the page around it. ----------
    db (CHAT_PATHS): chatWeeks/<week>/chats/<sid> (the queue; the doc is the chat), …/audits/<sid> (Claude's pre-grade), …/tx/<sid> (transcripts),
        …/reviews/<sid> (the reviewer's marks, coaching and finding marks); chatCalib/<sid> (calibration cases), settings/chatPolicy, settings/staff;
-       chatLessons/<sid>_<finding id> (the QA lead's corrections: findings marked "not a mistake", fed to the next grades).
+       chatLessons/<sid>_<crit> (what the coach learned: contested marks, kind "contest", and findings marked "not a mistake", kind "not"; the newest 20 go into every grade).
    chatWeeks/<week> itself is a small index doc written on pull, so the game layer can find the weeks that have reviews.
    Live subscriptions: the selected week's chats, audits and reviews (resubscribed once per week change), plus calibration, corrections, policy and staff.
    Transcripts are read per chat when opened; other weeks' reviews are read once per load with .get() for XP and the streak. */
 let chats=[], chatAud={}, chatRev={}, chatCal=[], chLessons=[], chatPolicyDoc=null, staffDoc=null, chatsReady=false;
 let chatSel=null, chatRun=null, chatPullRun=null, chatNote=null, chatPickOpen=null, calForm=null, chatAuditSig="", chLastRun=null;
 let polDirty=false, staffDirty=false, chTimelineOpen=false, chOrdQ="";
+/* the open contest box (one at a time): {sid, crit, where: "row" | "find", to, reason} */
+let chContest=null;
 const chatDrafts=new Map(), chatTxCache=new Map(), chModelOpen=new Set();
 const CH_LESSONS="chatLessons";
 /* the loaded week and its unsubscribers; other weeks' reviews for the game layer (week -> {sid: review}) */
@@ -221,23 +223,30 @@ function chFindings(c,a){const G=a&&a.grade;if(!G||typeof G!=="object")return []
   chFindCache.set(a,F);return F}
 const chIsNot=(M,id)=>!!(M&&M[id]&&M[id].mark==="not");
 /* the ticket's priority: the highest of the findings the reviewer hasn't marked "not a mistake" */
-function chTopPrio(F,M){return (F||[]).filter(f=>!chIsNot(M,f.id)).map(f=>f.priority).filter(p=>p in PRIO).sort()[0]||null}
+function chTopPrio(F,M,C,S){return (F||[]).filter(f=>!chDropped(f.id,M,C,S)).map(f=>f.priority).filter(p=>p in PRIO).sort()[0]||null}
 const chPrio=p=>p?`<span class="prio ${esc(String(p).toLowerCase())}">${esc(p)}</span>`:"";
-function chRowPrio(c,a){const rv=chatRev[c.sid];return chTopPrio(chFindings(c,a),rv&&rv.findings)}
+function chRowPrio(c,a){const rv=chatRev[c.sid];return chTopPrio(chFindings(c,a),rv&&rv.findings,rv&&rv.contests,rv&&rv.scores)}
 /* compensation check status: label, tone */
 const CH_COMP_ST={right:["Right","good"],wrong:["Wrong","bad"],minor:["Rounded","ok"],not_recorded:["Not recorded","bad"],missing:["Not offered","bad"],
   not_due:["Not due","bad"],none_due:["Nothing due","good"],held:["Held for approval","tp"],unknown:["Can't check","none"]};
 const CH_COMP_BAD=["wrong","minor","not_recorded","missing","not_due"],CH_COMP_OUT=["held","unknown","none_due"];
 const CH_WHERE={chat:"Chat",note:"Internal note",ticket:"WIRA ticket"};
 const chLessonsSorted=()=>chLessons.slice().sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+/* contests: the reviewer disagrees with one of Claude's marks and says why. Kept in the draft as {crit: {to, reason}}, saved with the review, and each one a lesson */
+const chRub=id=>CHAT_RUBRIC.find(x=>x.id===id)||null;
+const chMk=(v,max)=>v==="na"?"N/A":v==null||v===""?"–":`${chMarkL(v)}/${max}`;
+const chClaudeMark=(a,id)=>((a&&a.grade&&a.grade.scores)||{})[id];
+/* a finding leaves the ticket's priority and the coaching note when it is marked not a mistake, or contested to full marks or N/A */
+function chDropped(id,M,C,S){if(chIsNot(M,id))return true;const r=chRub(id),x=C&&C[id],v=S&&S[id];return !!(r&&x&&(v==="na"||Number(v)>=r.max))}
 
 /* ---------- QUEUE ---------- */
 /* a graded row: the ticket's priority and whether the compensation came out right */
 function chFlags(c){const a=chatAud[c.sid];if(!a||(chatRun&&chatRun.sid===String(c.sid)))return "";
-  const pr=chRowPrio(c,a),k=a.check;let comp="";
+  const pr=chRowPrio(c,a),k=a.check,rv=chatRev[c.sid],nc=rv&&rv.contests?Object.keys(rv.contests).length:0;let comp="";
   if(k&&k.applies){const st=CH_COMP_ST[k.status]||CH_COMP_ST.unknown,bad=CH_COMP_BAD.includes(k.status),unk=k.status==="unknown";
     comp=`<span class="compchip ${bad?"bad":unk?"none":"good"}" title="Compensation: ${esc(st[0])}">Comp ${bad?"✗":unk?"?":"✓"}</span>`}
-  return pr||comp?`<span class="cflags">${pr?chPrio(pr):"<span></span>"}${comp}</span>`:""}
+  const con=nc?`<span class="conchip" title="${nc} mark${nc===1?"":"s"} contested">Contested ${nc}</span>`:"";
+  return pr||comp||con?`<span class="cflags">${pr?chPrio(pr):"<span></span>"}${comp||"<span></span>"}${con}</span>`:""}
 /* checks that apply and can be judged: held, can't check and nothing due don't count */
 function chCompTally(list){const k=list.map(c=>chatAud[c.sid]&&chatAud[c.sid].check).filter(x=>x&&x.applies&&!CH_COMP_OUT.includes(x.status));
   return {right:k.filter(x=>x.status==="right").length,n:k.length}}
@@ -296,15 +305,17 @@ $("#view-chats").addEventListener("click",e=>{
 /* the reviewer's working copy: starts from the saved review, else Claude's marks; resets when a new grade or review lands */
 function chatDraft(sid){const a=chatAud[sid],rv=chatRev[sid],base=chHash(a),rvAt=chHash(rv);let d=chatDrafts.get(sid);
   if(!d||d.base!==base||d.rvAt!==rvAt){d={base,rvAt,scores:clone((rv&&rv.scores)||(a&&a.grade&&a.grade.scores)||{}),coach:rv&&typeof rv.coaching==="string"?rv.coaching:null,
-    reviewer:(rv&&rv.reviewer)||(d&&d.reviewer)||store.get("qa.reviewer")||"",findings:clone((rv&&rv.findings&&typeof rv.findings==="object")?rv.findings:{})};chatDrafts.set(sid,d)}
+    reviewer:(rv&&rv.reviewer)||(d&&d.reviewer)||store.get("qa.reviewer")||"",findings:clone((rv&&rv.findings&&typeof rv.findings==="object")?rv.findings:{}),
+    contests:Object.fromEntries(Object.entries((rv&&rv.contests)||{}).filter(([id])=>rv.scores&&rv.scores[id]!=null).map(([id,x])=>[id,{to:rv.scores[id],reason:String((x&&x.reason)||"")}]))};
+    chatDrafts.set(sid,d);if(chContest&&chContest.sid===sid)chContest=null}
   return d}
 /* the coaching note: the ticket's findings (P1 first, minus any marked not a mistake) when the grade has them, else the older "next time" list */
-function coachText(c,a,scores,marks){const pct=chatScore(scores),v=chatVerdict(pct),G=(a&&a.grade)||{},R=G.route||{};
+function coachText(c,a,scores,marks,contests){const pct=chatScore(scores),v=chatVerdict(pct),G=(a&&a.grade)||{},R=G.route||{};
   const L=[`Chat ${a.sid||c.sid} · ${a.restaurant||c.restaurant||""} · ${shortDate(String(a.at||c.at||"").slice(0,10))} — ${v?v.label:"–"} (${pct==null?"–":fmt(pct)}%)`,""];
   [["facts","Facts"],["analysis","Analysis"],["solution","Solution"]].forEach(([k,l])=>{const r=R[k]||{};L.push(`${l}: ${CH_MARK[r.mark]||"–"} ${r.why||""}`.trimEnd())});
   const es=scores&&scores.esc,er=R.escalation||{};L.push(`Escalation: ${es==="na"||es==null?"N/A":"Level "+chMarkL(es)}${er.why?" · "+er.why:""}`);
   if((G.wentWell||[]).length){L.push("","What you did well");G.wentWell.forEach(x=>L.push("- "+x))}
-  if(Array.isArray(G.findings)){const F=G.findings.filter(f=>f&&!chIsNot(marks,f.id)).sort((x,y)=>(PRIO[x.priority]??9)-(PRIO[y.priority]??9));
+  if(Array.isArray(G.findings)){const F=G.findings.filter(f=>f&&!chDropped(f.id,marks,contests,scores)).sort((x,y)=>(PRIO[x.priority]??9)-(PRIO[y.priority]??9));
     if(F.length){L.push("","Next time");F.forEach((f,i)=>{L.push(`${i+1}. ${f.priority?f.priority+" · ":""}${f.label||f.id}${f.type?": "+f.type:""}`);
       if(f.what)L.push(`   What happened: ${f.what}`);if(f.why)L.push(`   Why it matters: ${f.why}`);if(f.should)L.push(`   Do: ${f.should}`);if(f.model)L.push(`   Model message: "${f.model}"`)})}}
   else if((G.nextTime||[]).length){L.push("","Next time");G.nextTime.forEach((n,i)=>{L.push(`${i+1}. What happened: ${n.what||""}`);if(n.why)L.push(`   Why it matters: ${n.why}`);if(n.do)L.push(`   Do: ${n.do}`);if(n.model)L.push(`   Model message: "${n.model}"`)})}
@@ -433,14 +444,40 @@ function chAnalysis(c,a){const A=a.analysis||{},comp=a.comp||{},off=a.offer||{},
   if(A.ideal)rows.push(["Escalation",`<b>${es.needed?"Needed":"Not needed"}</b>${es.to?` · ${esc(es.to)}`:""}${es.why?` ${esc(es.why)}`:""}`]);
   Object.keys(A).filter(k=>!CH_KNOWN.includes(k)).forEach(k=>rows.push([chLabel(k),chAny(A[k])]));
   return `<dl class="adl">${rows.map(([k,v,line])=>line?`<dt class="sr-only">${esc(k)}</dt><dd class="aline">${esc(v)}</dd>`:`<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`}
-function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null;
-  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0;
+function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
+  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0,con=C[r.id],box=!!(B&&B.crit===r.id&&B.where==="row");
     const reads=runs&&String(runs[0][r.id])!==String(runs[1][r.id])?`<span class="reads num">Reads ${chMarkL(runs[0][r.id])} · ${chMarkL(runs[1][r.id])}</span>`:"";
     const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}${half&&(v===Math.floor(cur)||v===Math.ceil(cur))?" half":""}" data-cm="${r.id}" data-v="${v}" aria-pressed="${String(cur)===String(v)}">${v}</button>`).join("")+
       (r.na?`<button type="button" class="cm na" data-cm="${r.id}" data-v="na" aria-pressed="${cur==="na"}">N/A</button>`:"");
-    return `<div class="ccrit" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span><span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>${reads}</div>
-      <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}</div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}</div>`}).join("")}
-function chCoach(c,a,rv,d){const gen=coachText(c,a,d.scores,d.findings),txt=d.coach!=null?d.coach:gen,calEx=chatCal.some(x=>String(x.sid)===String(c.sid));
+    const mark=con?`<span class="ccon">Contested</span><span class="cfrom num"><s>${esc(chMk(orig,r.max))}</s> <b class="${chMarkCls(cur,r.max)}">${esc(chMk(cur,r.max))}</b></span>`
+      :`<span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>`;
+    return `<div class="ccrit${con?" contested":""}" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span>${mark}${reads}</div>
+      <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}<button type="button" class="btn small cbtn" data-contest="${r.id}" data-where="row" aria-expanded="${box}">Contest</button></div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}
+      ${con&&!box?`<div class="cyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}</div>`:""}${box?chContestBox(a,d,r):""}</div>`}).join("")}
+/* the contest box: Claude's mark and reason, your mark, why (required) */
+function chContestBox(a,d,r){const B=chContest,orig=chClaudeMark(a,r.id),why=((a.grade||{}).reasons||{})[r.id]||"",ex=(d.contests||{})[r.id];
+  const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}" data-cv="${v}" aria-pressed="${String(B.to)===String(v)}">${v}</button>`).join("")+
+    (r.na?`<button type="button" class="cm na" data-cv="na" aria-pressed="${B.to==="na"}">N/A</button>`:"");
+  return `<div class="cbox" id="cbox" role="group" aria-label="Contest ${esc(r.label)}">
+    <div class="cbl"><span class="lbl-sm">Claude</span><div class="cbv"><b class="num cbclaude ${chMarkCls(orig,r.max)}">${esc(chMk(orig,r.max))}</b>${why?`<p class="cbwhy">${esc(why)}</p>`:""}</div></div>
+    <div class="cbl"><span class="lbl-sm">Your mark</span><div class="cbv cbmarks" role="group" aria-label="Your mark">${opts}</div></div>
+    <div class="field cbfield"><label for="cbWhy">Why</label><textarea id="cbWhy" rows="3">${esc(B.reason||"")}</textarea></div>
+    <div class="row"><button type="button" class="btn primary" id="cbSave"${chContestOk()?"":" disabled"}>Save contest</button><button type="button" class="btn" id="cbCancel">Cancel</button>${ex?`<button type="button" class="btn danger" id="cbWithdraw">Withdraw</button>`:""}</div></div>`}
+function chContestOk(){const B=chContest;if(!B)return false;return B.to!=null&&String(B.to)!==String(chClaudeMark(chatAud[B.sid],B.crit))&&!!String(B.reason||"").trim()}
+function chOpenContest(crit,where,to){const sid=String(chatSel||""),a=chatAud[sid],r=chRub(crit);if(!a||!r)return;
+  const d=chatDraft(sid),ex=(d.contests||{})[crit];
+  if(to===undefined&&chContest&&chContest.sid===sid&&chContest.crit===crit&&chContest.where===where){chContest=null;paintMarks();return}
+  chContest={sid,crit,where,to:to!==undefined?to:ex?ex.to:null,reason:ex?ex.reason:(chContest&&chContest.sid===sid&&chContest.crit===crit?chContest.reason:"")};paintMarks();
+  const el=$("#cbox");if(el){el.scrollIntoView({block:"nearest"});const f=chContest.to!=null?$("#cbWhy"):el.querySelector("[data-cv]");if(f)f.focus({preventScroll:true})}}
+function chSaveContest(){if(!chContestOk())return;const B=chContest,d=chatDraft(B.sid);
+  (d.contests||(d.contests={}))[B.crit]={to:B.to,reason:String(B.reason).trim()};d.scores[B.crit]=B.to;
+  if(d.findings&&d.findings[B.crit])delete d.findings[B.crit];
+  chContest=null;paintMarks();const b=$(`[data-contest="${B.crit}"][data-where="${B.where}"]`);if(b)b.focus({preventScroll:true})}
+/* back to Claude's mark: the contest (and a Not a mistake on that criterion) goes */
+function chWithdraw(crit){const sid=String(chatSel||""),a=chatAud[sid];if(!a)return;const d=chatDraft(sid);
+  if(d.contests)delete d.contests[crit];if(chIsNot(d.findings,crit))delete d.findings[crit];
+  const o=chClaudeMark(a,crit);if(o!==undefined)d.scores[crit]=o;if(chContest&&chContest.crit===crit)chContest=null;paintMarks()}
+function chCoach(c,a,rv,d){const gen=coachText(c,a,d.scores,d.findings,d.contests),txt=d.coach!=null?d.coach:gen,calEx=chatCal.some(x=>String(x.sid)===String(c.sid));
   const xp=chatXpFor({sid:c.sid})-(rv?chatXpFor(rv):0);
   return `<div class="field"><label for="coachText" class="sr-only">Coaching note</label><textarea id="coachText" class="coach" rows="16">${esc(txt)}</textarea></div>
     <div class="row"><button type="button" class="btn small" id="coachCopy">Copy</button><button type="button" class="btn small" id="coachRebuild"${d.coach!=null&&d.coach!==gen?"":" hidden"}>Rebuild</button></div>
@@ -499,39 +536,50 @@ function chSrcChip(s){const t=String(s||"").trim();let m;
 function chEvHtml(e){const mark=e.swapped?`<span class="qflag">showing the message</span>`:e.ok===true?`<span class="qok" title="Found in the source" aria-label="Found in the source">✓</span>`:e.ok===false?`<span class="qflag bad">not found in source</span>`:"";
   return `<li class="tkq${e.fact?" fact":""}"><span class="tkqs">${chSrcChip(e.src)}${e.fact?chCite(e.fact):""}</span>${e.fact?`<span class="tkqt">${esc(e.quote)}</span>`:`<q class="tkqt">${esc(e.quote)}</q>`}${mark}</li>`}
 function chFindHtml(c,a,d,f){const M=d.findings||{},st=M[f.id]||{},not=st.mark==="not",agree=st.mark==="agree",r=CHAT_RUBRIC.find(x=>x.id===f.id),first=chFirst(a.sa||c.sa)||"the SA";
-  const sys=f.id==="amt"&&!!a.grade&&a.grade.amtBy==="system",fid=esc(f.id),mk=String(c.sid)+"/"+f.id;
+  const sys=f.id==="amt"&&!!a.grade&&a.grade.amtBy==="system",fid=esc(f.id),mk=String(c.sid)+"/"+f.id,con=r&&(d.contests||{})[f.id],B=chContest&&chContest.sid===String(c.sid)?chContest:null,box=!!(r&&B&&B.crit===f.id&&B.where==="find");
   let sc="";if(r){const cur=d.scores[f.id],lab=v=>v==="na"?"N/A":`${chMarkL(v)}/${r.max}`;
     sc=(String(cur)!==String(f.score)?`<s class="num">${lab(f.score)}</s>`:"")+`<b class="num tkscore ${chMarkCls(cur,r.max)}">${lab(cur)}</b>`}
   const ev=(f.evidence||[]).filter(e=>e&&e.quote).map(chEvHtml);
   return `<article class="tkfind ${esc(String(f.priority||"").toLowerCase())}${not?" not":""}" id="tf-${fid}" data-fid="${fid}">
     <div class="tkfh">${chPrio(f.priority)}<h4 class="tkft"><b>${esc(f.label||f.id)}</b>${f.type?`<span class="tktype"> · ${esc(f.type)}</span>`:""}</h4>
-      <span class="tkfs">${sc}${sys?`<span class="tksys">set by the comp check</span>`:""}${not?`<span class="tknot">Not a mistake</span>`:""}</span></div>
+      <span class="tkfs">${sc}${sys?`<span class="tksys">set by the comp check</span>`:""}${not?`<span class="tknot">Not a mistake</span>`:""}${con?`<span class="tkcon">Contested</span>`:""}</span></div>
     <div class="tkfb"><div class="tkcol">${f.what?`<div class="tkblk"><h5>What happened</h5><p>${esc(f.what)}</p></div>`:""}${ev.length?`<div class="tkblk"><h5>Evidence</h5><ul class="tkev">${ev.join("")}</ul></div>`:""}</div>
       <div class="tkcol">${f.why?`<div class="tkblk"><h5>Why it matters</h5><p>${esc(f.why)}</p></div>`:""}${f.should?`<div class="tkblk tkfix"><h5>What ${esc(first)} should have done</h5><p>${esc(f.should)}</p></div>`:""}
         ${f.model?`<details class="tkmodel" data-model="${esc(mk)}"${chModelOpen.has(mk)?" open":""}><summary>Model message</summary><div class="tkmsg">${esc(f.model)}</div><button type="button" class="btn small" data-mcopy="${fid}">Copy</button></details>`:""}</div></div>
-    <div class="tkact" role="group" aria-label="${esc(f.label||f.id)}"><button type="button" class="chip tkb" data-fmark="agree" data-fid="${fid}" aria-pressed="${agree}">Agree</button><button type="button" class="chip tkb tkbnot" data-fmark="not" data-fid="${fid}" aria-pressed="${not}">Not a mistake</button></div>
+    <div class="tkact" role="group" aria-label="${esc(f.label||f.id)}"><button type="button" class="chip tkb" data-fmark="agree" data-fid="${fid}" aria-pressed="${agree}">Agree</button><button type="button" class="chip tkb tkbnot" data-fmark="not" data-fid="${fid}" aria-pressed="${not}">Not a mistake</button>${r?`<button type="button" class="chip tkb tkbcon" data-contest="${fid}" data-where="find" aria-expanded="${box}">Contest</button>`:""}</div>
+    ${con&&!box?`<div class="tkyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}</div>`:""}${box?`<div class="tkcbox">${chContestBox(a,d,r)}</div>`:""}
     ${not?`<div class="field tknote"><label for="tkn-${fid}">Why it wasn't a mistake</label><textarea id="tkn-${fid}" data-fnote="${fid}" rows="2">${esc(st.note||"")}</textarea></div>`:""}</article>`}
-function chTicketCls(c,a,d){const p=chTopPrio(chFindings(c,a),d.findings);return "panel qticket"+(p?" "+p.toLowerCase():"")}
-function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(d.scores),v=chatVerdict(pct),pr=chTopPrio(F,d.findings);
+function chTicketCls(c,a,d){const p=chTopPrio(chFindings(c,a),d.findings,d.contests,d.scores);return "panel qticket"+(p?" "+p.toLowerCase():"")}
+function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(d.scores),v=chatVerdict(pct),pr=chTopPrio(F,d.findings,d.contests,d.scores);
   return `<header class="tkhd"><div class="tkttl"><span class="tkkind">QA ticket</span><span class="tkid">Chat <span class="num">${esc(c.sid)}</span></span></div>
       <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"–")}</span><span class="tkpct num" id="tkPct">${pct==null?"–":fmt(pct)+"%"}</span><span id="tkPrio" class="tkprio">${chPrio(pr)}</span></div></header>
     <div class="tkbody">${chTkFields(c,a)}
       ${A.summary?`<section class="tksec"><h3 class="tkh">What happened</h3><p class="tkp">${esc(A.summary)}</p></section>`:""}
       ${chCompHtml(c,a)}
       <section class="tksec" id="tkFinds"><div class="tkch"><h3 class="tkh">Findings</h3><span class="tkn num">${F.length}</span></div>${F.length?`<div class="tkfinds">${F.map(f=>chFindHtml(c,a,d,f)).join("")}</div>`:`<p class="tkp tkmut">No findings.</p>`}</section></div>
-    <footer class="tkfoot"><p>Filed by Swift Coach. If the SA was right, mark the finding Not a mistake: that correction teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
+    <footer class="tkfoot"><p>Filed by Swift Coach. Disagree with a mark? Contest it. Every contest teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
 /* live: a finding mark or a scorecard mark repaints the ticket in place (focus and open model messages kept) */
+/* a focused control's selector, so a repaint can put focus back */
+function chFocusSel(root){const f=document.activeElement;if(!f||!root||!root.contains(f))return "";const D=f.dataset||{};
+  if(D.fmark)return `[data-fmark="${D.fmark}"][data-fid="${D.fid}"]`;if(D.fnote)return `[data-fnote="${D.fnote}"]`;
+  if(D.contest)return `[data-contest="${D.contest}"][data-where="${D.where}"]`;if(D.cm)return `[data-cm="${D.cm}"][data-v="${D.v}"]`;if(D.cv)return `[data-cv="${D.cv}"]`;
+  return f.id?"#"+f.id:""}
+function chRefocus(root,key){if(!key)return;const g=root.querySelector(key);if(g)g.focus({preventScroll:true})}
 function paintTicket(){const el=$("#cTicket"),sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!el||!c||!a)return;
-  const f=document.activeElement,key=f&&el.contains(f)?(f.dataset.fmark?`[data-fmark="${f.dataset.fmark}"][data-fid="${f.dataset.fid}"]`:f.dataset.fnote?`[data-fnote="${f.dataset.fnote}"]`:f.id==="tkCopy"?"#tkCopy":""):"";
-  const d=chatDraft(sid);el.className=chTicketCls(c,a,d);el.innerHTML=chTicket(c,a,d);
-  if(key){const g=el.querySelector(key);if(g)g.focus({preventScroll:true})}}
+  const key=chFocusSel(el),d=chatDraft(sid);el.className=chTicketCls(c,a,d);el.innerHTML=chTicket(c,a,d);chRefocus(el,key)}
 /* Agree just marks it. Not a mistake gives the criterion full marks (put back on un-marking) and takes the finding off the ticket's priority and the coaching */
 function chMarkFinding(fid,mark){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
   const f=chFindings(c,a).find(x=>x.id===fid);if(!f)return;
   const d=chatDraft(sid),M=d.findings||(d.findings={}),st=M[fid]||{},r=CHAT_RUBRIC.find(x=>x.id===fid);
-  if(st.mark==="not"&&r)d.scores[fid]=st.prev!==undefined?st.prev:f.score;
+  const C=d.contests||(d.contests={});
+  if(st.mark==="not"&&r){d.scores[fid]=st.prev!==undefined?st.prev:f.score;if(st.prevC)C[fid]=st.prevC}
   if(st.mark===mark)delete M[fid];
-  else{const n={mark,note:mark==="not"?String(st.note||""):""};if(mark==="not"&&r){n.prev=d.scores[fid];d.scores[fid]=r.max}M[fid]=n}
+  else{const n={mark,note:mark==="not"?String(st.note||""):""};
+    /* Not a mistake is a shortcut contest to full marks: it stands in for any contest on that criterion (put back on un-marking). Agree withdraws one */
+    if(mark==="not"&&r){n.prev=d.scores[fid];if(C[fid]){n.prevC=C[fid];delete C[fid]}d.scores[fid]=r.max}
+    if(mark==="agree"&&r&&C[fid]){delete C[fid];const o=chClaudeMark(a,fid);if(o!==undefined)d.scores[fid]=o}
+    M[fid]=n}
+  if(chContest&&chContest.crit===fid)chContest=null;
   paintMarks()}
 function chTicketText(c,a,d){const A=a.analysis||{},F=chFindings(c,a),M=d.findings||{},pct=chatScore(d.scores),v=chatVerdict(pct),pr=chTopPrio(F,M),code=a.code||c.code||"",first=chFirst(a.sa||c.sa)||"The SA";
   const L=[`QA ticket · Chat ${c.sid} · ${v?v.label:"–"} ${pct==null?"–":fmt(pct)+"%"}${pr?" · "+pr:""}`,""];
@@ -549,12 +597,12 @@ function chTicketText(c,a,d){const A=a.analysis||{},F=chFindings(c,a),M=d.findin
     (k.errors||[]).concat(k.flags||[]).forEach(e=>L.push(`- ${e.label||e.code}: ${e.detail||""}`));
     if(!(k.errors||[]).length&&k.summary&&k.status!=="right")L.push(k.summary)}
   L.push("","Findings");if(!F.length)L.push("None.");
-  F.forEach((f,i)=>{const st=M[f.id]||{},r=CHAT_RUBRIC.find(x=>x.id===f.id),cur=r?d.scores[f.id]:null;
-    L.push(`${i+1}. ${f.priority?f.priority+" · ":""}${f.label||f.id}${f.type?" · "+f.type:""}${r?` · ${cur==="na"?"N/A":chMarkL(cur)+"/"+r.max}`:""}${st.mark==="not"?" · Not a mistake":""}`);
+  F.forEach((f,i)=>{const st=M[f.id]||{},r=CHAT_RUBRIC.find(x=>x.id===f.id),cur=r?d.scores[f.id]:null,con=r&&(d.contests||{})[f.id];
+    L.push(`${i+1}. ${f.priority?f.priority+" · ":""}${f.label||f.id}${f.type?" · "+f.type:""}${r?` · ${chMk(cur,r.max)}`:""}${st.mark==="not"?" · Not a mistake":""}${con?` · Contested (coach ${chMk(chClaudeMark(a,f.id),r.max)})`:""}`);
     if(f.what)L.push(`   What happened: ${f.what}`);
     (f.evidence||[]).filter(e=>e&&e.quote).forEach(e=>L.push(`   Evidence: ${e.src||""}${e.fact?` (${e.fact}): ${e.quote}`:` "${e.quote}"`}`));
     if(f.why)L.push(`   Why it matters: ${f.why}`);if(f.should)L.push(`   What ${first} should have done: ${f.should}`);if(f.model)L.push(`   Model message: "${f.model}"`);
-    if(st.mark==="not"&&st.note)L.push(`   Why it wasn't a mistake: ${st.note}`)});
+    if(st.mark==="not"&&st.note)L.push(`   Why it wasn't a mistake: ${st.note}`);if(con&&con.reason)L.push(`   Why contested: ${con.reason}`)});
   L.push("","Filed by Swift Coach.");return L.join("\n")}
 /* copy to the clipboard, falling back to a hidden text box */
 async function chClip(text,done){try{await navigator.clipboard.writeText(text);toast(done);return}catch(e){}
@@ -584,15 +632,13 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
 }
 /* live: a changed mark recomputes the score, the verdict, the escalation level and the generated coaching note */
 function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
-  const d=chatDraft(sid),pct=chatScore(d.scores),v=chatVerdict(pct),cl=(a.grade&&a.grade.scores)||{};
-  CHAT_RUBRIC.forEach(r=>{const cur=d.scores[r.id],half=typeof cur==="number"&&cur%1!==0;document.querySelectorAll(`#view-chat [data-cm="${r.id}"]`).forEach(b=>{b.setAttribute("aria-pressed",String(String(cur)===b.dataset.v));
-      b.classList.toggle("half",half&&(Number(b.dataset.v)===Math.floor(cur)||Number(b.dataset.v)===Math.ceil(cur)))});
-    const w=$("#was-"+r.id);if(w)w.hidden=String(d.scores[r.id])===String(cl[r.id])});
+  const d=chatDraft(sid),pct=chatScore(d.scores),v=chatVerdict(pct);
+  const sc=$("#cs-score .ccrits");if(sc){const key=chFocusSel(sc);sc.innerHTML=chScorecard(a,d);chRefocus(sc,key)}
   const wd=$("#cvWord");if(wd){wd.textContent=v?v.label:"–";wd.className="vword v-"+(v?v.id:"")}
   const p=$("#cvPct");if(p)p.textContent=pct==null?"–":fmt(pct)+"%";const cc=$("#cvClaude");if(cc)cc.hidden=pct===a.pct;
   const e=$("#cvEsc");if(e)e.textContent=d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+chMarkL(d.scores.esc);
   const sa=$("#csScoreAns");if(sa)sa.textContent=v?`${v.label} · ${fmt(pct)}%`:"";
-  const ta=$("#coachText"),gen=coachText(c,a,d.scores,d.findings);if(ta&&d.coach==null)ta.value=gen;
+  const ta=$("#coachText"),gen=coachText(c,a,d.scores,d.findings,d.contests);if(ta&&d.coach==null)ta.value=gen;
   const rb=$("#coachRebuild");if(rb)rb.hidden=!(d.coach!=null&&d.coach!==gen);
   paintTicket();renderChatTabs()}
 function chJump(id){const el=document.getElementById(id);if(!el)return;const fold=el.closest("details:not([open])");if(fold){fold.open=true;if(fold.id==="cfTimeline")chTimelineOpen=true}el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
@@ -606,7 +652,11 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
   const d=chatDraft(sid),pct=chatScore(d.scores),v=chatVerdict(pct),prev=chatRev[sid],ta=$("#coachText"),F=chFindings(c,a);
   /* finding marks: {<finding id>: {mark: "agree" | "not", note}} for the findings on this ticket */
   const findings={};F.forEach(f=>{const m=(d.findings||{})[f.id];if(m&&(m.mark==="agree"||m.mark==="not"))findings[f.id]={mark:m.mark,note:m.mark==="not"?String(m.note||"").trim():""}});
-  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:ta?ta.value:coachText(c,a,d.scores,d.findings),findings,
+  /* contests: {<crit>: {from, to, reason}}. A mark back on Claude's is no contest */
+  const G=(a.grade&&a.grade.scores)||{},contests={};
+  Object.entries(d.contests||{}).forEach(([id,x])=>{const r=chRub(id);if(!r||!x||String(d.scores[id])!==String(x.to)||String(x.to)===String(G[id]))return;
+    contests[id]={from:chMk(G[id],r.max),to:chMk(x.to,r.max),reason:String(x.reason||"").trim()}});
+  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:ta?ta.value:coachText(c,a,d.scores,d.findings,d.contests),findings,contests,
     reviewer:String(d.reviewer||"").trim(),by:myId||null,at:new Date().toISOString()};
   const before=gameStats(),gained=chatXpFor(rec)-(prev?chatXpFor(prev):0),btn=$("#chatSave");if(btn)btn.disabled=true;
   try{await db.doc(chPath("reviews",rec.week,sid)).set(rec)}
@@ -614,17 +664,22 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
   chatRev[sid]=rec;
   const L=await chSaveLessons(c,a,rec,prev);
   const q=chatQuest(rec.week),lv=Math.floor((before.xp+gained)/100),nx=chNextChat(sid);
-  const msg=`Saved ${v?v.label:""} ${fmt(pct)}% · +${Math.max(0,gained)} XP`+(q.total?` · ${q.done} of ${q.total}`:"")+(L.n?` · ${L.n} correction${L.n===1?"":"s"}`:"")+(L.err?" · Corrections not saved":"")+(lv>before.lv?` · Level up: ${levelName(lv)}`:"");
+  const msg=`Saved ${v?v.label:""} ${fmt(pct)}% · +${Math.max(0,gained)} XP`+(q.total?` · ${q.done} of ${q.total}`:"")+(L.n?` · ${L.n} lesson${L.n===1?"":"s"}`:"")+(L.err?" · Lessons not saved":"")+(lv>before.lv?` · Level up: ${levelName(lv)}`:"");
   toast(msg,nx?{label:"Next chat →",fn:()=>openChat(nx.sid)}:null);celebrate($("#chatSave"));renderChats();renderGame()}
-/* every finding marked "not a mistake" is a correction the brain learns from (chatLessons/<sid>_<finding id>); un-marking deletes it.
-   A correction that already exists keeps its date, so re-saving a review doesn't push older corrections out of the newest 20 */
-async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFindings(c,a),M=rec.findings||{},now=rec.at;
-  const keep=new Set(F.filter(f=>chIsNot(M,f.id)).map(f=>`${sid}_${f.id}`));
-  const stale=new Set(chLessons.filter(l=>String(l.sid)===sid&&!keep.has(l.id)).map(l=>l.id));
-  Object.keys((prev&&prev.findings)||{}).forEach(id=>{if(chIsNot(prev.findings,id)&&!keep.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
+/* every contest and every finding marked "not a mistake" is a lesson the brain learns from (chatLessons/<sid>_<crit>); withdrawing or un-marking deletes it.
+   An unchanged lesson keeps its date, so re-saving a review doesn't push older lessons out of the newest 20 */
+async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFindings(c,a),M=rec.findings||{},C=rec.contests||{},now=rec.at,A=a.analysis||{},R=(a.grade&&a.grade.reasons)||{};
+  const base={sid,week:rec.week,sa:rec.sa||"",caseType:A.caseType||"",by:myId||null},docs=new Map();
+  F.filter(f=>chIsNot(M,f.id)).forEach(f=>{const r=chRub(f.id);
+    docs.set(`${sid}_${f.id}`,Object.assign({kind:"not"},base,{crit:f.id,label:f.label||f.id,type:f.type||"",what:f.what||"",note:M[f.id].note||""},r?{from:chMk(f.score,r.max),to:chMk(r.max,r.max)}:{}))});
+  Object.entries(C).forEach(([id,x])=>{const r=chRub(id),f=F.find(y=>y.id===id);if(!r)return;
+    docs.set(`${sid}_${id}`,Object.assign({kind:"contest"},base,{crit:id,label:r.label,type:(f&&f.type)||"",from:x.from,to:x.to,reason:x.reason,what:R[id]||""}))});
+  const stale=new Set(chLessons.filter(l=>String(l.sid)===sid&&!docs.has(l.id)).map(l=>l.id));
+  Object.keys((prev&&prev.findings)||{}).forEach(id=>{if(chIsNot(prev.findings,id)&&!docs.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
+  Object.keys((prev&&prev.contests)||{}).forEach(id=>{if(!docs.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
   let n=0,err=false;
-  for(const f of F.filter(x=>chIsNot(M,x.id))){const id=`${sid}_${f.id}`,ex=chLessons.find(l=>l.id===id);
-    const doc={sid,week:rec.week,sa:rec.sa||"",crit:f.id,label:f.label||f.id,type:f.type||"",what:f.what||"",note:M[f.id].note||"",by:myId||null,at:(ex&&ex.at)||now};
+  for(const [id,doc] of docs){const ex=chLessons.find(l=>l.id===id),same=ex&&["kind","from","to","reason","note"].every(k=>String(ex[k]??"")===String(doc[k]??""));
+    doc.at=same&&ex.at?ex.at:now;
     try{await db.doc(CH_LESSONS+"/"+id).set(doc);n++}catch(e){err=true}}
   for(const id of stale){try{await db.doc(CH_LESSONS+"/"+id).delete()}catch(e){err=true}}
   return {n,err}}
@@ -637,13 +692,22 @@ async function saveCalib(){const sid=String(chatSel||""),c=chatBy(sid);if(!db||!
   toast("Calibration case saved"+(chatRev[sid]&&!had?" · +5 XP":""));renderChatAudit(true);renderGame()}
 $("#view-chat").addEventListener("click",e=>{
   const j=e.target.closest("[data-jump]");if(j){e.preventDefault();chJump(j.dataset.jump);return}
-  const m=e.target.closest("[data-cm]");if(m){const d=chatDraft(String(chatSel));d.scores[m.dataset.cm]=m.dataset.v==="na"?"na":Number(m.dataset.v);paintMarks();return}
+  /* a mark away from Claude's opens the contest box; Claude's own mark withdraws a contest */
+  const m=e.target.closest("[data-cm]");if(m){const id=m.dataset.cm,v=m.dataset.v==="na"?"na":Number(m.dataset.v);
+    if(String(v)===String(chClaudeMark(chatAud[String(chatSel)],id)))chWithdraw(id);else chOpenContest(id,"row",v);return}
+  const ct=e.target.closest("[data-contest]");if(ct){chOpenContest(ct.dataset.contest,ct.dataset.where);return}
+  const cvb=e.target.closest("[data-cv]");if(cvb&&chContest){chContest.to=cvb.dataset.cv==="na"?"na":Number(cvb.dataset.cv);
+    document.querySelectorAll("#cbox [data-cv]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.cv===String(chContest.to))));
+    const sv=$("#cbSave");if(sv)sv.disabled=!chContestOk();const w=$("#cbWhy");if(w&&!w.value.trim())w.focus({preventScroll:true});return}
   const fm=e.target.closest("[data-fmark]");if(fm){chMarkFinding(fm.dataset.fid,fm.dataset.fmark);return}
   const mc=e.target.closest("[data-mcopy]");if(mc){const c=chatBy(chatSel),a=c&&chatAud[c.sid],f=a&&chFindings(c,a).find(x=>x.id===mc.dataset.mcopy);if(f&&f.model)chClip(f.model,"Model message copied");return}
   const oc=e.target.closest("[data-oid]");if(oc){const id=oc.dataset.oid;chGradeOpen(id?[id]:[]);return}
   const cv=e.target.closest("[data-calv]");if(cv&&calForm){calForm.verdict=cv.dataset.calv;document.querySelectorAll("#calVerdict [data-calv]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.calv===calForm.verdict)));const s=$("#calSave");if(s)s.disabled=false;return}
   const b=e.target.closest("button");if(!b)return;
   switch(b.id){
+    case "cbSave":chSaveContest();break;
+    case "cbCancel":{const B=chContest;chContest=null;paintMarks();if(B){const x=$(`[data-contest="${B.crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}break}
+    case "cbWithdraw":if(chContest)chWithdraw(chContest.crit);break;
     case "cvGrade":chGradeOpen();break;
     case "cvStop":if(chatRun)chatRun.ctl.abort();break;
     case "cvNext":{const nx=chNextChat(chatSel);if(nx)openChat(nx.sid);break}
@@ -658,11 +722,13 @@ $("#view-chat").addEventListener("click",e=>{
     case "calSave":saveCalib();break;
     case "calCancel":calForm=null;renderChatAudit(true);break}});
 $("#view-chat").addEventListener("input",e=>{const t=e.target,sid=String(chatSel||"");if(!sid)return;
-  if(t.id==="coachText"){const d=chatDraft(sid);d.coach=t.value;const c=chatBy(sid),a=chatAud[sid],rb=$("#coachRebuild");if(rb&&c&&a)rb.hidden=t.value===coachText(c,a,d.scores,d.findings);return}
+  if(t.id==="coachText"){const d=chatDraft(sid);d.coach=t.value;const c=chatBy(sid),a=chatAud[sid],rb=$("#coachRebuild");if(rb&&c&&a)rb.hidden=t.value===coachText(c,a,d.scores,d.findings,d.contests);return}
+  if(t.id==="cbWhy"&&chContest){chContest.reason=t.value;const sv=$("#cbSave");if(sv)sv.disabled=!chContestOk();return}
   if(t.dataset&&t.dataset.fnote){const M=chatDraft(sid).findings||{},st=M[t.dataset.fnote];if(st&&st.mark==="not")st.note=t.value;return}
   if(t.id==="chatReviewer"){chatDraft(sid).reviewer=t.value;store.set("qa.reviewer",t.value);return}
   if(t.id==="ordQ"){chOrdQ=t.value;chOrdFilter();return}
   if(t.id==="calLessons"&&calForm)calForm.lessons=t.value});
+$("#view-chat").addEventListener("keydown",e=>{if(e.key==="Escape"&&chContest&&e.target.closest&&e.target.closest("#cbox")){e.preventDefault();$("#cbCancel").click()}});
 $("#view-chat").addEventListener("toggle",async e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.id==="cfTimeline"){chTimelineOpen=d.open;return}
   if(d instanceof HTMLDetailsElement&&d.dataset.model){if(d.open)chModelOpen.add(d.dataset.model);else chModelOpen.delete(d.dataset.model);return}
   if(!(d instanceof HTMLDetailsElement)||!d.dataset.ctx||!d.open)return;
@@ -691,12 +757,13 @@ function chCalHtml(){const L=chatCal.slice().sort((a,b)=>String(b.at||"").locale
       <b>${esc(x.agent||"")}</b><span>${esc(x.restaurant||"")}</span><span class="num hint">${esc(x.date?shortDate(x.date):"")}</span>${i<CHAT.calibMax?`<span class="ttag">In use</span>`:""}
       <span class="calact">${chatBy(x.sid)||x.date?`<button type="button" class="btn small" data-open="${esc(x.sid)}" data-week="${esc(chatBy(x.sid)?chWk(chatBy(x.sid)):chatWeek(x.date))}">Open</button>`:""}<button type="button" class="btn small danger" data-caldel="${esc(x.id)}">Delete</button></span></div>
       ${(x.lessons||[]).length?`<ul class="lessons">${x.lessons.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`:""}</li>`).join("")}</ul>`:`<div class="hint">None yet.</div>`)}
-/* the QA lead's corrections: findings marked "not a mistake". The newest CHAT.lessonMax go into every grade */
+/* what the coach learned: contested marks and findings marked "not a mistake". The newest CHAT.lessonMax go into every grade */
 function chLessonsHtml(){const L=chLessonsSorted(),max=CHAT.lessonMax||20,day=at=>{const t=Date.parse(at);return isNaN(t)?"":new Date(t).toLocaleDateString("en-US",{month:"short",day:"numeric"})};
-  return `<div class="bhd"><h2>Corrections</h2><span class="hint num">${L.length>max?`${max} of ${L.length} in use`:L.length}</span></div>`+(L.length?`<ul class="callist">${L.map(l=>{const wk=l.week||(chatBy(l.sid)?chWk(chatBy(l.sid)):"");
-    return `<li class="calitem lsitem"><div class="calhd"><b>${esc(l.label||l.crit||"Finding")}</b>${l.type?`<span class="lstype">${esc(l.type)}</span>`:""}
+  return `<div class="bhd"><h2>What the coach learned</h2><span class="hint num">${L.length>max?`${max} of ${L.length} in use`:L.length}</span></div>`+(L.length?`<p class="hint lsuse">Every new grade reads the newest ${max}.</p><ul class="callist">${L.map(l=>{const wk=l.week||(chatBy(l.sid)?chWk(chatBy(l.sid)):""),con=l.kind==="contest",why=con?l.reason:l.note;
+    const mk=con?`<span class="lsmk num"><s>${esc(l.from||"–")}</s><span aria-hidden="true"> → </span><span class="sr-only"> to </span><b>${esc(l.to||"–")}</b></span>`:`<span class="lsmk"><span class="tknot">Not a mistake</span></span>`;
+    return `<li class="calitem lsitem ${con?"contest":"not"}"><div class="calhd"><b>${esc(l.label||l.crit||"Finding")}</b>${l.caseType?`<span class="lsct">${esc(chCaseL(l.caseType))}</span>`:""}${mk}
       <span class="calact"><button type="button" class="btn small danger" data-lsdel="${esc(l.id)}">Delete</button></span></div>
-      ${l.what?`<div class="lsline"><span class="lbl-sm">Coach said</span> ${esc(l.what)}</div>`:""}${l.note?`<div class="lsline lsnote"><span class="lbl-sm">Note</span> ${esc(l.note)}</div>`:""}
+      ${why?`<div class="lsline lsnote"><span class="lbl-sm">Why</span> ${esc(why)}</div>`:""}${l.what?`<div class="lsline"><span class="lbl-sm">Coach said</span> ${l.type?`<span class="lstype0">${esc(l.type)}:</span> `:""}${esc(l.what)}</div>`:""}
       <div class="lsmeta hint">${esc(l.sa||"")}${l.sa?" · ":""}<span class="num">${esc(day(l.at))}</span> · <button type="button" class="lslink" data-open="${esc(l.sid)}" data-week="${esc(wk)}">Chat ${esc(l.sid)}</button></div></li>`}).join("")}</ul>`:`<div class="hint">None yet.</div>`)}
 function chStaffRow(p,s,def){return `<div class="srow"${def?' data-def="1"':""}><input data-sp aria-label="Email prefix" autocomplete="off" value="${esc(p)}"><input data-sn aria-label="Name" autocomplete="off" value="${esc(s.name||"")}">
   <select data-sr aria-label="Role">${CH_ROLES.map(([v,l])=>`<option value="${v}"${s.role===v?" selected":""}>${l}</option>`).join("")}</select>${def?`<span></span>`:`<button type="button" class="btn small danger" data-srm aria-label="Remove">×</button>`}</div>`}
@@ -735,7 +802,7 @@ $("#view-brain").addEventListener("click",async e=>{const b=e.target.closest("bu
   if(b.dataset.caldel){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirm";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent="Delete"}},3000);return}
     try{await db.doc(CHAT_PATHS.calib+"/"+b.dataset.caldel).delete();toast("Calibration case deleted")}catch(err){toast("Couldn't delete it.")}return}
   if(b.dataset.lsdel){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirm";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent="Delete"}},3000);return}
-    try{await db.doc(CH_LESSONS+"/"+b.dataset.lsdel).delete();toast("Correction deleted")}catch(err){toast("Couldn't delete it.")}return}
+    try{await db.doc(CH_LESSONS+"/"+b.dataset.lsdel).delete();toast("Lesson deleted")}catch(err){toast("Couldn't delete it.")}return}
   if(b.hasAttribute("data-srm")){b.closest(".srow").remove();chStaffDirty(true);return}
   switch(b.id){
     case "polSave":savePolicy();break;
