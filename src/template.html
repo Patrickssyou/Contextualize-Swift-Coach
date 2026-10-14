@@ -890,7 +890,7 @@ const TABS=["chats","chat","learn","brain","queue","calls","facts","results","da
 const AREA_OF={chats:"chats",chat:"chats",learn:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
 const lastTab={chats:"chats",calls:"queue",results:"results",data:"data"};
 function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="chats";tab=t;const area=AREA_OF[t];lastTab[area]=t;
-  document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+  document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
   document.querySelectorAll(".tabs [data-area]").forEach(b=>{if(b.dataset.area===area)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")});
   $("#sub-chats").hidden=area!=="chats";$("#sub-calls").hidden=area==="chats";
   TABS.forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+(t==="chat"?chatHash():t))}catch(e){}
