@@ -117,7 +117,7 @@ function chatHistory(){if(!db||chHistRun)return chHistRun;
       try{const s=await db.collection(CHAT_PATHS.reviews(w)).get();if(w!==chW.week&&!chRevHist.has(w))chRevHist.set(w,Object.fromEntries(s.docs.map(x=>[x.id,x.data()])))}catch(e){}}));
     renderGame()})();
   return chHistRun}
-function renderChats(){renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain()}
+function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain()}
 function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="chat"]');if(!tb)return;
   const c=chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid];tb.classList.toggle("done",!!c);
   const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=d?chatScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
@@ -385,8 +385,14 @@ function chBoard(c,a,rv,d){
     ${note?`<div class="cvnote">${esc(note)}</div>`:""}
     <div class="row">${run?`<button type="button" class="btn danger" id="cvStop">Stop</button>`:`<button type="button" class="btn${a?"":" primary"}" id="cvGrade"${can&&g?"":" disabled"}>${a?"Re-grade":"Grade"}</button>`}
       <button type="button" class="btn" id="cvNext"${nx?"":" disabled"}>Next chat →</button></div>`}
-function chOrderCard(o){const src=titleCase(String(o.source||"").replace(/_/g," "));
-  return `<div class="ordcard"${o.label?` id="cx-ord-${esc(o.label)}"`:""}><div class="ordhd"><b>Ticket ${esc(o.ticket||"?")}</b>${o.type?`<span>${esc(capFirst(o.type))}</span>`:""}${src?`<span>${esc(src)}</span>`:""}<span class="num">${esc(when(o.at))}</span>${o.coupon?`<span class="ttag">Coupon ${esc(o.coupon)}</span>`:""}${o.label?`<span class="num olab">${esc(o.label)}</span>`:""}</div>
+/* a WIRA task card; withId only for the one in Evidence, so the panel's copy never doubles an id */
+function chTaskCard(t,withId){const u=safeUrl(t.url)||wiraUrl(t.sid),f=[];
+  f.push(["Created",`${esc(t.by?prettyWho(t.by):"Not recorded")} · ${esc(when(t.at))}`]);if(t.assigned)f.push(["Assigned",esc(t.assigned)]);if(t.desc)f.push(["Description",chMd(t.desc)]);
+  if((t.comments||[]).length)f.push(["Comments",`<ul class="cmts">${t.comments.map(x=>`<li><b>${esc(prettyWho(x.who)||"Someone")}</b> ${esc(x.text)}</li>`).join("")}</ul>`]);
+  return `<div class="task"${withId?` id="cx-task-${esc(t.sid)}"`:""}><div class="thead"><a class="tid" href="${esc(u)}" target="_blank" rel="noopener">${esc(t.sid)} ↗</a>${t.parent?`<span class="ttag">From this chat</span>`:""}${t.intent||t.project?`<span class="tcat">${esc(t.intent||t.project)}</span>`:""}${t.status?`<span>${esc(capFirst(t.status))}</span>`:""}</div>
+    <div class="ttitle">${esc(t.title||"Untitled")}</div><dl class="tfields">${f.map(([x,y])=>`<dt>${x}</dt><dd>${y}</dd>`).join("")}</dl></div>`}
+function chOrderCard(o,noId){const src=titleCase(String(o.source||"").replace(/_/g," "));
+  return `<div class="ordcard"${o.label&&!noId?` id="cx-ord-${esc(o.label)}"`:""}><div class="ordhd"><b>Ticket ${esc(o.ticket||"?")}</b>${o.type?`<span>${esc(capFirst(o.type))}</span>`:""}${src?`<span>${esc(src)}</span>`:""}<span class="num">${esc(when(o.at))}</span>${o.coupon?`<span class="ttag">Coupon ${esc(o.coupon)}</span>`:""}${o.label?`<span class="num olab">${esc(o.label)}</span>`:""}</div>
     <dl class="ordmoney">${[["Items",o.items],["Tax",o.tax],["Tip",o.tip],["Other",o.other],["Total",o.total]].map(([k,x])=>`<div${k==="Total"?' class="tot"':""}><dt>${k}</dt><dd class="num">${money(x)}</dd></div>`).join("")}</dl></div>`}
 /* Change order: Claude's ranked matches with their reasons, then every order of the chat day and the day before (newest first), then No order */
 const chSrcL=s=>titleCase(String(s||"").replace(/_/g," "));
@@ -479,11 +485,7 @@ function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).l
       <details class="txd" data-ctx="${esc(l.id)}"><summary>Transcript</summary><div class="txtext">${txText(c.sid,l.id)}</div></details></li>`).join("")}</ol>`:`<div class="cxnone">No calls linked</div>`,false,
       {rows:calls.map((l,i)=>chCallLine(c,l,i)).join("")}));
     const tasks=a.tasks||[];
-    if(tasks.length)src.push(chFold(c,"tasks","Tasks",[chPl(tasks.length,"task"),tasks[0].title||""].filter(Boolean).join(" · "),`<div class="cxbox">${tasks.map(t=>{const u=safeUrl(t.url)||wiraUrl(t.sid),f=[];
-      f.push(["Created",`${esc(t.by?prettyWho(t.by):"Not recorded")} · ${esc(when(t.at))}`]);if(t.assigned)f.push(["Assigned",esc(t.assigned)]);if(t.desc)f.push(["Description",chMd(t.desc)]);
-      if((t.comments||[]).length)f.push(["Comments",`<ul class="cmts">${t.comments.map(x=>`<li><b>${esc(prettyWho(x.who)||"Someone")}</b> ${esc(x.text)}</li>`).join("")}</ul>`]);
-      return `<div class="task" id="cx-task-${esc(t.sid)}"><div class="thead"><a class="tid" href="${esc(u)}" target="_blank" rel="noopener">${esc(t.sid)} ↗</a>${t.parent?`<span class="ttag">From this chat</span>`:""}${t.intent||t.project?`<span class="tcat">${esc(t.intent||t.project)}</span>`:""}${t.status?`<span>${esc(capFirst(t.status))}</span>`:""}</div>
-        <div class="ttitle">${esc(t.title||"Untitled")}</div><dl class="tfields">${f.map(([x,y])=>`<dt>${x}</dt><dd>${y}</dd>`).join("")}</dl></div>`}).join("")}</div>`));
+    if(tasks.length)src.push(chFold(c,"tasks","Tasks",[chPl(tasks.length,"task"),tasks[0].title||""].filter(Boolean).join(" · "),`<div class="cxbox">${tasks.map(t=>chTaskCard(t,true)).join("")}</div>`));
     const sl=a.slack||[];
     if(sl.length)src.push(chFold(c,"slack","Slack",[chPl(sl.length,"thread"),[...new Set(sl.map(t=>"#"+t.channel))].join(", ")].join(" · "),`<div class="cxbox">${sl.map(t=>`<div class="task"><div class="thead">${safeUrl(t.url)?`<a class="tid" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener">#${esc(t.channel)} ↗</a>`:`<span class="tid">#${esc(t.channel)}</span>`}<span class="num">${esc(when(t.at))}</span>${(t.replies||[]).length?`<span>· ${t.replies.length} repl${t.replies.length===1?"y":"ies"}</span>`:""}</div>
       <div class="ttitle" style="font-weight:500"><b>${esc(t.author||"Someone")}</b> ${esc(t.text)}</div>${(t.replies||[]).length?`<ul class="cmts">${t.replies.map(r=>`<li><b>${esc(r.who)}</b> ${esc(r.text)}</li>`).join("")}</ul>`:""}</div>`).join("")}</div>`));
@@ -499,7 +501,7 @@ function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},r
       (r.na?`<button type="button" class="cm na" data-cm="${r.id}" data-v="na" aria-pressed="${cur==="na"}">N/A</button>`:"");
     const mark=con?`<span class="ccon">Contested</span><span class="cfrom num"><s>${esc(chMk(orig,r.max))}</s> <b class="${chMarkCls(cur,r.max)}">${esc(chMk(cur,r.max))}</b></span>`
       :`<span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>`;
-    return `<div class="ccrit${con?" contested":""}" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span>${mark}${reads}</div>
+    return `<div class="ccrit${con?" contested":""}" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span>${mark}${reads}<button type="button" class="srcbtn" data-psrc="${r.id}" aria-expanded="${!!(chPanel&&chPanel.crit===r.id)}" aria-controls="chPanel">Sources</button></div>
       <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}<button type="button" class="btn small cbtn" data-contest="${r.id}" data-where="row" aria-expanded="${box}">Contest</button></div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}
       ${con&&!box?`<div class="cyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(chatSel,r.id,con)}</div>`:""}${box?chContestBox(a,d,r):""}</div>`}).join("")}
 /* the contest box: Claude's mark and reason, your mark, why (required) */
@@ -515,8 +517,8 @@ function chContestOk(){const B=chContest;if(!B)return false;return B.to!=null&&S
 function chOpenContest(crit,where,to){const sid=String(chatSel||""),a=chatAud[sid],r=chRub(crit);if(!a||!r)return;
   const d=chatDraft(sid),ex=(d.contests||{})[crit];
   if(to===undefined&&chContest&&chContest.sid===sid&&chContest.crit===crit&&chContest.where===where){chContest=null;paintMarks();return}
-  chContest={sid,crit,where,to:to!==undefined?to:ex?ex.to:null,reason:ex?ex.reason:(chContest&&chContest.sid===sid&&chContest.crit===crit?chContest.reason:"")};paintMarks();
-  const el=$("#cbox");if(el){el.scrollIntoView({block:"nearest"});const f=chContest.to!=null?$("#cbWhy"):el.querySelector("[data-cv]");if(f)f.focus({preventScroll:true})}}
+  chContest={sid,crit,where,to:to!==undefined?to:ex?ex.to:null,reason:ex?ex.reason:(chContest&&chContest.sid===sid&&chContest.crit===crit?chContest.reason:"")};chPanelOpen(crit,"contest");paintMarks();
+  const el=$("#cbox");if(el){if(chSheet()){const r=el.getBoundingClientRect(),P=$("#chPanel"),av=P&&!P.hidden?innerHeight-P.offsetHeight:innerHeight;window.scrollTo({top:Math.max(0,scrollY+r.bottom-av+8)})}else el.scrollIntoView({block:"nearest"});const f=chContest.to!=null?$("#cbWhy"):el.querySelector("[data-cv]");if(f)f.focus({preventScroll:true})}}
 function chSaveContest(){if(!chContestOk())return;const B=chContest,d=chatDraft(B.sid);
   (d.contests||(d.contests={}))[B.crit]={to:B.to,reason:String(B.reason).trim()};d.scores[B.crit]=B.to;
   if(d.findings&&d.findings[B.crit])delete d.findings[B.crit];
@@ -716,8 +718,8 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
     !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at]);
   if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);return}
   chatAuditSig=sig;
-  if(!sid){v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the queue</button></div>`;return}
-  if(!c){v.innerHTML=`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the queue</button></div>`;return}
+  if(!sid){chPanelClose();v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
+  if(!c){chPanelClose();v.innerHTML=`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
   const d=chatDraft(sid),pct=a?chatScore(d.scores):null,vd=chatVerdict(pct),o=a&&(a.orders||[])[0];
   /* four sections: 1 the ticket (on top), 2 Evidence, 3 Scorecard, 4 Coaching */
   const evAns=a?[a.analysis&&a.analysis.caseType?chCaseL(a.analysis.caseType):"",o?`Ticket ${o.ticket||"?"}`:"No order",chPl((a.calls||[]).length,"call")].filter(Boolean).join(" · "):chPl((c.msgs||[]).length,"message");
@@ -728,6 +730,8 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   v.innerHTML=`<div class="cdesk${a?" has-tk":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside><div class="ccol">${secs.join("")}</div></div>`;
   if(chatPickOpen===sid)chOrdFilter();
   const p2=$("#tkPan-chat");if(p2&&top)p2.scrollTop=top;
+  /* the evidence panel lives in the view, so a re-render puts it back (and redraws it: the grade may have changed) */
+  chPanelSync();if(chPanel&&chPanelEl){v.append(chPanelEl);chPanelRender(true)}
 }
 /* live: a changed mark recomputes the score, the verdict, the escalation level and the generated coaching note */
 function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
@@ -737,7 +741,7 @@ function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid]
   const p=$("#cvPct");if(p)p.textContent=pct==null?"–":fmt(pct)+"%";const cc=$("#cvClaude");if(cc)cc.hidden=pct===a.pct;
   const e=$("#cvEsc");if(e)e.textContent=d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+chMarkL(d.scores.esc);
   const sa=$("#csScoreAns");if(sa)sa.textContent=v?`${v.label} · ${fmt(pct)}%`:"";
-  paintCoach();paintTicket();renderChatTabs()}
+  paintCoach();paintTicket();renderChatTabs();chPanelSync()}
 function paintCoach(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid],el=$("#cs-coach .qbody");if(!c||!a||!el)return;
   const key=chFocusSel(el);el.innerHTML=chCoach(c,a,chatRev[sid],chatDraft(sid));chRefocus(el,key)}
 /* a jump opens every fold around its target (an M# on a finding opens the ticket's Chat tab) (a source, a call's transcript) and keeps them open */
@@ -798,7 +802,117 @@ async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFinding
     try{await db.doc(CH_LESSONS+"/"+id).set(doc);n++}catch(e){err=true}}
   for(const id of stale){try{await db.doc(CH_LESSONS+"/"+id).delete()}catch(e){err=true}}
   return {n,err}}
+/* ---------- the evidence panel: what Claude used for one criterion. A contest (from a scorecard row or a finding card) opens it, and so does a row's Sources link.
+   A fixed side panel on desktop (the page narrows beside it), a bottom sheet on phones. Three parts: What Claude used (the reason, each cite resolved to its text),
+   then the chat with the cited messages marked, or the call, order or task a cite points at. Closing the contest box closes a panel the contest opened. ---------- */
+let chPanel=null,chPanelEl=null;   /* {sid, crit, via: "contest" | "sources", view: {kind: "chat" | "call" | "ord" | "task", …}, items} */
+const chSheet=()=>matchMedia("(max-width:860px)").matches;
+const chOne=(s,n)=>{s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1)+"…":s};
+/* the cites in a text, in order: M3, F11, C8, P2, O1, Call 2, Task 1831693. "F1 to F3" and "M2–M4" are ranges */
+function chCitesIn(t){const out=[],add=k=>{if(!out.includes(k))out.push(k)};
+  String(t||"").replace(/\b(?:Call\s*#?(\d+)|Task\s*#?(\d+)|([MFCPO])(\d+)(?:\s*(?:to|–|—|-)\s*\3?(\d+))?)\b/g,(m,cn,tk,L,x,y)=>{
+    if(cn)add("Call "+cn);else if(tk)add("Task "+tk);else{x=+x;y=y!=null?+y:x;if(y>x&&y-x<=12)for(let i=x;i<=y;i++)add(L+i);else add(L+x)}return m});
+  return out}
+const chCiteKey=s=>String(s||"").trim().replace(/^Call\s*#?/i,"Call ").replace(/^Task\s*#?/i,"Task ");
+/* where a source string points: a message, a call, an order or a task */
+function chTarget(src){const t=String(src||"").trim();let m;
+  if((m=/^M(\d+)$/i.exec(t)))return {kind:"msg",n:m[1]};
+  if((m=/^Call\s*#?(\d+)/i.exec(t)))return {kind:"call",n:+m[1]};
+  if((m=/^O(\d+)$/i.exec(t)))return {kind:"ord",n:+m[1]};
+  if((m=/^Task\s*#?(\d+)/i.exec(t)))return {kind:"task",id:m[1]};
+  return null}
+const chPOrder=(a,n)=>{const os=a.orders||[];return os.find(o=>String(o.label||"").toUpperCase()==="O"+n)||os[n-1]||null};
+/* the quoted words in a fact ('…' or "…"), to find in a call transcript */
+const chQuoted=s=>(String(s||"").match(/'[^']{6,}'|"[^"]{6,}"|“[^”]{6,}”/g)||[]).map(q=>q.slice(1,-1));
+/* one cite resolved: its chips, the text it stands for, and where it points. An unknown P# is skipped (it may be a priority) */
+function chResolve(c,a,key){const F=a.facts||{},miss=t=>({key,chips:[key],text:t,miss:true});let m;
+  if((m=/^M(\d+)$/.exec(key))){const x=(c.msgs||[]).find(y=>String(y.n)===m[1]);return x?{key,chips:[key],text:`${x.name||ROLE_L[x.role]||x.role}: ${chOne(x.text,220)}`,tgt:{kind:"msg",n:m[1]}}:miss("Not in the chat")}
+  if((m=/^([FCP])\d+$/.exec(key))){const L=m[1],x=((L==="F"?F.timeline:L==="C"?F.claims:F.promises)||[]).find(y=>y.id===key);if(!x)return L==="P"?null:miss("Not in the facts");
+    const text=L==="F"?`${x.who} ${x.what}`:L==="C"?`${x.claim} · ${(CH_CHECK[x.check]||CH_CHECK.cant_check)[1]}${x.evidence?". "+x.evidence:""}`:`${x.who} → ${x.to}: ${x.what}`;
+    return {key,chips:[key,x.src].filter(Boolean),text,tgt:chTarget(x.src),quote:chQuoted(L==="C"?x.evidence:x.what)}}
+  if((m=/^Call (\d+)$/.exec(key))){const l=(a.calls||[])[m[1]-1];return l?{key,chips:[key],text:[l.agent,when(l.at),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),tgt:{kind:"call",n:+m[1]}}:miss("Not linked")}
+  if((m=/^O(\d+)$/.exec(key))){const o=chPOrder(a,+m[1]);return o?{key,chips:[key],text:`Ticket ${o.ticket||"?"} · ${money(o.total)}`,tgt:{kind:"ord",n:+m[1]}}:miss("Not linked")}
+  if((m=/^Task (\d+)$/.exec(key))){const t=(a.tasks||[]).find(x=>String(x.sid)===m[1]);return t?{key,chips:[key],text:t.title||"Untitled",tgt:{kind:"task",id:m[1]}}:miss("Not linked")}
+  return null}
+/* the finding's quotes first, then every other cite in the reason */
+function chPanelItems(c,a,crit){const f=chFindings(c,a).find(x=>x.id===crit),why=((a.grade||{}).reasons||{})[crit]||"",out=[],seen=new Set();
+  ((f&&f.evidence)||[]).filter(e=>e&&e.quote).forEach(e=>{const fx=e.fact?chResolve(c,a,e.fact):null;
+    out.push({key:"q"+out.length,chips:[e.fact,e.src].filter(Boolean),text:e.quote,q:!e.fact,ok:e.ok,tgt:chTarget(e.src)||(fx&&fx.tgt),quote:[e.quote]});
+    if(e.src)seen.add(chCiteKey(e.src));if(e.fact)seen.add(e.fact)});
+  chCitesIn(why).forEach(k=>{if(seen.has(k))return;const r=chResolve(c,a,k);if(r){seen.add(k);out.push(r)}});
+  return {why,items:out}}
+const chPanelFind=k=>((chPanel&&chPanel.items)||[]).find(i=>i.key===k||i.chips.includes(k))||null;
+function chPanelHtml(c,a){const P=chPanel,r=chRub(P.crit),orig=chClaudeMark(a,P.crit),{why,items}=chPanelItems(c,a,P.crit);P.items=items;
+  const whyH=esc(why).replace(/\b(?:Call\s*#?\d+|Task\s*#?\d+|[MFCPO]\d+)\b/g,k=>{const key=chCiteKey(k),it=chPanelFind(key);return it&&it.tgt?`<button type="button" class="chpcite" data-pkey="${esc(key)}">${k}</button>`:k});
+  const li=(it,i)=>{const chips=it.chips.map(x=>`<span class="srcchip">${esc(x)}</span>`).join(""),t=it.q?`<q class="chpq">${esc(it.text)}</q>`:`<span class="chpq${it.miss?" tkmut":""}">${esc(it.text)}</span>`,
+      flag=it.ok===false?`<span class="qflag bad">not found in source</span>`:"";
+    return `<li>${it.tgt?`<button type="button" class="chpi" data-pgo="${i}">`:`<div class="chpi">`}<span class="chpchips">${chips}</span>${t}${flag}${it.tgt?"</button>":"</div>"}</li>`};
+  return `<header class="chphd"><div class="chpttl"><span class="lbl-sm" id="chpVia">${P.via==="contest"?"Contest":"Sources"}</span><h2 id="chpTitle" tabindex="-1">${esc(r.label)}</h2></div>
+    <span class="chpmark"><span class="lbl-sm">Claude</span><b class="num cbclaude ${chMarkCls(orig,r.max)}">${esc(chMk(orig,r.max))}</b></span>
+    <button type="button" class="chpx" id="chpClose" aria-label="Close sources">×</button></header>
+    <section class="chpused" aria-labelledby="chpUsedH"><h3 class="chph" id="chpUsedH">What Claude used</h3>${why?`<p class="chpwhy">${whyH}</p>`:""}
+      ${items.length?`<ol class="chplist">${items.map(li).join("")}</ol>`:`<p class="tkmut chpnone">No sources cited.</p>`}</section>
+    <section class="chpview" id="chpView" aria-label="Source"></section>`}
+/* a call transcript with the quoted words marked when they're found (the whole quote, else its longest sentence) */
+function chTxMark(text,quotes){const T=String(text||""),low=T.toLowerCase();
+  for(const q of quotes||[]){const n=String(q||"").replace(/\s+/g," ").trim();if(n.length<4)continue;
+    for(const k of [n,...n.split(/[.?!…]+\s*/).filter(x=>x.length>=12).sort((x,y)=>y.length-x.length)]){const i=low.indexOf(k.toLowerCase());
+      if(i>=0)return esc(T.slice(0,i))+`<mark class="txhit">${esc(T.slice(i,i+k.length))}</mark>`+esc(T.slice(i+k.length))}}
+  return esc(T)}
+function chPanelTx(sid,id,quotes){const m=chatTxCache.get(String(sid));if(m==null||m==="loading")return `<span class="hint">Loading…</span>`;if(m==="error")return `<span class="hint">Couldn't load the transcript.</span>`;
+  const t=m.get(String(id));return t&&t.trim()?chTxMark(t,quotes):`<span class="hint">No transcript for this call.</span>`}
+/* the transcripts of one chat, read once (shared with the Calls fold in Evidence) */
+const chTxRuns=new Map();
+function chTxLoad(sid){sid=String(sid);const m=chatTxCache.get(sid);if(m!=null&&m!=="loading")return Promise.resolve();if(chTxRuns.has(sid))return chTxRuns.get(sid);if(!db)return Promise.resolve();
+  chatTxCache.set(sid,"loading");
+  const p=(async()=>{try{const s=await db.doc(chPath("tx",chWk(chatBy(sid)),sid)).get();chatTxCache.set(sid,new Map(((s.exists&&s.data().calls)||[]).map(x=>[String(x.id),String(x.text||"")])))}
+    catch(err){chatTxCache.set(sid,"error")}finally{chTxRuns.delete(sid)}})();
+  chTxRuns.set(sid,p);return p}
+/* scroll the panel's lower part (not the page) to one of its elements */
+function chPanelScroll(el,flash){const v=$("#chpView");if(!v||!el)return;v.scrollTop+=el.getBoundingClientRect().top-v.getBoundingClientRect().top-12;
+  if(flash){el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}}
+function chPanelView(c,a,toFirst){const P=chPanel,V=P.view||{kind:"chat"},el=$("#chpView");if(!el)return;
+  const back=`<div class="chpvh"><button type="button" class="btn small" data-pback>← Chat</button></div>`;
+  if(V.kind==="call"){const l=(a.calls||[])[V.n-1]||{},B=((a.facts&&a.facts.calls)||{})[l.id]||[],q=(V.quote||[]).length>0;
+    el.innerHTML=back+`<div class="chpsrc" id="chpCall"><div class="chpsh"><b>Call ${V.n}</b><span class="tkmut">${esc([l.agent,l.dir==="out"?"Outbound":"Inbound",when(l.at),l.sec?dur(l.sec):""].filter(Boolean).join(" · "))}</span>${l.id?chRowLink(recUrl(l.id),"▶ Recording","rec"):""}</div>
+      ${B.length?`<ul class="txsum">${B.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+      ${l.id?`<details class="txd" data-ptx="${esc(l.id)}"${q?" open":""}><summary>Transcript</summary><div class="txtext" id="chpTx">${chPanelTx(c.sid,l.id,V.quote)}</div></details>`:""}</div>`;
+    if(q&&l.id)chPanelTxFill(c.sid,l.id);return}
+  if(V.kind==="ord"){const o=chPOrder(a,V.n),code=a.code||c.code||"";
+    el.innerHTML=back+(o?`<div class="chpsrc">${chOrderCard(o,true)}${o.id?`<p class="chplink">${chRowLink(chGdOrder(code,o.id),"Open in GreenDot ↗")}</p>`:""}</div>`:`<p class="tkmut">Not linked.</p>`);return}
+  if(V.kind==="task"){const t=(a.tasks||[]).find(x=>String(x.sid)===String(V.id));el.innerHTML=back+(t?`<div class="chpsrc cxbox">${chTaskCard(t,false)}</div>`:`<p class="tkmut">Not linked.</p>`);return}
+  const msgs=c.msgs||[],cited=new Set(P.items.filter(i=>i.tgt&&i.tgt.kind==="msg").map(i=>String(i.tgt.n)));
+  el.innerHTML=`<div class="chpvh"><h3 class="chph">Chat</h3><span class="num tkmut">${chPl(msgs.length,"message")} · ${cited.size} cited</span></div><ol class="bubbles chpchat" id="chpChat">${msgs.map(m=>chBubble(m,"pm")).join("")||`<li class="hint">No messages.</li>`}</ol>`;
+  cited.forEach(n=>{const b=document.getElementById("pm-"+n);if(b){b.classList.add("cited");(b.querySelector(".bwho")||b).insertAdjacentHTML("beforeend",`<span class="ctag">Cited</span>`)}});
+  if(toFirst)chPanelScroll(el.querySelector(".cited"))}
+/* load the transcript, then fill it in and bring the marked words into view */
+async function chPanelTxFill(sid,id){await chTxLoad(sid);const t=$("#chpTx"),d=t&&t.closest("details");if(!t||!chPanel||String(chatSel)!==String(sid)||d.dataset.ptx!==String(id))return;
+  t.innerHTML=chPanelTx(sid,id,(chPanel.view||{}).quote);const h=t.querySelector(".txhit");if(h&&d.open)chPanelScroll(h,true)}
+function chPanelGo(it){if(!it||!it.tgt||!chPanel)return;const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!a)return;const T=it.tgt;
+  if(T.kind==="msg"){if(chPanel.view.kind!=="chat"){chPanel.view={kind:"chat"};chPanelView(c,a)}chPanelScroll(document.getElementById("pm-"+T.n),true);return}
+  chPanel.view=Object.assign({},T,{quote:it.quote||[]});chPanelView(c,a);const v=$("#chpView");if(v)v.scrollTop=0}
+function chPanelEnsure(){if(!chPanelEl){const el=document.createElement("aside");el.id="chPanel";el.className="chpanel";el.setAttribute("aria-labelledby","chpTitle");el.hidden=true;chPanelEl=el}return chPanelEl}
+function chPanelRender(){const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!chPanel||!chPanelEl||!a)return;
+  if(chPanel.view.kind!=="chat"&&chPanel.view.kind!=="msg")chPanel.view={kind:"chat"};chPanelEl.innerHTML=chPanelHtml(c,a);chPanelView(c,a,true)}
+function chPanelOpen(crit,via){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a||!chRub(crit))return;
+  if(chPanel&&chPanel.sid===sid&&chPanel.crit===crit){chPanel.via=via;const l=$("#chpVia");if(l)l.textContent=via==="contest"?"Contest":"Sources";return}
+  chPanel={sid,crit,via,view:{kind:"chat"},items:[]};const el=chPanelEnsure(),v=$("#view-chat");if(v&&el.parentNode!==v)v.append(el);
+  el.hidden=false;document.body.classList.add("chp-on");chPanelRender();chPanelAria()}
+function chPanelClose(refocus){if(!chPanel)return;const P=chPanel;chPanel=null;if(chPanelEl){chPanelEl.hidden=true;chPanelEl.innerHTML=""}document.body.classList.remove("chp-on");chPanelAria();
+  if(refocus){const b=$(`[data-psrc="${P.crit}"]`);if(b)b.focus({preventScroll:true})}}
+function chPanelAria(){document.querySelectorAll("#view-chat [data-psrc]").forEach(b=>b.setAttribute("aria-expanded",String(!!(chPanel&&chPanel.crit===b.dataset.psrc))))}
+/* closes the panel when its chat, tab or audit is gone, or when the contest that opened it closed */
+function chPanelSync(){if(!chPanel)return;const sid=String(chatSel||"");
+  if(chPanel.sid!==sid||tab!=="chat"||!chatAud[sid]||!chRub(chPanel.crit)){chPanelClose();return}
+  if(chPanel.via==="contest"&&!(chContest&&chContest.sid===sid&&chContest.crit===chPanel.crit))chPanelClose()}
+document.addEventListener("keydown",e=>{if(e.key!=="Escape"||!chPanel||e.defaultPrevented)return;e.preventDefault();chPanelClose(!!(chPanelEl&&chPanelEl.contains(document.activeElement)))});
 $("#view-chat").addEventListener("click",e=>{
+  /* the evidence panel */
+  if(e.target.closest("#chpClose")){chPanelClose(true);return}
+  const ps=e.target.closest("[data-psrc]");if(ps){const k=ps.dataset.psrc;if(chPanel&&chPanel.crit===k)chPanelClose(true);else{chPanelOpen(k,chContest&&chContest.sid===String(chatSel)&&chContest.crit===k?"contest":"sources");const h=$("#chpTitle");if(h)h.focus({preventScroll:true})}return}
+  const pg=e.target.closest("[data-pgo]");if(pg){chPanelGo((chPanel&&chPanel.items||[])[Number(pg.dataset.pgo)]);return}
+  const pk=e.target.closest("[data-pkey]");if(pk){chPanelGo(chPanelFind(pk.dataset.pkey));return}
+  if(e.target.closest("[data-pback]")&&chPanel){const c=chatBy(chatSel),a=c&&chatAud[c.sid];chPanel.view={kind:"chat"};if(a)chPanelView(c,a,true);return}
   const j=e.target.closest("[data-jump]");if(j){e.preventDefault();chJump(j.dataset.jump);return}
   const tt=e.target.closest("[data-tktab]");if(tt){chTkSet(tt.dataset.tktab);return}
   /* a mark away from Claude's opens the contest box; Claude's own mark withdraws a contest */
@@ -839,9 +953,10 @@ $("#view-chat").addEventListener("keydown",e=>{const tt=e.target.closest&&e.targ
   if(e.key==="Escape"&&chContest&&e.target.closest&&e.target.closest("#cbox")){e.preventDefault();$("#cbCancel").click()}});
 $("#view-chat").addEventListener("toggle",async e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.src){const k=String(chatSel)+":"+d.dataset.src;if(d.open)chSrcOpen.add(k);else chSrcOpen.delete(k);return}
   if(d instanceof HTMLDetailsElement&&d.dataset.model){if(d.open)chModelOpen.add(d.dataset.model);else chModelOpen.delete(d.dataset.model);return}
+  if(d instanceof HTMLDetailsElement&&d.dataset.ptx){if(d.open)chPanelTxFill(String(chatSel||""),d.dataset.ptx);return}
   if(!(d instanceof HTMLDetailsElement)||!d.dataset.ctx||!d.open)return;
-  const sid=String(chatSel||"");if(!sid||!db||chatTxCache.has(sid))return;chatTxCache.set(sid,"loading");
-  try{const s=await db.doc(chPath("tx",chWk(chatBy(sid)),sid)).get();chatTxCache.set(sid,new Map(((s.exists&&s.data().calls)||[]).map(x=>[String(x.id),String(x.text||"")])))}catch(err){chatTxCache.set(sid,"error")}
+  const sid=String(chatSel||"");if(!sid||!db||(chatTxCache.has(sid)&&chatTxCache.get(sid)!=="loading"))return;
+  await chTxLoad(sid);
   if(String(chatSel)===sid)document.querySelectorAll("#view-chat details[data-ctx]").forEach(x=>{const t=x.querySelector(".txtext");if(t)t.innerHTML=txText(sid,x.dataset.ctx)})},true);
 
 /* ---------- LEARNING: the teacher/student loop. Claude grades every chat of the week from outside (a checkpoint: brainRuns/<cp>), Patrick reviews a random 10,
