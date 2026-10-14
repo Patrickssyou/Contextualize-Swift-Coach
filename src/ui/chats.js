@@ -359,10 +359,10 @@ function chNextChat(sid){const c=chatBy(sid),wk=c?c.week:week,sa=c&&c.sa;
   return l.find(x=>x.picked&&x.sa===sa)||l.find(x=>x.picked)||l.find(x=>chatAud[x.sid])||l[0]||null}
 /* workflow bots are a small system line; a role the page doesn't know is a neutral bubble labelled with the role */
 const CH_SIDES=["client","sa","sa_other","ae","crt","lead","staff"];
-function chBubble(m){
-  if(m.role==="bot")return `<li class="sysline" id="cm-${esc(m.n)}"><span class="syswho">${esc(ROLE_L.bot||"System")}</span><span class="systext">${esc(m.text)}</span><span class="num bn">M${esc(m.n)}</span></li>`;
+function chBubble(m,pre){pre=typeof pre==="string"?pre:"cm";
+  if(m.role==="bot")return `<li class="sysline" id="${pre}-${esc(m.n)}"><span class="syswho">${esc(ROLE_L.bot||"System")}</span><span class="systext">${esc(m.text)}</span><span class="num bn">M${esc(m.n)}</span></li>`;
   const cl=m.role==="client",odd=!CH_SIDES.includes(m.role),role=ROLE_L[m.role]||m.role||"Unknown";
-  return `<li class="bub${cl?" cl":""}${m.role==="sa"?" me":""}${odd?" other":""}${m.internal?" internal":""}" id="cm-${esc(m.n)}"><div class="bwho"><b>${esc(m.name||role)}</b>${cl&&m.name==="Client"||m.name===role?"":`<span>${esc(role)}</span>`}<span class="num bn">M${esc(m.n)}</span>${m.internal?`<span class="ntag">internal${m.inferred?" · inferred":""}</span>`:""}</div><div class="btext">${esc(m.text)}</div></li>`}
+  return `<li class="bub${cl?" cl":""}${m.role==="sa"?" me":""}${odd?" other":""}${m.internal?" internal":""}" id="${pre}-${esc(m.n)}"><div class="bwho"><b>${esc(m.name||role)}</b>${cl&&m.name==="Client"||m.name===role?"":`<span>${esc(role)}</span>`}<span class="num bn">M${esc(m.n)}</span>${m.internal?`<span class="ntag">internal${m.inferred?" · inferred":""}</span>`:""}</div><div class="btext">${esc(m.text)}</div></li>`}
 function chCaseHtml(A){A=A||{};if(!A.caseType&&!A.request)return "";
   return `<div class="vcase" id="cvCase">${A.caseType?`<span class="ctype">${esc(chCaseL(A.caseType))}</span>`:""}${A.request?`<span class="vreq">${esc(A.request)}</span>`:""}</div>`}
 function chBoard(c,a,rv,d){
@@ -373,7 +373,7 @@ function chBoard(c,a,rv,d){
   const route=a?`<div class="vroute" id="cvRoute">${[["facts","Facts"],["analysis","Analysis"],["solution","Solution"]].map(([k,l])=>{const r=R[k]||{};
       return `<span class="rm ${esc(r.mark||"")}" title="${esc(r.why||"")}"><span>${l}</span><b>${CH_MARK[r.mark]||"–"} ${esc(CH_MARK_L[r.mark]||"")}</b></span>`}).join("")}
       <span class="rm esc" title="${esc((R.escalation||{}).why||"")}"><span>Escalation</span><b id="cvEsc">${d.scores.esc==="na"||d.scores.esc==null?"N/A":"Level "+esc(chMarkL(d.scores.esc))}</b></span></div>`:"";
-  return `<div class="vhead"><span class="lbl-sm">Chat ${esc(c.sid)}</span>${rv?`<span class="pill solid ${chVB(rv.pct)}">Reviewed</span>`:a?`<span class="pill none">Graded</span>`:""}</div>
+  return `<div class="vhead"><span class="lbl-sm">Chat ${esc(c.sid)}${chVia(c)}</span>${rv?`<span class="pill solid ${chVB(rv.pct)}">Reviewed</span>`:a?`<span class="pill none">Graded</span>`:""}</div>
     ${a?`<div class="vword v-${esc(v?v.id:"")}" id="cvWord">${esc(v?v.label:"–")}</div><div class="vpct"><span class="num" id="cvPct">${pct==null?"–":fmt(pct)+"%"}</span><span class="hint num" id="cvClaude"${pct===a.pct?" hidden":""}>Claude ${fmt(a.pct)}%</span></div>${a.grade&&a.grade.spread>=15&&Array.isArray(a.grade.runPcts)?`<div class="hint num vreads">Two reads: ${a.grade.runPcts.map(x=>fmt(x)+"%").join(" · ")}</div>`:""}`
       :`<div class="vword v-none">${g?"Not graded":"No SA reply"}</div>`}
     ${a?chCaseHtml(a.analysis):""}
@@ -414,9 +414,15 @@ function chFieldList(f){
   if(Array.isArray(f))L=f.map(x=>x&&typeof x==="object"&&!Array.isArray(x)&&("value" in x)?[x.label||x.name||x.key||"",x.value]:["",x]);
   else if(f&&typeof f==="object")L=Object.entries(f);
   else if(f!=null&&f!=="")L=[["",f]];
-  return L.map(([k,v])=>[chLabel(k),capText(val(v).trim(),300)]).filter(([,v])=>v)}
+  return L.filter(([k])=>k!=="message_source").map(([k,v])=>[chLabel(k),capText(val(v).trim(),300)]).filter(([,v])=>v)}
+/* where the chat came in from (the form's message_source), shown as a chip by the chat number */
+const CH_VIA={pos:"POS",cma:"CMA",sms:"SMS",email:"Email",web:"Web",app:"App",phone:"Phone",slack:"Slack"};
+function chVia(c){let f=c&&c.fields;if(typeof f==="string"){try{f=JSON.parse(f)}catch(e){return ""}}
+  const v=f&&typeof f==="object"&&!Array.isArray(f)?String(f.message_source==null?"":f.message_source).trim():"";if(!v)return "";
+  const k=v.toLowerCase(),l=CH_VIA[k]||(v.length<=4?v.toUpperCase():capFirst(v.replace(/_/g," ")));
+  return `<span class="viachip" title="Came in via ${esc(l)}">via ${esc(l)}</span>`}
 function chFieldsHtml(c){const L=chFieldList(c&&c.fields);if(!L.length)return "";
-  return `<div class="cxsec" id="cxFields"><div class="cxhd"><span class="lbl-sm">Request fields</span></div><dl class="rfields">${L.map(([k,v])=>`<dt>${esc(k||"Field")}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div>`}
+  return `<div class="cxsec" id="cxFields"><dl class="rfields">${L.map(([k,v])=>`<dt>${esc(k||"Field")}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div>`}
 function chFacts(a){const F=a.facts||{},tl=F.timeline||[],cl=F.claims||[],pr=F.promises||[];
   return `<div class="fhd"><span class="lbl-sm">Timeline</span><span class="hint num">${tl.length} facts${tl.some(t=>t.kind==="internal")?` · ${tl.filter(t=>t.kind==="internal").length} internal`:""}</span></div>
     <ol class="flist cfacts" id="cfTimeline">${tl.map(t=>`<li id="cf-${esc(t.id)}" class="fact ${esc(t.kind)}"><span class="fid num">${esc(t.id)}</span><span class="fwhen num">${esc(t.when)}</span><span class="fsrc">${chSrc(t.src)}</span><span class="fwhat"><b>${esc(t.who)}</b>${t.kind==="internal"?` <span class="ntag">internal</span>`:""} ${esc(t.what)}</span></li>`).join("")}</ol>
@@ -433,8 +439,14 @@ function chAny(v){if(v==null||v==="")return "–";if(typeof v==="boolean")return
 /* the open folds, per chat ("<sid>:<src>"), so a repaint keeps them */
 const chSrcOpen=new Set();
 const chPl=(n,w,ws)=>`${n} ${n===1?w:(ws||w+"s")}`;
-function chFold(c,id,title,sum,body,force){const k=String(c.sid)+":"+id,open=force||chSrcOpen.has(k);
-  return `<details class="srcf" id="src-${id}" data-src="${id}"${open?" open":""}><summary><span class="srct">${esc(title)}</span><span class="srcs num">${esc(sum)}</span></summary><div class="srcb">${body}</div></details>`}
+function chFold(c,id,title,sum,body,force,x){const k=String(c.sid)+":"+id,open=force||chSrcOpen.has(k);x=x||{};
+  return `<details class="srcf" id="src-${id}" data-src="${id}"${open?" open":""}><summary><span class="srch"><span class="srct">${esc(title)}</span><span class="srcs num">${esc(sum)}</span>${x.links||""}</span>${x.rows?`<span class="srcx">${x.rows}</span>`:""}</summary><div class="srcb">${body}</div></details>`}
+/* a link on a fold row: opens in a new tab and never toggles the fold */
+const chRowLink=(u,t,cls)=>`<a class="srclink${cls?" "+cls:""}" href="${esc(u)}" target="_blank" rel="noopener">${t}</a>`;
+const chDay=c=>String((c&&c.at)||"").slice(0,10);
+/* one call on a line: Call 1 · 6:40 PM · 2:26 · Agent · ▶ Recording */
+function chCallLine(c,l,i){const p=[`<b>Call ${i+1}</b>`,`<span class="num">${esc(chClock(l.at,chDay(c)))}</span>`];if(l.sec)p.push(`<span class="num">${esc(dur(l.sec))}</span>`);if(l.agent)p.push(esc(l.agent));
+  return `<span class="srcrow" id="srcrow-call-${i+1}">${p.join('<span class="srcdot">·</span>')}${l.id?chRowLink(recUrl(l.id),"▶ Recording","rec"):""}</span>`}
 /* the brief: the facts pass's 5-7 bullets; an older audit gets the summary plus each call's first bullet */
 function chBrief(a){const F=a.facts||{};if(Array.isArray(F.brief)&&F.brief.length)return F.brief;
   const B=F.calls||{},out=[];if(a.analysis&&a.analysis.summary)out.push(a.analysis.summary);
@@ -453,28 +465,31 @@ function chStrip(c,a){const A=a.analysis||{},f=A.fault||{},b=A.bucket||{},ae=A.a
   return it.length?`<dl class="evstrip" id="evStrip">${it.map(([k,v,w])=>`<div class="evi${w?" wide":""}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join("")}</dl>`:""}
 function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).length,out=[],src=[];
   if(a){const br=chBrief(a);if(br.length)out.push(`<div class="evglance"><h3 class="evh">The case at a glance</h3><ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div>`);out.push(chStrip(c,a))}
-  src.push(chFold(c,"chat","Chat transcript",`${chPl(msgs.length,"message")}${nInt?` · ${nInt} internal`:""}`,`<ol class="bubbles" id="cs-chat">${msgs.map(chBubble).join("")||`<li class="hint">No messages.</li>`}</ol>`,!a));
-  const fl=chFieldList(c&&c.fields);if(fl.length)src.push(chFold(c,"fields","Request fields",chPl(fl.length,"field"),chFieldsHtml(c)));
+  src.push(chFold(c,"chat","Chat",`${chPl(msgs.length,"message")}${nInt?` · ${nInt} internal`:""}`,`<ol class="bubbles" id="cs-chat">${msgs.map(m=>chBubble(m,"cm")).join("")||`<li class="hint">No messages.</li>`}</ol>`,!a));
+  const fl=chFieldList(c&&c.fields);if(fl.length)src.push(chFold(c,"fields","WIRA form",fl.map(([k])=>k||"Field").join(", "),chFieldsHtml(c)));
   if(a){const canPick=!!(db&&mcp&&sampleFn)&&!chatRun,pickOpen=chatPickOpen===String(c.sid),os=a.orders||[];
-    src.push(chFold(c,"order","Order",os.length?os.map(o=>`Ticket ${o.ticket||"?"} · ${money(o.total)}`).join(", "):"No order linked",
+    const code=a.code||c.code||"",oLine=o=>[`Ticket ${o.ticket||"?"}`,money(o.total),String(o.type||"").toLowerCase(),o.at?chClock(o.at,chDay(c)):""].filter(Boolean).join(" · ");
+    src.push(chFold(c,"order","Order",os.length?os.map(oLine).join(", "):"No order linked",
       `<div class="cxsec" id="cs-ord"><div class="cxhd">${a.orderPick==="reviewer"?`<span class="ttag">Your pick</span>`:""}${pickOpen?"":`<button type="button" class="btn small" id="ordChange"${canPick?"":" disabled"}>Change order</button>`}</div>
-      ${os.length?os.map(chOrderCard).join(""):`<div class="cxnone">No order linked</div>${a.orderNote?`<div class="hint">${esc(a.orderNote)}</div>`:""}`}${pickOpen?chPicker(a):""}</div>`,pickOpen));
+      ${os.length?os.map(chOrderCard).join(""):`<div class="cxnone">No order linked</div>${a.orderNote?`<div class="hint">${esc(a.orderNote)}</div>`:""}`}${pickOpen?chPicker(a):""}</div>`,pickOpen,
+      {links:os.filter(o=>o.id).map(o=>chRowLink(chGdOrder(code,o.id),os.length>1?`Ticket ${esc(o.ticket||"?")} ↗`:"Open in GreenDot ↗")).join("")}));
     const calls=a.calls||[],B=(a.facts&&a.facts.calls)||{};
-    src.push(chFold(c,"calls","Calls",calls.length?chPl(calls.length,"call"):"No recordings linked",calls.length?`<ol class="txlist">${calls.map((l,i)=>`<li class="txcall" id="cx-call-${i+1}"><div class="txhd"><span class="num idx">${i+1}</span><b>${esc(l.agent||"Unknown")}</b><span class="hint">${l.dir==="out"?"Outbound":"Inbound"}${l.phone4?" · …"+esc(l.phone4):""}</span><span class="num hint">${esc(when(l.at))} · ${dur(l.sec)}</span>${l.orders?`<span class="ttag">${esc(l.orders)}</span>`:""}${l.id?`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">Rec ↗</a>`:""}</div>
+    src.push(chFold(c,"calls","Calls",calls.length?chPl(calls.length,"call"):"No calls linked",calls.length?`<ol class="txlist">${calls.map((l,i)=>`<li class="txcall" id="cx-call-${i+1}"><div class="txhd"><span class="num idx">${i+1}</span><b>${esc(l.agent||"Unknown")}</b><span class="hint">${l.dir==="out"?"Outbound":"Inbound"}${l.phone4?" · …"+esc(l.phone4):""}</span><span class="num hint">${esc(when(l.at))} · ${dur(l.sec)}</span>${l.orders?`<span class="ttag">${esc(l.orders)}</span>`:""}${l.id?`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">Rec ↗</a>`:""}</div>
       ${(B[l.id]||[]).length?`<ul class="txsum">${B[l.id].map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
-      <details class="txd" data-ctx="${esc(l.id)}"><summary>Transcript</summary><div class="txtext">${txText(c.sid,l.id)}</div></details></li>`).join("")}</ol>`:`<div class="cxnone">No call recordings linked</div>`));
+      <details class="txd" data-ctx="${esc(l.id)}"><summary>Transcript</summary><div class="txtext">${txText(c.sid,l.id)}</div></details></li>`).join("")}</ol>`:`<div class="cxnone">No calls linked</div>`,false,
+      {rows:calls.map((l,i)=>chCallLine(c,l,i)).join("")}));
     const tasks=a.tasks||[];
-    if(tasks.length)src.push(chFold(c,"tasks","Tasks",chPl(tasks.length,"task"),`<div class="cxbox">${tasks.map(t=>{const u=safeUrl(t.url)||wiraUrl(t.sid),f=[];
+    if(tasks.length)src.push(chFold(c,"tasks","Tasks",[chPl(tasks.length,"task"),tasks[0].title||""].filter(Boolean).join(" · "),`<div class="cxbox">${tasks.map(t=>{const u=safeUrl(t.url)||wiraUrl(t.sid),f=[];
       f.push(["Created",`${esc(t.by?prettyWho(t.by):"Not recorded")} · ${esc(when(t.at))}`]);if(t.assigned)f.push(["Assigned",esc(t.assigned)]);if(t.desc)f.push(["Description",chMd(t.desc)]);
       if((t.comments||[]).length)f.push(["Comments",`<ul class="cmts">${t.comments.map(x=>`<li><b>${esc(prettyWho(x.who)||"Someone")}</b> ${esc(x.text)}</li>`).join("")}</ul>`]);
       return `<div class="task" id="cx-task-${esc(t.sid)}"><div class="thead"><a class="tid" href="${esc(u)}" target="_blank" rel="noopener">${esc(t.sid)} ↗</a>${t.parent?`<span class="ttag">From this chat</span>`:""}${t.intent||t.project?`<span class="tcat">${esc(t.intent||t.project)}</span>`:""}${t.status?`<span>${esc(capFirst(t.status))}</span>`:""}</div>
         <div class="ttitle">${esc(t.title||"Untitled")}</div><dl class="tfields">${f.map(([x,y])=>`<dt>${x}</dt><dd>${y}</dd>`).join("")}</dl></div>`}).join("")}</div>`));
     const sl=a.slack||[];
-    if(sl.length)src.push(chFold(c,"slack","Slack",chPl(sl.length,"thread"),`<div class="cxbox">${sl.map(t=>`<div class="task"><div class="thead">${safeUrl(t.url)?`<a class="tid" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener">#${esc(t.channel)} ↗</a>`:`<span class="tid">#${esc(t.channel)}</span>`}<span class="num">${esc(when(t.at))}</span>${(t.replies||[]).length?`<span>· ${t.replies.length} repl${t.replies.length===1?"y":"ies"}</span>`:""}</div>
+    if(sl.length)src.push(chFold(c,"slack","Slack",[chPl(sl.length,"thread"),[...new Set(sl.map(t=>"#"+t.channel))].join(", ")].join(" · "),`<div class="cxbox">${sl.map(t=>`<div class="task"><div class="thead">${safeUrl(t.url)?`<a class="tid" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener">#${esc(t.channel)} ↗</a>`:`<span class="tid">#${esc(t.channel)}</span>`}<span class="num">${esc(when(t.at))}</span>${(t.replies||[]).length?`<span>· ${t.replies.length} repl${t.replies.length===1?"y":"ies"}</span>`:""}</div>
       <div class="ttitle" style="font-weight:500"><b>${esc(t.author||"Someone")}</b> ${esc(t.text)}</div>${(t.replies||[]).length?`<ul class="cmts">${t.replies.map(r=>`<li><b>${esc(r.who)}</b> ${esc(r.text)}</li>`).join("")}</ul>`:""}</div>`).join("")}</div>`));
     const F=a.facts||{},cl=F.claims||[],nc=cl.filter(x=>x.check==="contradicted").length;
-    src.push(chFold(c,"facts","Timeline and SA claims check",`${chPl((F.timeline||[]).length,"fact")} · ${chPl(cl.length,"claim")} (${nc} contradicted)`,chFacts(a)));
-    if((a.notFound||[]).length)src.push(chFold(c,"nf","Not in the data",chPl(a.notFound.length,"item"),`<ul class="nf">${a.notFound.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`))}
+    src.push(chFold(c,"facts","Timeline and SA claims",`${chPl((F.timeline||[]).length,"fact")} · ${chPl(cl.length,"claim")} · ${nc} wrong`,chFacts(a)));
+    if((a.notFound||[]).length)src.push(chFold(c,"nf","Not found in the data",chPl(a.notFound.length,"item"),`<ul class="nf">${a.notFound.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`))}
   out.push(`<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`);
   return out.join("")}
 function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
@@ -538,7 +553,7 @@ function chStrike(s,codes){let h=esc(s);
   ["tax","tip","fees"].forEach(x=>{if(codes.includes(x))h=h.replace(new RegExp("\\+ "+x+" (\\$[\\d,]+\\.\\d{2})"),`<del>+ ${x} $1</del>`)});
   if(codes.includes("pct"))h=h.replace(/^(\d+(?:\.\d+)?%)/,"<mark>$1</mark>");
   return h}
-function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.code||"",url=safeUrl(c.url||a.url)||wiraUrl(c.sid),recs=(a.calls||[]).filter(l=>l.id);
+function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.code||"",url=safeUrl(c.url||a.url)||wiraUrl(c.sid),recs=(a.calls||[]).map((l,i)=>Object.assign({i},l)).filter(l=>l.id);
   const link=(u,t,title)=>`<a href="${esc(u)}" target="_blank" rel="noopener" class="tklink"${title?` title="${esc(title)}"`:""}>${t} ↗</a>`;
   const F=[["Restaurant",`${esc(c.restaurant||a.restaurant||"–")}${code?` <span class="num tkcode">${esc(code)}</span>`:""}`],
     ["SA",esc(a.sa||c.sa||"–")],
@@ -550,7 +565,7 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
     ["First reply",chFrHtml(c,a)],
     ["Closed",c.closedAt?`<span class="num">${esc(when(c.closedAt))}</span>`:`<span class="tkmut">Not closed${c.status?" · "+esc(chStatusL(c)):""}</span>`],
     ["Started by",esc(chInit(c))],
-    ["Recordings",recs.length?`<span class="tkrecs">${recs.map((l,i)=>link(recUrl(l.id),"Rec"+(recs.length>1?" "+(i+1):""),[l.agent,when(l.at)].filter(Boolean).join(" · "))).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
+    ["Recordings",recs.length?`<span class="tkrecs">${recs.map(l=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec" title="${esc([l.agent,when(l.at),l.sec?dur(l.sec):""].filter(Boolean).join(" · "))}">▶ Call ${l.i+1}${l.at?` <span class="num tkmut">(${esc(chClock(l.at,chDay(c)))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
   return `<dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`}
 /* the Timing block: the chat's times, a strip of its status changes sized by minutes, the totals per side, and why there is no time per reply */
 const CH_TM_NOTE="WIRA doesn't record a time for each message, so only the first reply can be timed.";
@@ -595,9 +610,9 @@ function chCompHtml(c,a){const k=a.check;if(!k||!k.applies)return "";
     <div class="rcpt">${due1}${appr}${gave}${diff}</div>${sum}
     ${errs.length?`<ul class="rerr">${errs.map(e=>`<li><b>${esc(e.label||COMP_ERR[e.code]||e.code)}</b> ${esc(e.detail||"")}</li>`).join("")}</ul>`:""}
     ${flags.length?`<ul class="rerr rflag">${flags.map(e=>`<li><b>${esc(e.label||COMP_ERR[e.code]||e.code)}</b> ${esc(e.detail||"")}</li>`).join("")}</ul>`:""}</section>`}
-/* a source chip: M# scrolls to the message, Call # to the call card, O# to the order, Task to the task */
+/* a source chip: M# opens the ticket's Chat tab at the message, Call # to the call card, O# to the order, Task to the task */
 function chSrcChip(s){const t=String(s||"").trim();let m;
-  if((m=/^M(\d+)$/i.exec(t)))return `<a href="#" class="srcchip" data-jump="cm-${m[1]}">M${m[1]}</a>`;
+  if((m=/^M(\d+)$/i.exec(t)))return `<a href="#" class="srcchip" data-jump="tm-${m[1]}">M${m[1]}</a>`;
   if((m=/^Call\s*(\d+)$/i.exec(t)))return `<a href="#" class="srcchip" data-jump="cx-call-${m[1]}">Call ${m[1]}</a>`;
   if((m=/^O(\d+)$/i.exec(t)))return `<a href="#" class="srcchip" data-jump="cx-ord-O${m[1]}">O${m[1]}</a>`;
   if((m=/^Task\s*#?(\d+)$/i.exec(t)))return `<a href="#" class="srcchip" data-jump="cx-task-${m[1]}">Task ${m[1]}</a>`;
@@ -619,14 +634,27 @@ function chFindHtml(c,a,d,f){const M=d.findings||{},st=M[f.id]||{},not=st.mark==
     ${con&&!box?`<div class="tkyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(c.sid,f.id,con)}</div>`:""}${box?`<div class="tkcbox">${chContestBox(a,d,r)}</div>`:""}
     ${not?`<div class="field tknote"><label for="tkn-${fid}">Why it wasn't a mistake</label><textarea id="tkn-${fid}" data-fnote="${fid}" rows="2">${esc(st.note||"")}</textarea></div>`:""}</article>`}
 function chTicketCls(c,a,d){const p=chTopPrio(chFindings(c,a),d.findings,d.contests,d.scores);return "panel qticket"+(p?" "+p.toLowerCase():"")}
+/* the ticket's two tabs: Ticket (the fields, timing, comp check, findings) and Chat (the transcript). The tab is kept for the page view, across chats */
+let chTkTab="ticket";
+function chTkTabs(c){const n=(c.msgs||[]).length,t=(id,l,x)=>{const on=chTkTab===id;
+    return `<button type="button" role="tab" class="tktab" id="tkTab-${id}" data-tktab="${id}" aria-selected="${on}" aria-controls="tkPan-${id}" tabindex="${on?0:-1}">${l}${x||""}</button>`};
+  return `<div class="tktabs" role="tablist" aria-label="QA ticket">${t("ticket","Ticket")}${t("chat","Chat",`<span class="count num">${n}</span>`)}</div>`}
+function chTkChat(c){const msgs=c.msgs||[];
+  return `<div class="tkchat" id="tkPan-chat" role="tabpanel" aria-labelledby="tkTab-chat" tabindex="0"${chTkTab==="chat"?"":" hidden"}><ol class="bubbles" id="tkChat">${msgs.map(m=>chBubble(m,"tm")).join("")||`<li class="hint">No messages.</li>`}</ol></div>`}
+/* switch tabs in place: no re-render, so the transcript keeps its scroll. Also re-applied after setTab, which resets every [role=tab] */
+function chTkSet(id,focus){if(id!=="chat")id="ticket";chTkTab=id;
+  document.querySelectorAll("#cTicket [data-tktab]").forEach(b=>{const on=b.dataset.tktab===id;b.setAttribute("aria-selected",String(on));b.tabIndex=on?0:-1;if(on&&focus)b.focus()});
+  const p=$("#tkPan-ticket"),q=$("#tkPan-chat");if(p)p.hidden=id!=="ticket";if(q)q.hidden=id!=="chat"}
 function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(d.scores),v=chatVerdict(pct),pr=chTopPrio(F,d.findings,d.contests,d.scores);
-  return `${lrnBand(c,a)}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Chat <span class="num">${esc(c.sid)}</span></span></div>
+  return `${lrnBand(c,a)}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Chat <span class="num">${esc(c.sid)}</span>${chVia(c)}</span></div>
       <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"–")}</span><span class="tkpct num" id="tkPct">${pct==null?"–":fmt(pct)+"%"}</span><span id="tkPrio" class="tkprio">${chPrio(pr)}</span></div></header>
-    <div class="tkbody">${chTkFields(c,a)}
+    ${chTkTabs(c)}
+    <div class="tkbody" id="tkPan-ticket" role="tabpanel" aria-labelledby="tkTab-ticket"${chTkTab==="ticket"?"":" hidden"}>${chTkFields(c,a)}
       ${chWhatHtml(a)}
       ${chTimingHtml(c,a)}
       ${chCompHtml(c,a)}
       <section class="tksec" id="tkFinds"><div class="tkch"><h3 class="tkh">Findings</h3><span class="tkn num">${F.length}</span></div>${F.length?`<div class="tkfinds">${F.map(f=>chFindHtml(c,a,d,f)).join("")}</div>`:`<p class="tkp tkmut">No findings.</p>`}</section></div>
+    ${chTkChat(c)}
     <footer class="tkfoot"><p>Filed by Swift Coach. Disagree with a mark? Contest it. Every contest teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
 /* live: a finding mark or a scorecard mark repaints the ticket in place (focus and open model messages kept) */
 /* a focused control's selector, so a repaint can put focus back */
@@ -636,7 +664,8 @@ function chFocusSel(root){const f=document.activeElement;if(!f||!root||!root.con
   return f.id?"#"+f.id:""}
 function chRefocus(root,key){if(!key)return;const g=root.querySelector(key);if(g)g.focus({preventScroll:true})}
 function paintTicket(){const el=$("#cTicket"),sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!el||!c||!a)return;
-  const key=chFocusSel(el),d=chatDraft(sid);el.className=chTicketCls(c,a,d);el.innerHTML=chTicket(c,a,d);chRefocus(el,key)}
+  const key=chFocusSel(el),d=chatDraft(sid),pn=$("#tkPan-chat"),top=pn?pn.scrollTop:0;el.className=chTicketCls(c,a,d);el.innerHTML=chTicket(c,a,d);chRefocus(el,key);
+  const p2=$("#tkPan-chat");if(p2&&top)p2.scrollTop=top}
 /* Agree just marks it. Not a mistake gives the criterion full marks (put back on un-marking) and takes the finding off the ticket's priority and the coaching */
 function chMarkFinding(fid,mark){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
   const f=chFindings(c,a).find(x=>x.id===fid);if(!f)return;
@@ -685,7 +714,7 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   const sid=chatSel?String(chatSel):"",c=sid?chatBy(sid):null,a=c?chatAud[sid]:null,rv=c?chatRev[sid]:null;
   const sig=JSON.stringify([sid,week,!!c,c&&c.picked,c&&c.gradeError,c&&chHash(c),chHash(a),chHash(rv),chatPickOpen===sid,chNoteOpen===sid,
     !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at]);
-  if(!force&&sig===chatAuditSig){paintRun();return}
+  if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);return}
   chatAuditSig=sig;
   if(!sid){v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the queue</button></div>`;return}
   if(!c){v.innerHTML=`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the queue</button></div>`;return}
@@ -695,8 +724,10 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   const secs=[chSec("cs-ev",2,"Evidence",evAns,chEvidence(c,a),"ref")];
   if(a){secs.push(chSec("cs-score",3,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
     chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
-  v.innerHTML=`<div class="cdesk${a?" has-tk":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside><div class="ccol">${secs.join("")}</div></div>`;
+  const pn=$("#tkPan-chat"),top=pn&&pn.closest("[data-sid]")&&pn.closest("[data-sid]").dataset.sid===sid?pn.scrollTop:0;
+  v.innerHTML=`<div class="cdesk${a?" has-tk":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside><div class="ccol">${secs.join("")}</div></div>`;
   if(chatPickOpen===sid)chOrdFilter();
+  const p2=$("#tkPan-chat");if(p2&&top)p2.scrollTop=top;
 }
 /* live: a changed mark recomputes the score, the verdict, the escalation level and the generated coaching note */
 function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a)return;
@@ -709,8 +740,8 @@ function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid]
   paintCoach();paintTicket();renderChatTabs()}
 function paintCoach(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid],el=$("#cs-coach .qbody");if(!c||!a||!el)return;
   const key=chFocusSel(el);el.innerHTML=chCoach(c,a,chatRev[sid],chatDraft(sid));chRefocus(el,key)}
-/* a jump opens every fold around its target (a source, a call's transcript) and keeps them open */
-function chJump(id){const el=document.getElementById(id);if(!el)return;
+/* a jump opens every fold around its target (an M# on a finding opens the ticket's Chat tab) (a source, a call's transcript) and keeps them open */
+function chJump(id){if(/^tm-/.test(id))chTkSet("chat");const el=document.getElementById(id);if(!el)return;
   for(let f=el.closest("details");f;f=f.parentElement&&f.parentElement.closest("details")){f.open=true;if(f.dataset.src)chSrcOpen.add(String(chatSel)+":"+f.dataset.src)}
   el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
 function chGradeOpen(orderIds){const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!c)return;
@@ -769,6 +800,7 @@ async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFinding
   return {n,err}}
 $("#view-chat").addEventListener("click",e=>{
   const j=e.target.closest("[data-jump]");if(j){e.preventDefault();chJump(j.dataset.jump);return}
+  const tt=e.target.closest("[data-tktab]");if(tt){chTkSet(tt.dataset.tktab);return}
   /* a mark away from Claude's opens the contest box; Claude's own mark withdraws a contest */
   const m=e.target.closest("[data-cm]");if(m){const id=m.dataset.cm,v=m.dataset.v==="na"?"na":Number(m.dataset.v);
     if(String(v)===String(chClaudeMark(chatAud[String(chatSel)],id)))chWithdraw(id);else chOpenContest(id,"row",v);return}
@@ -802,7 +834,9 @@ $("#view-chat").addEventListener("input",e=>{const t=e.target,sid=String(chatSel
   if(t.id==="chatReviewer"){chatDraft(sid).reviewer=t.value;store.set("qa.reviewer",t.value);return}
   if(t.id==="ordQ"){chOrdQ=t.value;chOrdFilter();return}
 });
-$("#view-chat").addEventListener("keydown",e=>{if(e.key==="Escape"&&chContest&&e.target.closest&&e.target.closest("#cbox")){e.preventDefault();$("#cbCancel").click()}});
+$("#view-chat").addEventListener("keydown",e=>{const tt=e.target.closest&&e.target.closest("[data-tktab]");
+  if(tt&&["ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();const id=e.key==="Home"?"ticket":e.key==="End"?"chat":tt.dataset.tktab==="chat"?"ticket":"chat";chTkSet(id,true);return}
+  if(e.key==="Escape"&&chContest&&e.target.closest&&e.target.closest("#cbox")){e.preventDefault();$("#cbCancel").click()}});
 $("#view-chat").addEventListener("toggle",async e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.src){const k=String(chatSel)+":"+d.dataset.src;if(d.open)chSrcOpen.add(k);else chSrcOpen.delete(k);return}
   if(d instanceof HTMLDetailsElement&&d.dataset.model){if(d.open)chModelOpen.add(d.dataset.model);else chModelOpen.delete(d.dataset.model);return}
   if(!(d instanceof HTMLDetailsElement)||!d.dataset.ctx||!d.open)return;
