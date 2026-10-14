@@ -6,7 +6,7 @@
 // deleted on withdraw, listed in Brain under What the coach learned and fed to the next grade's prompt.
 // No names or chat text from the real case are written here: the SA, restaurant and messages are read from the fixture at run time.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
-const { openPage, chatWorld, DIR } = require('./mock.js');
+const { openPage, chatWorld, learnWorld, DIR } = require('./mock.js');
 const B = require('../src/chat.js');
 const SH = path.join(DIR, 'shots'); fs.mkdirSync(SH, { recursive: true });
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; console.log('ok -', m) };
@@ -56,8 +56,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await sel(page) === 'chats' && await page.locator('#view-chats').isVisible() && await page.locator('[data-area="chats"][aria-current="page"]').count() === 1, 'lands on Chats › Queue');
   ok((await page.locator('.weekpick small').textContent()) === 'Week' && (await txt(page, '#wkLabel')).startsWith('Oct 12'), 'week picker says Week and opens on the case week');
   const subs = (await page.locator('#sub-chats [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-  ok(subs.length === 3 && ['Queue', 'Audit', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Queue, Audit, Brain');
+  ok(subs.length === 4 && ['Queue', 'Audit', 'Learning', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Queue, Audit, Learning, Brain');
   ok(/Not pulled yet/.test(await txt(page, '#chatStatus')) && await page.locator('#chatPull').isEnabled(), 'empty week: Pull chats ready');
+  await page.click('[data-tab="learn"]'); await page.waitForTimeout(200);
+  ok(await sel(page) === 'learn' && await page.evaluate(() => location.hash) === '#learn' && (await txt(page, '#lrNoCp')) === 'No checkpoint yet.' && /No round yet/.test(await txt(page, '#lrRound')) && await page.locator('#lrChart').isHidden(), 'Learning with no brainRuns: No checkpoint yet, no round, no chart');
+  await page.click('[data-tab="chats"]'); await page.waitForTimeout(100);
   ok(await page.locator('#chatBtns button').count() === 1 && await page.locator('#chatQuest').isHidden() && await page.locator('#chatGroups > *').count() === 0, 'a week with no pull shows the Pull button only');
 
   // ----- 1b. storage by week: one week's collections live, other weeks' reviews read once for the game layer
@@ -139,7 +142,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(true, 'progress line: Grading N of 9 · SA · restaurant · step');
   await page.waitForFunction(`${nIn(P('audits'))} === 9 && !document.querySelector('#chatStatus .spin') && [...document.querySelectorAll('.crow .pill')].filter(p => /^Graded/.test(p.textContent)).length === 9`, null, { timeout: 60000 });
   ok(await count(page, P('audits')) === 9 && await count(page, P('tx')) === 9, "Grade picks writes the week's audits and tx for the 9 picks");
-  ok(await page.evaluate(() => { const P = window.__prompts, g = P.filter(p => /You are Swift Coach/.test(p.input)); return P.length >= 45 && P.every(p => p.cache === undefined || (p.cache === false && /You are Swift Coach/.test(p.input))) && g.filter(p => p.cache === false).length * 2 === g.length }), 'first grades use the default sample cache; only the second grade read is fresh');
+  ok(await page.evaluate(() => { const P = window.__prompts, g = P.filter(p => /You are Swift Coach/.test(p.input)); return P.length === 36 && g.length === 9 && P.every(p => p.cache === undefined) }), 'first grades: 4 passes per chat (refs, facts, analysis, one grade read), all on the default sample cache');
   ok(await weekSubN(page) === nSub, 'pulling and grading open no new subscriptions');
   ok(/Graded 9 chats/.test(await txt(page, '#chatStatus')) && await page.locator('.crow .pill', { hasText: 'Graded' }).count() === 9, 'queue shows Graded pills and the summary');
   const realA = await page.evaluate(p => window.__data[p], P('audits/' + SID));
@@ -147,11 +150,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(realA.v === 'chat-2' && realA.pct === B.chatScore(realA.grade.scores) && realA.verdict === B.chatVerdict(realA.pct).id && realA.orders[0].ticket === '65', `real case graded ${RV} ${RP}% on ticket 65`);
   ok(realA.check && realA.check.applies && realA.check.status === 'wrong' && realA.check.due.amount === 16.42 && realA.check.given.amount === 17.73 && realA.check.diff === 1.31 && realA.check.errors.some(e => e.code === 'tax')
     && realA.grade.amtBy === 'system' && realA.grade.scores.amt === 1 && realA.priority === 'P1', 'the brain checked the comp: due $16.42, gave $17.73, taxes included; amt set by the check; ticket P1');
-  ok(W.chat.gradeSrc !== 't1' || (realA.grade.runs && JSON.stringify(realA.grade.runs[0]) !== JSON.stringify(realA.grade.runs[1])), 'the two grade reads come from grade and grade2');
+  ok(!realA.grade.runs && !realA.grade.runPcts && B.CHAT_RUBRIC.every(r => realA.grade.scores[r.id] === 'na' || Number.isInteger(realA.grade.scores[r.id])), 'one grade read: no runs, no half marks');
   // the corrections reach the prompts, newest first
   const gp = await page.evaluate(s => window.__prompts.filter(p => /You are Swift Coach/.test(p.input) && p.input.includes(`CHAT ${s} ·`)).map(p => p.input), SID);
   const corr = gp.length ? gp[0].slice(gp[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
-  ok(gp.length === 2 && corr.includes(LS_NEW.note) && corr.includes(LS_OLD.note) && corr.indexOf(LS_NEW.note) < corr.indexOf(LS_OLD.note), "seeded corrections reach the grade prompt under QA LEAD'S CORRECTIONS, newest first");
+  ok(gp.length === 1 && corr.includes(LS_NEW.note) && corr.includes(LS_OLD.note) && corr.indexOf(LS_NEW.note) < corr.indexOf(LS_OLD.note), "seeded corrections reach the grade prompt under QA LEAD'S CORRECTIONS, newest first");
   ok(await page.evaluate(s => window.__prompts.some(p => /You are the analyst for a QA lead/.test(p.input) && p.input.includes(`CHAT ${s} ·`) && p.input.includes("QA LEAD'S CORRECTIONS")), SID), 'and the analysis prompt');
   // queue: graded rows carry the ticket priority and the comp chip; the SA card counts comp right
   const realRow = page.locator(`.crow[data-open="${SID}"]`);
@@ -175,6 +178,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click(`.crow[data-open="${SID}"] .clink`); await page.waitForTimeout(300);
   ok(await sel(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, 'row opens Audit at #chat/<week>/<sid>');
   ok((await txt(page, '#cvWord')) === RV && (await txt(page, '#cvPct')) === RP + '%', `verdict card: ${RV} ${RP}%`);
+  ok(await page.locator('#cs-score .reads').count() === 0 && await page.locator('#cs-score .cm.half').count() === 0 && await page.locator('.vreads').count() === 0, 'a one-read audit: no Reads line, no half marks, no two-reads note');
+  const two = await page.evaluate(s => { const a = JSON.parse(JSON.stringify(chatAud[s])), g = a.grade, t0 = Number(g.scores.tone), t1 = t0 ? t0 - 1 : 1, r2 = Object.assign({}, g.scores, { tone: t1 }); g.runs = [g.scores, r2]; g.runPcts = [80, 60]; g.spread = 20; g.scores = Object.assign({}, g.scores, { tone: (t0 + t1) / 2 });
+    const d = document.createElement('div'); d.innerHTML = chScorecard(a, { scores: g.scores, contests: {} }) + chBoard(chatBy(s), a, null, { scores: g.scores });
+    return { reads: d.querySelectorAll('.reads').length, half: d.querySelectorAll('.cm.half').length, note: (d.querySelector('.vreads') || {}).textContent || '' } }, SID);
+  ok(two.reads === 1 && two.half === 2 && /Two reads: 80\.0% · 60\.0%/.test(two.note), 'an older two-read audit still shows Reads, the half mark and the two-reads note');
   await shot(page, 'chats-audit-top.png'); await shot(page, 'chats-audit-full.png', true);
   await shot(page, 'ticket-top.png'); await shot(page, 'ticket-full.png', true);
   ok(await page.locator('#cvRoute .rm').count() === 4 && (await txt(page, '#cvEsc')) === 'Level ' + markL(realA.grade.scores.esc), `route marks with escalation Level ${markL(realA.grade.scores.esc)}`);
@@ -304,7 +312,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.fill('#cbWhy', '   '); ok(await page.locator('#cbSave').isDisabled(), 'blank space is not a reason');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cc-amt').scrollIntoView({ block: 'center' }) });
   const WHY = 'The lead approved $17.73 in the thread before the client was told, so the amount stands.';
-  await page.fill('#cbWhy', WHY); ok(await page.locator('#cbSave').isEnabled(), 'typing a reason arms Save contest');
+  await page.fill('#cbWhy', WHY); ok(await page.locator('#cbSave').isEnabled(), 'typing a reason arms Submit');
   await page.waitForTimeout(80); await page.screenshot({ path: path.join(SH, 'contest-box.png') });
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
   ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbox')).backgroundColor) !== 'rgb(255, 255, 255)', 'dark: the contest box takes the dark tokens');
@@ -314,10 +322,18 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbox').getBoundingClientRect().right <= 390), `390px contest box: no horizontal overflow (${await width(page)})`);
   await page.screenshot({ path: path.join(SH, 'contest-390.png') });
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
+  ok((await txt(page, '#cbSave')) === 'Submit', 'the contest button says Submit');
   await page.click('#cbSave'); await page.waitForTimeout(100);
-  ok((await txt(page, '#cvPct')) === want.p + '%' && (await txt(page, '#cvWord')) === want.v && (await txt(page, '#csScoreAns')) === `${want.v} · ${want.p}%` && await page.locator('#cbox').count() === 0, `Save contest re-scores live: ${want.v} ${want.p}%`);
+  ok((await txt(page, '#cvPct')) === want.p + '%' && (await txt(page, '#cvWord')) === want.v && (await txt(page, '#csScoreAns')) === `${want.v} · ${want.p}%` && await page.locator('#cbox').count() === 0, `Submit re-scores live: ${want.v} ${want.p}%`);
   ok(await page.locator('#cc-amt.contested').count() === 1 && (await txt(page, '#cc-amt .ccon')) === 'CONTESTED' && (await txt(page, '#cc-amt .cfrom s')) === '1/3' && (await txt(page, '#cc-amt .cfrom b')) === '3/3' && (await txt(page, '#cc-amt .cyour')).includes(WHY) && await page.locator('[data-cm="amt"][data-v="3"][aria-pressed="true"]').count() === 1,
     "the row: Contested, Claude's 1/3 struck, 3/3, the reason underneath");
+  await page.waitForFunction(p => !!window.__data[p], `chatLessons/${SID}_amt`, { timeout: 3000 });
+  const sub = await page.evaluate(p => window.__data[p], `chatLessons/${SID}_amt`);
+  ok(sub.kind === 'contest' && sub.from === '1/3' && sub.to === '3/3' && sub.reason === WHY && sub.week === WEEK && 'round' in sub && 'checkpoint' in sub && sub.round === null && !(await page.evaluate(p => !!window.__data[p], P('reviews/' + SID))), 'Submit writes the lesson at once, before Save review, with round and checkpoint fields');
+  await page.waitForTimeout(100);
+  ok((await txt(page, '#cc-amt .clearned')) === 'Submitted · learned' && (await txt(page, '#tf-amt .tkyour .clearned')) === 'Submitted · learned', 'the row and the finding card say Submitted · learned');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cc-amt').scrollIntoView({ block: 'center' }) }); await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(SH, 'contest-submit.png') });
   ok((await page.locator('#coachText').inputValue()).includes(`— ${want.v} (${want.p}%)`) && !/\d\. P1 · Resolution accuracy/.test(await page.locator('#coachText').inputValue()), 'coaching note follows the marks; contested to full marks, the finding leaves it');
   ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v && (await txt(page, '#tf-amt .tkfs s')) === '1/3' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tf-amt .tkcon')) === 'CONTESTED' && (await txt(page, '#tf-amt .tkyour')).includes(WHY), "the ticket follows: score, verdict, the finding's mark struck and contested, the reason");
   // Cancel leaves everything as it was
@@ -425,10 +441,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click(`#ordList .orow[data-oid="${tgt.id}"]`);
   await page.waitForFunction(([p, id]) => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && a.orders.length === 1 && a.orders[0].id === id && !document.querySelector('#chatSteps') }, [P('audits/' + SID), tgt.id], { timeout: 20000 }); await page.waitForTimeout(150);
   let cs = await caches(page, pq);
-  ok(cs.length === 5 && cs.every(c => c === false), 'picking an order re-grades with cache:false on every pass (refs, facts, analysis, two grade reads)');
+  ok(cs.length === 4 && cs.every(c => c === false), 'picking an order re-grades with cache:false on every pass (refs, facts, analysis, grade)');
   const rg = await page.evaluate(n => window.__prompts.slice(n).filter(p => /You are Swift Coach/.test(p.input)).map(p => p.input), pq);
   const rgc = rg.length ? rg[0].slice(rg[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
-  ok(rg.length === 2 && rgc.includes(NOTE) && rgc.includes(NF.label) && rgc.indexOf(NOTE) < rgc.indexOf(LS_NEW.note), "after a re-grade the new correction is in the grade prompt, newest first");
+  ok(rg.length === 1 && rgc.includes(NOTE) && rgc.includes(NF.label) && rgc.indexOf(NOTE) < rgc.indexOf(LS_NEW.note), "after a re-grade the new correction is in the grade prompt, newest first");
   ok(rgc.includes(`Resolution accuracy · ${amtF.type} (compensation case): the coach gave 1/3, the QA lead says 3/3. Why: ${WHY}`) && rgc.includes(`the QA lead says ${CTO}/${CR.max}. Why: ${WHY2}`), "the re-grade's prompt has the contests: the coach gave X, the QA lead says Y. Why: …");
   ok((await txt(page, '.ordcard')).includes('Ticket ' + tgt.ticket) && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'the picked order is linked as your pick');
   // → No order: re-grade without the order, money card gone
@@ -442,7 +458,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(() => { window.__opts.sampleMs = 30 });
   await page.waitForFunction(p => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && !a.orders.length && !document.querySelector('#chatSteps') }, P('audits/' + SID), { timeout: 20000 }); await page.waitForTimeout(150);
   ok(await page.locator('.ordcard').count() === 0 && (await txt(page, '#cs-ctx')).includes('No order linked') && await page.locator('#cs-ctx .ttag', { hasText: 'Your pick' }).count() === 1, 'No order: re-graded, the money card is gone');
-  cs = await caches(page, pq); ok(cs.length === 5 && cs.every(c => c === false), 'No order re-grades with cache:false');
+  cs = await caches(page, pq); ok(cs.length === 4 && cs.every(c => c === false), 'No order re-grades with cache:false');
   ok(await page.locator('#cs-ctx .txcall').count() === 0, 'no order, no recordings');
   ok((await txt(page, '#cTicket')).includes('No order linked') && (await txt(page, '#cTicket')).includes('None linked') && /Can't check/.test(await txt(page, '#tkComp .tkst')), "the ticket after No order: no order, no recordings, the comp check can't check");
   // un-mark Not a mistake and save: the correction is deleted, the mark goes back
@@ -452,9 +468,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, `#tf-${CF.id} .tkscore`)) === `${CTO}/${CR.max}`, 'the saved contest survives a re-grade');
   await page.click(`[data-contest="${CF.id}"][data-where="row"]`); await page.waitForTimeout(80);
   ok((await page.locator('#cbWhy').inputValue()) === WHY2 && await page.locator('#cbWithdraw').isVisible(), 'reopening a contest shows its reason and Withdraw');
-  await page.click('#cbWithdraw'); await page.waitForTimeout(80);
-  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 0 && await page.locator(`[data-cm="${CF.id}"][data-v="${CF.score}"][aria-pressed="true"]`).count() === 1 && await page.locator('#cbox').count() === 0, `Withdraw puts ${CF.label} back on Claude's ${CF.score}`);
   const nLs = await count(page, 'chatLessons');
+  await page.click('#cbWithdraw'); await page.waitForTimeout(150);
+  ok(!(await page.evaluate(p => window.__data[p], `chatLessons/${SID}_${CF.id}`)) && await count(page, 'chatLessons') === nLs - 1, 'Withdraw unlearns a submitted contest at once');
+  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 0 && await page.locator(`[data-cm="${CF.id}"][data-v="${CF.score}"][aria-pressed="true"]`).count() === 1 && await page.locator('#cbox').count() === 0, `Withdraw puts ${CF.label} back on Claude's ${CF.score}`);
   await page.click('#chatSave'); await page.waitForTimeout(300);
   const rv2 = await page.evaluate(p => window.__data[p], P('reviews/' + SID));
   ok(!(await page.evaluate(p => window.__data[p], LID)) && !rv2.findings[NF.id], 'un-marking and saving deletes the Not a mistake lesson and the mark');
@@ -467,8 +484,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok((await txt(page, '#cvGrade')) === 'Re-grade', 'a graded chat offers Re-grade');
   pq = await nPrompts(page);
   await page.click('#cvGrade');
-  await page.waitForFunction(n => window.__prompts.length >= n + 5 && !chatRun && !document.querySelector('#chatSteps'), pq, { timeout: 20000 }); await page.waitForTimeout(100);
-  cs = await caches(page, pq); ok(cs.length === 5 && cs.every(c => c === false), 'Re-grade asks Claude fresh (cache:false)');
+  await page.waitForFunction(n => window.__prompts.length >= n + 4 && !chatRun && !document.querySelector('#chatSteps'), pq, { timeout: 20000 }); await page.waitForTimeout(100);
+  cs = await caches(page, pq); ok(cs.length === 4 && cs.every(c => c === false), 'Re-grade asks Claude fresh (cache:false)');
   await page.click('#coachCopy'); await page.waitForTimeout(150);
   ok(/Copied|Couldn't copy/.test(await txt(page, '#toast')), 'Copy gives feedback');
   const harbor = await page.evaluate(() => (Object.values(window.__data).find(d => d.restaurant === 'Harbor Crust' && d.grade) || {}).sid);
@@ -580,8 +597,112 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(() => { window.__opts.sampleFail = null }); pq = await nPrompts(page);
   await page.click('#chatGradePicks'); await page.waitForFunction(() => !document.querySelector('#chatStop'), null, { timeout: 20000 }); await page.waitForTimeout(200);
   ok((await docs(page, P('chats'))).every(c => !c.gradeError) && await count(page, P('audits')) === a0 + left, 'grading again clears the marks');
-  cs = await caches(page, pq); ok(cs.length === 5 * left && cs.every(c => c === false), 'a chat that failed is asked fresh (cache:false)');
+  cs = await caches(page, pq); ok(cs.length === 4 * left && cs.every(c => c === false), 'a chat that failed is asked fresh (cache:false)');
   ok(!errors.length, 'no console errors (batches) ' + JSON.stringify(errors));
+  await ctx.close();
+
+  // ===== 13. Learning: the teacher/student loop on an invented week (14 graded chats, 6 SAs, checkpoint cp0)
+  const LW = addD(WEEK, -14), LWo = learnWorld(LW), audOf = sid => LWo.list.find(x => x.sid === sid);
+  ({ page, ctx, errors } = await openPage(b, seed.concat(LWo.seed), { viewer: true, sampleMs: 30 }, { width: 1280, height: 900 }, more));
+  await page.goto('http://qa.test/#learn'); await page.waitForTimeout(500);
+  const state = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__data['learning/state'])));
+  ok(await sel(page) === 'learn' && /No round yet/.test(await txt(page, '#lrRound')) && await page.locator('#lrCps .cprow').count() === 1 && await page.locator('#lrChart').isHidden(), 'Learning: no round yet, one checkpoint, no chart');
+  await page.click('#lrDraw');
+  await page.waitForFunction(() => (window.__data['learning/state'].rounds || []).length === 1 && document.querySelectorAll('#lrRound .lrrow').length === 10, null, { timeout: 5000 });
+  let st = await state(), r1 = st.rounds[0];
+  const bySA = {}; r1.sample.forEach(x => bySA[x.sa] = (bySA[x.sa] || 0) + 1);
+  ok(r1.round === 1 && r1.status === 'open' && r1.sample.length === 10 && new Set(r1.sample.map(x => x.sid)).size === 10, 'Draw 10: ten distinct chats, round 1 open');
+  ok(Object.keys(bySA).length === 6 && Object.values(bySA).every(k => k >= 1 && k <= 2), `spread across the 6 SAs, 1–2 each (${Object.values(bySA).join(' ')})`);
+  ok(!r1.sample.some(x => x.sid === LWo.reviewed.sid || x.sid === LWo.marked.sid), 'excludes the marked chat and the one already reviewed');
+  ok(r1.sample.every(x => { const a = audOf(x.sid); return x.aiPct === a.pct && x.aiVerdict === a.verdict && JSON.stringify(x.aiScores) === JSON.stringify(a.scores) && x.sa === a.sa && x.restaurant === a.restaurant }) && r1.checkpoint === 'cp0' && st.currentCheckpoint === 'cp0' && st.week === LW && JSON.stringify(st.marked) === JSON.stringify([LWo.marked.sid]),
+    "the state keeps Claude's score, verdict and marks at draw time, the checkpoint and the week");
+  ok((await txt(page, '#lrRound .lrprog')).replace(/\s+/g, ' ').startsWith('0 of 10 reviewed') && await page.locator('#lrDraw').isDisabled() && await page.locator('#st-learn').innerText() === '0/10', 'progress 0 of 10; Draw is off while the round is open; the tab shows 0/10');
+  // review the 10: three with a contest on Gathered the evidence (to 0), the rest as Claude graded them
+  const WHYL = 'The SA set the hours without checking the current schedule first.';
+  for (let i = 0; i < 10; i++) { const x = r1.sample[i];
+    await page.click('[data-tab="learn"]'); await page.waitForTimeout(120);
+    await page.click(`#lrRound [data-lopen="${x.sid}"]`); await page.waitForTimeout(250);
+    if (i === 0) {
+      ok(await sel(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${LW}/${x.sid}` && (await txt(page, '#tkRound')).replace(/\s+/g, ' ').includes(`Round 1 Sampled chat Claude's score at draw: ${fmt(x.aiPct)}% ${vLabel(x.aiVerdict)}`), "a sampled chat opens on its week with the banner: Round 1 · Claude's score at draw");
+      await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
+      ok(await page.locator('.crow .rndchip').count() === 10 && (await txt(page, `.crow[data-open="${x.sid}"] .rndchip`)) === 'Round 1' && await page.locator('.crow .rndchip.done').count() === 0, 'queue: the 10 sampled chats wear a Round 1 chip');
+      await page.click(`.crow[data-open="${x.sid}"] .clink`); await page.waitForTimeout(200) }
+    if (i < 3) { await page.click('[data-cm="ev"][data-v="0"]'); await page.fill('#cbWhy', WHYL); await page.click('#cbSave');
+      await page.waitForFunction(p => !!window.__data[p], `chatLessons/${x.sid}_ev`, { timeout: 3000 });
+      if (i === 0) { const L = await page.evaluate(p => window.__data[p], `chatLessons/${x.sid}_ev`);
+        ok(L.kind === 'contest' && L.round === 1 && L.checkpoint === 'cp0' && L.from === `${x.aiScores.ev}/3` && L.to === '0/3' && L.reason === WHYL && L.sa === x.sa && L.week === LW, 'Submit on a sampled chat: the lesson carries round 1 and checkpoint cp0, written before Save review');
+        await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cTicket').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(100);
+        await page.screenshot({ path: path.join(SH, 'learning-audit-banner.png') }) } }
+    await page.click('#chatSave');
+    await page.waitForFunction(([p, k]) => !!window.__data[p] && (window.__data['learning/state'].rounds[0].results || []).length === k, [`chatWeeks/${LW}/reviews/${x.sid}`, i + 1], { timeout: 5000 });
+    if (i === 0) ok(/ · Round 1: 1 of 10/.test(await txt(page, '#toast')), 'the save toast counts the round: Round 1: 1 of 10') }
+  st = await state(); r1 = st.rounds[0];
+  const revs = await page.evaluate(w => Object.fromEntries(Object.entries(window.__data).filter(([p]) => p.startsWith(`chatWeeks/${w}/reviews/`)).map(([p, d]) => [p.split('/').pop(), d])), LW);
+  const exp = r1.sample.map(x => { const v = revs[x.sid]; return { d: Math.round((v.pct - x.aiPct) * 10) / 10, m: v.verdict === x.aiVerdict } });
+  const expM = exp.filter(e => e.m).length, expD = Math.round(exp.reduce((t, e) => t + Math.abs(e.d), 0) / 10 * 10) / 10;
+  ok(r1.status === 'done' && r1.results.length === 10 && r1.results.every((x, i) => x.sid === r1.sample[i].sid && x.yourPct === revs[x.sid].pct && x.yourVerdict === revs[x.sid].verdict && x.aiPct === r1.sample[i].aiPct && x.diff === exp[i].d && x.match === exp[i].m), 'each review fills the round results: Claude at draw, yours, the difference, match');
+  ok(r1.verdictMatch === expM && expM === 7 && r1.meanAbsDiff === expD && r1.pass === false, `round 1: ${r1.verdictMatch} of 10 verdicts, ${r1.meanAbsDiff} pts average difference, not a pass`);
+  ok(new Set(st.marked).size === 11 && r1.sample.every(x => st.marked.includes(x.sid)), 'the 10 reviewed chats join the marked list');
+  await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
+  ok(await page.locator('.crow .rndchip.done').count() === 10 && (await txt(page, `.crow[data-open="${r1.sample[0].sid}"] .rndchip`)) === 'Round 1 ✓', 'queue: reviewed sampled chats show Round 1 ✓');
+  await page.click('[data-tab="learn"]'); await page.waitForTimeout(200);
+  const rr = (await txt(page, '#lrResult')).replace(/\s+/g, ' ');
+  ok(rr.includes('FAIL') && rr.includes('Verdicts 7 of 10') && rr.includes(`Average difference ${fmt(expD)} pts`) && rr.includes('Streak 0 of 2') && (await txt(page, '#lrNext')) === 'Round done. Ask Claude to regrade all 14 with what it learned.', 'round card: FAIL, 7 of 10, the average difference, streak 0 of 2, and the regrade line');
+  ok(await page.locator('#lrRound .lrrow.miss').count() === 3 && (await txt(page, `#lrRound .lrrow:has([data-lopen="${r1.sample[0].sid}"]) .lrd`)).startsWith('−') && await page.locator('#lrDraw').isEnabled(), 'the three mismatches stand out with their differences; Draw is back on');
+  await shot(page, 'learning-round.png', true);
+  // the main session regrades: checkpoint cp1 lands (brainRuns/cp1 + grades), audits move to cp1, one chat's score moves
+  const moved = (r1.sample.find(x => x.aiPct > 80) || r1.sample[0]).sid;
+  await page.evaluate(([lw, list, moved]) => window.claude.use('db').then(async db => {
+    const v = {}; list.forEach(x => v[x.verdict] = (v[x.verdict] || 0) + 1);
+    await db.doc('brainRuns/cp1').set({ id: 'cp1', round: 1, at: new Date(Date.parse(lw) + 9 * 864e5).toISOString(), brain: 'chat-2', model: 'test-model', week: lw, chats: list.length, graded: list.length, avgPct: 88.1, verdicts: v, perSA: {}, lessonsUsed: 5, learned: [{ kind: 'lesson', text: 'Check the current schedule before changing hours.', sid: moved, crit: 'ev' }], notes: '' });
+    for (const x of list) { const g = Object.assign({}, x, x.sid === moved ? { pct: 72.7, verdict: 'okay' } : {}); delete g.scores; await db.doc(`brainRuns/cp1/grades/${x.sid}`).set(Object.assign(g, { priority: null, caseType: 'hours_service', fault: 'none' }));
+      const p = `chatWeeks/${lw}/audits/${x.sid}`, a = (await db.doc(p).get()).data(); a.checkpoint = 'cp1'; await db.doc(p).set(a) } }), [LW, LWo.list, moved]);
+  await page.waitForTimeout(250);
+  ok(await page.locator('#lrCps .cprow').count() === 2 && (await txt(page, '#lrCps .cprow[data-cp="cp0"] .cpagree')).replace(/\s+/g, ' ').includes('7 of 10 verdicts'), 'a new checkpoint shows up; cp0 carries round 1\'s agreement');
+  // round 2: only the 2 chats never marked or reviewed are left
+  await page.click('#lrDraw');
+  await page.waitForFunction(() => (window.__data['learning/state'].rounds || []).length === 2, null, { timeout: 5000 });
+  st = await state(); const r2 = st.rounds[1], seen1 = new Set(r1.sample.map(x => x.sid).concat([LWo.reviewed.sid, LWo.marked.sid]));
+  ok(r2.round === 2 && r2.sample.length === 2 && r2.sample.every(x => !seen1.has(x.sid)) && r2.checkpoint === 'cp1' && st.currentCheckpoint === 'cp1', 'a second Draw takes only chats never marked (2 left), on checkpoint cp1');
+  for (const x of r2.sample) { await page.click(`#lrRound [data-lopen="${x.sid}"]`); await page.waitForTimeout(250); await page.click('#chatSave');
+    await page.waitForFunction(p => !!window.__data[p], `chatWeeks/${LW}/reviews/${x.sid}`, { timeout: 5000 }); await page.waitForTimeout(150); await page.click('[data-tab="learn"]'); await page.waitForTimeout(150) }
+  st = await state();
+  ok(st.rounds[1].status === 'done' && st.rounds[1].verdictMatch === 2 && st.rounds[1].meanAbsDiff === 0 && st.rounds[1].pass === true, 'round 2: 2 of 2, 0 pts, a pass');
+  const rr2 = (await txt(page, '#lrResult')).replace(/\s+/g, ' ');
+  ok(rr2.includes('PASS') && rr2.includes('Verdicts 2 of 2') && rr2.includes('need 2') && rr2.includes('Streak 1 of 2'), 'round card: PASS, the bar scales to the sample, streak 1 of 2');
+  ok(await page.locator('#lrChart').isVisible() && await page.locator('#lrChartV circle:not(.lrhit)').count() === 2 && await page.locator('#lrChartD circle:not(.lrhit)').count() === 2 && await page.locator('#lrChart .lrtgt').count() === 2, 'two finished rounds: the agreement charts (verdicts, difference), each with its target');
+  await page.click('#lrDraw'); await page.waitForTimeout(250);
+  ok((await state()).rounds.length === 2 && /No chats left to sample/.test(await txt(page, '#lrRound')), 'nothing left: Draw says so and writes nothing');
+  // checkpoints history: newest first; expand cp0 for what it learned and per SA
+  const cpr = await page.locator('#lrCps .cprow').evaluateAll(x => x.map(d => d.dataset.cp));
+  ok(JSON.stringify(cpr) === '["cp1","cp0"]' && (await txt(page, '#lrCps .cprow[data-cp="cp1"] .cpagree')).replace(/\s+/g, ' ').includes('2 of 2 verdicts'), 'checkpoints newest first; cp1 shows round 2\'s agreement');
+  const c0 = (await txt(page, '#lrCps .cprow[data-cp="cp0"] summary')).replace(/\s+/g, ' ');
+  ok(c0.includes(LWo.cp0.avgPct.toFixed(1) + '%') && /LESSONS USED 2\b/i.test(c0), 'cp0 row: average and lessons used');
+  ok(Object.entries(LWo.cp0.verdicts).every(([k, v]) => c0.includes(`${vLabel(k)} ${v}`)), 'cp0 row: the verdict mix');
+  await page.click('#lrCps .cprow[data-cp="cp0"] summary'); await page.waitForTimeout(120);
+  const cb = (await txt(page, '#lrCps .cprow[data-cp="cp0"] .cpbody')).replace(/\s+/g, ' ');
+  ok(LWo.cp0.learned.every(l => cb.includes(l.text)) && await page.locator('#lrCps .cprow[data-cp="cp0"] .cpsr:not(.cpsh)').count() === 6 && cb.includes('Faye Lund') && cb.includes(LWo.cp0.notes), 'expanding cp0: what it learned in this pass, the notes, per-SA averages');
+  await page.evaluate(() => document.getElementById('lrChart').scrollIntoView({ block: 'start' })); await page.waitForTimeout(100);
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'learning-history.png'), fullPage: true });
+  // one chat's history: cp0 → cp1 and Patrick's review
+  await page.selectOption('#lrPick', moved);
+  await page.waitForFunction(() => document.querySelectorAll('#lrHist .chr:not(.chh)').length === 3, null, { timeout: 5000 });
+  const hr = await page.locator('#lrHist .chr:not(.chh)').allInnerTexts(), mv = audOf(moved);
+  ok(hr[0].includes('cp0') && hr[0].includes(fmt(mv.pct) + '%') && hr[1].includes('cp1') && hr[1].includes('72.7%') && hr[1].includes(`−${fmt(mv.pct - 72.7)}`) && hr[2].includes('Your review') && hr[2].includes(fmt(revs[moved].pct) + '%'), 'chat history: the grade at cp0 and cp1, how it moved, and your review');
+  await page.locator('#lrChat').screenshot({ path: path.join(SH, 'learning-chat.png') });
+  // dark and phone
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+  ok(await page.evaluate(() => getComputedStyle(document.querySelector('#lrRound')).backgroundColor) !== 'rgb(255, 255, 255)' && await page.evaluate(() => getComputedStyle(document.querySelector('.lrline')).stroke) === 'rgb(167, 139, 250)', 'dark: Learning takes the dark tokens');
+  await shot(page, 'learning-dark.png', true);
+  for (const wd of [390, 900]) { await page.setViewportSize({ width: wd, height: 860 }); await page.waitForTimeout(150); ok(await width(page) <= wd, `${wd}px Learning (dark): no horizontal overflow (${await width(page)})`) }
+  await page.emulateMedia({ colorScheme: 'light' }); await page.waitForTimeout(100);
+  ok(await width(page) <= 900, '900px Learning (light): no overflow');
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  ok(await width(page) <= 390, `390px Learning (light): no horizontal overflow (${await width(page)})`);
+  await shot(page, 'learning-390.png', true);
+  await page.click(`#lrRound [data-lopen="${r2.sample[0].sid}"]`); await page.waitForTimeout(250);
+  ok(await width(page) <= 390 && await page.locator('#tkRound').count() === 0, '390px audit of a chat in a finished round: no banner, no overflow');
+  ok(!errors.length, 'no console errors (learning) ' + JSON.stringify(errors));
   await ctx.close();
   ok(!allErrors.length, 'no console errors (routes) ' + JSON.stringify(allErrors));
   await b.close(); console.log(`ui chats: ${n} checks passed`);

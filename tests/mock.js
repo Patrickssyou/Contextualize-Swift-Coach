@@ -83,7 +83,7 @@ const MOCK = ([seed, ld, opts, extra]) => {
         return { content: [], payload: { result: { status: 'done', queryUuid: input.queryUuid, rows: q.rows, fields: {}, exploreUrl: null } } } }
       throw { code: 'bad_request' } } };
   // chat passes first: the chat facts prompt also says "note-taker". The real case (CH.realSid) gets its saved replies, invented chats a small valid one.
-  // The grade is read twice per grading: the real case answers the first read with CH.grade and the second with CH.grade2
+  // One grade read per grading (CHAT.gradeRuns 1). The real case answers with CH.grade; a second read (deps.gradeRuns 2, older audits) gets CH.grade2
   const gradeReads = {};
   const chatReply = input => { if (!CH) return null;
     const sid = (input.match(/CHAT (\S+) ·/) || [])[1] || '', real = sid === String(CH.realSid), S = CH.synth;
@@ -228,4 +228,38 @@ function inventGrades(fx, old) {
       findings, verdictWhy: old.verdictWhy } };
   return [mk(false), mk(true)];
 }
-module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld };
+
+/* The Learning world (all invented): 14 graded chats across 6 SAs in week lw, each audit tagged checkpoint cp0, brainRuns/cp0 with a grades doc per chat,
+   one chat already reviewed and one already marked (both must never be drawn), and learning/state for that week. */
+function learnWorld(lw) {
+  const B = require('../src/chat.js');
+  const SAS = ['Ana Ruiz', 'Ben Okafor', 'Cleo Marsh', 'Dev Patel', 'Eli Novak', 'Faye Lund'], per = [4, 3, 2, 2, 2, 1];
+  const SC = [{ ev: 3, path: 3 }, { ev: 2, path: 3 }, { ev: 1, path: 3 }, { ev: 2, path: 1 }, { ev: 3, path: 2 }];
+  const addD = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10), P = k => `chatWeeks/${lw}/${k}`;
+  const seed = [], list = []; let n = 0;
+  SAS.forEach((sa, si) => { for (let j = 0; j < per[si]; j++) { n++;
+    const sid = String(9930000 + n), at = `${addD(lw, n % 6)}T${String(9 + (n % 8)).padStart(2, '0')}:15:00.000Z`, rest = `Test Kitchen ${n}`, code = 'R93' + String(n).padStart(3, '0');
+    const em = sa.toLowerCase().replace(' ', '.') + '@wondersco.com', wid = `Wid(0,1,1,0,${sid})`, url = `https://wira.example.test/tasks/${sid}`;
+    const msgs = [{ n: 1, author: 'client-+15550300', role: 'client', name: 'Rae', text: `Hi, please set our Sunday hours to 11 AM to 9 PM. This is Rae from ${rest}.`, internal: false, inferred: false },
+      { n: 2, author: em, role: 'sa', name: sa, text: 'Hi Rae, done: Sunday is now 11 AM to 9 PM.', internal: false, inferred: false }];
+    const chat = { v: 'chat-1', week: lw, picked: false, gradable: true, wid, sid, url, at, closedAt: '', status: 'closed', sub: '', title: msgs[0].text.slice(0, 80), direction: 'inbound', createdBy: '', createdByTitle: '',
+      sa, saEmail: em, clientId: 'client-+15550300', frt: 2, firstClientAt: at, firstReplyAt: at, intent: 'hours', rating: '', code, restaurant: rest, initiator: 'client', msgs, clientName: 'Rae' };
+    const scores = Object.assign({ fr: 3, ev: 3, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 3 }, SC[n % SC.length]), pct = B.chatScore(scores), verdict = B.chatVerdict(pct).id;
+    const audit = { v: 'chat-1', sid, wid, url, week: lw, at, sa, restaurant: rest, code, initiator: 'client', title: chat.title, frt: 2, clientName: 'Rae', checkpoint: 'cp0',
+      tasks: [], orders: [], candidates: [], dayOrders: [], orderNote: '', orderPick: 'auto', refs: {}, calls: [], slack: [], notFound: [],
+      facts: { calls: {}, timeline: [{ id: 'F1', src: 'M1', when: '', who: 'Rae (client)', kind: 'said', what: 'Asks to set Sunday hours to 11 AM to 9 PM' }, { id: 'F2', src: 'M2', when: '', who: sa, kind: 'said', what: 'Says Sunday hours are set' }], claims: [], promises: [] },
+      analysis: { caseType: 'hours_service', request: 'Set Sunday hours', summary: 'The client asked for new Sunday hours; the SA set them.', fault: { who: 'none', why: 'A plain request.', cites: ['F1'] } },
+      grade: { scores, reasons: Object.fromEntries(Object.keys(scores).map(k => [k, 'Cites F1 and F2.'])), route: { facts: { mark: 'right', why: 'Clear.' }, analysis: { mark: 'right', why: 'Plain.' }, solution: { mark: 'right', why: 'Set.' }, escalation: { mark: 'right', why: 'Not needed.' } }, wentWell: ['Fast'], nextTime: [], verdictWhy: 'Fine.' },
+      pct, verdict, gradedAt: `${addD(lw, 7)}T10:00:00.000Z`, by: 'main' };
+    seed.push([P('chats/' + sid), chat], [P('audits/' + sid), audit], [`brainRuns/cp0/grades/${sid}`, { sid, sa, restaurant: rest, pct, verdict, scores, priority: pct < 100 ? 'P2' : null, caseType: 'hours_service', fault: 'none' }]);
+    list.push({ sid, sa, restaurant: rest, pct, verdict, scores }) } });
+  const reviewed = list[0], marked = list[4];
+  seed.push([P('reviews/' + reviewed.sid), { sid: reviewed.sid, week: lw, sa: reviewed.sa, scores: reviewed.scores, pct: reviewed.pct, verdict: reviewed.verdict, coaching: '', reviewer: 'QA lead', by: 'u_test', at: `${addD(lw, 8)}T09:00:00.000Z` }]);
+  const mix = {}; list.forEach(x => mix[x.verdict] = (mix[x.verdict] || 0) + 1);
+  const perSA = {}; SAS.forEach(sa => { const l = list.filter(x => x.sa === sa), v = {}; l.forEach(x => v[x.verdict] = (v[x.verdict] || 0) + 1); perSA[sa] = { n: l.length, avgPct: Math.round(l.reduce((t, x) => t + x.pct, 0) / l.length * 10) / 10, verdicts: v } });
+  const cp0 = { id: 'cp0', round: 0, at: `${addD(lw, 7)}T10:00:00.000Z`, brain: 'chat-2', model: 'test-model', week: lw, chats: list.length, graded: list.length, avgPct: Math.round(list.reduce((t, x) => t + x.pct, 0) / list.length * 10) / 10,
+    verdicts: mix, perSA, lessonsUsed: 2, learned: [{ kind: 'rule', text: 'A plain hours request has no fault to attribute.', crit: 'fa' }, { kind: 'lesson', text: 'Confirming the change back counts as the restatement.', sid: list[1].sid, crit: 'rs' }], notes: 'Checkpoint 0: the first full pass.' };
+  seed.push(['brainRuns/cp0', cp0], ['learning/state', { week: lw, target: { verdicts: 8, pts: 5, streak: 2 }, marked: [marked.sid], rounds: [] }]);
+  return { seed, list, reviewed, marked, SAS, cp0 };
+}
+module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld, learnWorld };

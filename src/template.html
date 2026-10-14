@@ -510,6 +510,7 @@ details.txd .txtext{margin-top:6px}
   <div class="subtabs" role="tablist" aria-label="Chats" id="sub-chats">
     <button type="button" role="tab" data-tab="chats" aria-selected="true"><span class="tn"><span>1</span></span>Queue<span class="count" id="chCount"></span></button>
     <button type="button" role="tab" data-tab="chat" aria-selected="false"><span class="tn"><span>2</span></span>Audit<span class="tst num" id="st-chat"></span></button>
+    <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
   </div>
   <div class="subtabs" role="tablist" aria-label="Calls" id="sub-calls" hidden>
@@ -518,9 +519,10 @@ details.txd .txtext{margin-top:6px}
     <button type="button" role="tab" data-tab="facts" aria-selected="false"><span class="tn"><span>3</span></span>Facts<span class="tst" id="st-facts"></span></button>
   </div>
 
-  <!-- CHATS: the week's WIRA chats (Queue), one chat audited (Audit), the policy, calibration cases and staff the brain reads (Brain). Filled by src/ui/chats.js -->
+  <!-- CHATS: the week's WIRA chats (Queue), one chat audited (Audit), the teacher/student rounds and checkpoints (Learning), the policy, calibration cases and staff the brain reads (Brain). Filled by src/ui/chats.js -->
   <section id="view-chats" hidden></section>
   <section id="view-chat" hidden></section>
+  <section id="view-learn" hidden></section>
   <section id="view-brain" hidden></section>
 
   <!-- 1 SNAPSHOT: the week's pool of calls -->
@@ -882,10 +884,10 @@ let tt; function toast(m,act){const t=$("#toast");t.textContent=m;
 function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 
 /* ---------- tabs & week ---------- */
-/* Areas: Chats (default: 1 Queue → 2 Audit, plus Brain), Calls (parked: 1 Snapshot (queue) → 2 Calls → 3 Facts), Results, Database.
+/* Areas: Chats (default: 1 Queue → 2 Audit, plus Learning and Brain), Calls (parked: 1 Snapshot (queue) → 2 Calls → 3 Facts), Results, Database.
    Results and Database are call views, so the call steps stay in reach there. "score" is the old Scorecard tab: it opens Calls. "chat/<sid>" opens that chat in Audit. */
-const TABS=["chats","chat","brain","queue","calls","facts","results","data"];
-const AREA_OF={chats:"chats",chat:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
+const TABS=["chats","chat","learn","brain","queue","calls","facts","results","data"];
+const AREA_OF={chats:"chats",chat:"chats",learn:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
 const lastTab={chats:"chats",calls:"queue",results:"results",data:"data"};
 function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="chats";tab=t;const area=AREA_OF[t];lastTab[area]=t;
   document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
