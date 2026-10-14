@@ -305,7 +305,7 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
   $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l),frs=l.map(c=>chFirstMin(c,chatAud[c.sid])).filter(x=>x!=null).sort((x,y)=>x-y),pq=q=>frs.length?frs[Math.min(frs.length-1,Math.ceil(q*frs.length)-1)]:null,fr=pq(.5),f90=pq(.9);
     return `<button type="button" class="sacard" data-sajump="${i}"><span class="satop"><b>${esc(sa)}</b><span class="saavg num t-${chVB(av)}">${av==null?"–":fmt(av)+"%"}</span></span>
       <span class="sanums">${[["chats",l.length],["picked",l.filter(c=>c.picked).length],["graded",l.filter(c=>chatAud[c.sid]).length],["reviewed",rv.length]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span>
-      ${fr!=null?`<span class="safr">First reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b> median · <b class="num${f90>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(f90))}</b> p90</span>`:""}
+      ${fr!=null?`<span class="safr">First reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b> median</span>`:""}
       ${ct.n?`<span class="sacomp t-${ct.right===ct.n?"good":"bad"}">Comp right <b class="num">${ct.right} of ${ct.n}</b></span>`:""}</button>`}).join("");
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";

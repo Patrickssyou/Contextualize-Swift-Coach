@@ -165,7 +165,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok((await wiraRow.locator('.cfr').innerText()) === 'Reply 2.1 min' && await page.locator('.wsays').count() === 0, "first reply is WIRA's own first response time (the Lightdash metric), not recomputed");
   ok((await page.locator(`.crow[data-open="${SID}"] .cfr`).innerText()) === 'Reply 2.3 min' && await page.locator(`.crow[data-open="${SID}"] .cfr.t-bad`).count() === 0, 'the real case: Reply 2.3 min, not slow');
   const mara = (await page.locator('.sacard', { hasText: 'Mara Quill' }).innerText()).replace(/\s+/g, ' ');
-  ok(/First reply \d+(\.\d)? min median · \d+(\.\d)? min p90/.test(mara) && !/Avg first reply/.test(mara), `SA cards show the median and p90 first reply, like the Lightdash chart (${(mara.match(/First reply .*? p90/) || [''])[0]})`);
+  ok(/First reply \d+(\.\d)? min median/.test(mara) && !/p90|Avg first reply/.test(mara), `SA cards show the median first reply only (${(mara.match(/First reply .*? median/) || [''])[0]})`);
   await shot(page, 'chats-queue.png'); await shot(page, 'queue-ticket.png');
   for (const wd of [1100, 900]) { await page.setViewportSize({ width: wd, height: 900 }); await page.waitForTimeout(120);
     ok(await width(page) <= wd && await page.evaluate(() => [...document.querySelectorAll('.crow .cmain')].every(m => m.getBoundingClientRect().width >= 160)), `${wd}px queue: rows keep room for the chat, no overflow`) }
