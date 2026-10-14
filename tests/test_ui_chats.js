@@ -374,6 +374,82 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cs-coach').screenshot({ path: path.join(SH, 'coaching-cards.png') });
   await page.evaluate(() => document.querySelectorAll('#cs-ev details.srcf[open]').forEach(d => d.open = false)); await shot(page, 'audit-4sections.png', true);
 
+  // ===== 4c. the evidence panel: a contest (or a row's Sources link) opens what Claude used for that criterion, beside the page (a bottom sheet on phones)
+  const PC = await page.evaluate(s => { const c = chatBy(s), a = chatAud[s], R = a.grade.reasons || {}, out = {};
+    for (const r of CHAT_RUBRIC) { const k = chCitesIn(R[r.id]), its = chPanelItems(c, a, r.id).items;
+      if (!out.m && k.some(x => /^M\d+$/.test(x))) out.m = { id: r.id, label: r.label, ms: [...new Set(its.filter(i => i.tgt && i.tgt.kind === 'msg').map(i => String(i.tgt.n)))] };
+      const fk = k.find(x => /^F\d+$/.test(x) && a.facts.timeline.some(t => t.id === x));
+      if (!out.f && fk) { const t = a.facts.timeline.find(x => x.id === fk); out.f = { id: r.id, key: fk, text: `${t.who} ${t.what}` } }
+      const ci = its.findIndex(i => i.tgt && i.tgt.kind === 'call');
+      if (!out.call && ci >= 0) out.call = { id: r.id, i: ci, n: its[ci].tgt.n, callId: a.calls[its[ci].tgt.n - 1].id } }
+    return out }, SID);
+  ok(PC.m && PC.f && PC.call && PC.m.ms.length > 0, `the real case has reasons citing messages (${PC.m.id}), facts (${PC.f.id}: ${PC.f.key}) and a call (${PC.call.id})`);
+  ok(JSON.stringify(await page.evaluate(() => [chCitesIn('See M2, F1 to F3 and C8; Call 2 and Task 1831693 (O1).'), chCitesIn('M4–M6')])) === JSON.stringify([['M2', 'F1', 'F2', 'F3', 'C8', 'Call 2', 'Task 1831693', 'O1'], ['M4', 'M5', 'M6']]), 'cites are read from the reason: M, F, C, O, Call, Task and ranges');
+  await page.click(`[data-contest="${PC.m.id}"][data-where="row"]`); await page.waitForTimeout(250);
+  const pan = () => page.evaluate(() => { const P = document.getElementById('chPanel'), r = P && P.getBoundingClientRect(); return P && !P.hidden ? { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height } : null });
+  let pr0 = await pan();
+  ok(pr0 && Math.abs(pr0.r - 1280) < 1 && pr0.w >= 420 && pr0.w <= 480 && pr0.t === 0 && Math.abs(pr0.b - 900) < 1 && await page.locator(`#cc-${PC.m.id} #cbox`).isVisible(), `Contest opens the panel on the right (${Math.round(pr0 && pr0.w)}px, full height) beside the contest box`);
+  ok((await txt(page, '#chpTitle')) === PC.m.label && (await txt(page, '#chPanel .chpmark b')) === await page.evaluate(([s, k]) => { const r = chRub(k); return chMk(chClaudeMark(chatAud[s], k), r.max) }, [SID, PC.m.id]) && await page.locator('#chpClose').isVisible(), "panel header: the criterion, Claude's mark, ×");
+  ok(await page.evaluate(() => { const b = document.getElementById('cbox').getBoundingClientRect(), p = document.getElementById('chPanel').getBoundingClientRect(), s = document.querySelector('#cs-score').getBoundingClientRect(); return b.right <= p.left && s.right <= p.left }) && await width(page) <= 1280, 'the page narrows: the scorecard and the contest box sit clear of the panel');
+  await page.fill('#cbWhy', 'Checking the sources.'); ok((await page.locator('#cbWhy').inputValue()) === 'Checking the sources.' && await page.evaluate(() => document.activeElement.id) === 'cbWhy', 'the contest box stays usable while the panel is open');
+  const pit = await page.evaluate(() => [...document.querySelectorAll('#chPanel .chplist > li')].map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  ok(pit.length >= PC.m.ms.length && (await page.locator('#chPanel .chpwhy .chpcite').count()) > 0, `What Claude used: ${pit.length} items, the reason's cites are buttons`);
+  const cv = await page.evaluate(ms => { const V = document.getElementById('chpView'), vr = V.getBoundingClientRect(), C = [...V.querySelectorAll('.cited')], f = C[0] && C[0].getBoundingClientRect();
+    return { ids: C.map(x => x.id.replace('pm-', '')), all: V.querySelectorAll('#chpChat > li').length, first: !!f && f.top >= vr.top - 1 && f.top < vr.bottom - 20, tag: C.every(x => /Cited/.test(x.textContent)) } }, PC.m.ms);
+  ok(JSON.stringify(cv.ids.slice().sort()) === JSON.stringify(PC.m.ms.slice().sort()) && cv.all === await page.evaluate(s => chatBy(s).msgs.length, SID) && cv.tag, `the panel's chat: every message, ${cv.ids.map(x => 'M' + x).join(' ')} marked Cited`);
+  ok(cv.first, 'the first cited message is scrolled into view');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cbox').scrollIntoView({ block: 'center' }) }); await page.waitForTimeout(120);
+  await page.screenshot({ path: path.join(SH, 'contest-panel.png') });
+  const lastM = PC.m.ms[PC.m.ms.length - 1];
+  await page.locator('#chPanel [data-pgo]').filter({ has: page.locator('.srcchip', { hasText: new RegExp('^M' + lastM + '$') }) }).first().click(); await page.waitForTimeout(200);
+  ok(await page.evaluate(n => { const V = document.getElementById('chpView').getBoundingClientRect(), e = document.getElementById('pm-' + n), r = e.getBoundingClientRect(); return e.classList.contains('flash') && r.top >= V.top - 1 && r.top < V.bottom - 10 }, lastM) && await page.evaluate(() => scrollY) > 0, `clicking the M${lastM} item scrolls the panel's chat to it`);
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => getComputedStyle(document.getElementById('chPanel')).backgroundColor) !== 'rgb(255, 255, 255)', 'dark: the panel takes the dark tokens');
+  await page.screenshot({ path: path.join(SH, 'contest-panel-dark.png') }); await page.emulateMedia({ colorScheme: 'light' });
+  await page.click('#chpClose'); await page.waitForTimeout(100);
+  ok(!(await pan()) && await page.locator('#cbox').isVisible() && !(await page.evaluate(() => document.body.classList.contains('chp-on'))), '× closes the panel; the contest box stays');
+  await page.click('#cbCancel'); await page.waitForTimeout(80);
+  await page.click(`[data-contest="${PC.m.id}"][data-where="row"]`); await page.waitForTimeout(150);
+  ok(!!(await pan()), 'contesting again reopens it');
+  await page.click('#cbCancel'); await page.waitForTimeout(100);
+  ok(!(await pan()) && await page.locator('#cbox').count() === 0, 'closing the contest box closes the panel');
+  await page.click(`[data-contest="${PC.m.id}"][data-where="row"]`); await page.waitForTimeout(150);
+  await page.focus('#cbWhy'); await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  ok(!(await pan()) && await page.locator('#cbox').count() === 0, 'Esc in the contest box closes both');
+  // contest from a finding card
+  const fcard = await page.evaluate(() => { const b = document.querySelector('.tkfind [data-contest][data-where="find"]'); return b && b.dataset.contest });
+  await page.click(`.tkfind [data-contest="${fcard}"]`); await page.waitForTimeout(150);
+  ok((await txt(page, '#chpTitle')) === await page.evaluate(k => chRub(k).label, fcard) && (await txt(page, '#chpVia')) === 'CONTEST', 'a finding card\'s Contest opens the panel too');
+  await page.click('#cbCancel'); await page.waitForTimeout(100);
+  // the Sources link: no contest
+  await page.click(`[data-psrc="${PC.f.id}"]`); await page.waitForTimeout(150);
+  ok(!!(await pan()) && await page.locator('#cbox').count() === 0 && (await txt(page, '#chpVia')) === 'SOURCES' && (await page.locator(`[data-psrc="${PC.f.id}"]`).getAttribute('aria-expanded')) === 'true' && await page.evaluate(() => document.activeElement.id) === 'chpTitle', 'Sources opens the panel without contesting');
+  const fi = page.locator('#chPanel .chplist .chpi').filter({ has: page.locator('.srcchip', { hasText: new RegExp('^' + PC.f.key + '$') }) }).first();
+  ok((await fi.locator('.chpq').innerText()).replace(/\s+/g, ' ').trim() === PC.f.text.replace(/\s+/g, ' ').trim() && await fi.locator('.srcchip').count() === 2, `${PC.f.key} resolves to the fact text and its source`);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  ok(!(await pan()) && await page.evaluate(k => document.activeElement && document.activeElement.dataset.psrc === k, PC.f.id), 'Esc closes it and focus goes back to Sources');
+  // a Call cite shows the call: bullets, the recording, the transcript with the quote marked when it's found
+  await page.click(`[data-psrc="${PC.call.id}"]`); await page.waitForTimeout(150);
+  await page.click(`#chPanel [data-pgo="${PC.call.i}"]`); await page.waitForTimeout(400);
+  const callV = await page.evaluate(() => { const C = document.getElementById('chpCall'), a = C && C.querySelector('a.rec'); return C ? { head: C.querySelector('.chpsh b').textContent, href: a && a.getAttribute('href'), tgt: a && a.target, tx: !!C.querySelector('details[data-ptx]'), back: !!document.querySelector('#chpView [data-pback]') } : null });
+  ok(callV && callV.head === 'Call ' + PC.call.n && callV.href.includes('/callrecordings?callIds=' + encodeURIComponent(PC.call.callId)) && callV.tgt === '_blank' && callV.tx && callV.back, `a Call cite shows Call ${PC.call.n} in the panel with ▶ Recording and a transcript`);
+  if (!(await page.locator('#chpCall details[open]').count())) await page.click('#chpCall details summary');
+  await page.waitForFunction(() => { const t = document.getElementById('chpTx'); return t && t.textContent.length > 100 }, null, { timeout: 5000 });
+  ok(await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = chTxMark('Hello. Pickup or delivery? Pickup. Thanks.', ["Answered 'x'", 'Pickup or delivery? Pickup']); return d.querySelector('mark').textContent }) === 'Pickup or delivery? Pickup', 'the transcript marks the quoted words when found');
+  await page.click('#chpView [data-pback]'); await page.waitForTimeout(100);
+  ok(await page.locator('#chpChat').isVisible(), '← Chat goes back to the chat');
+  await page.click('#chpClose'); await page.waitForTimeout(80);
+  // phone: a bottom sheet, the contest box above it
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  await page.click(`[data-contest="${PC.m.id}"][data-where="row"]`); await page.waitForTimeout(250);
+  const sh = await pan();
+  ok(sh && sh.l === 0 && Math.abs(sh.r - 390) < 1 && Math.abs(sh.b - 860) < 1 && sh.h <= 860 * 0.55 && sh.t > 380 && await width(page) <= 390, `390px: a bottom sheet (${Math.round(sh && sh.h)}px), no horizontal overflow (${await width(page)})`);
+  ok(await page.evaluate(() => { const b = document.getElementById('cbox').getBoundingClientRect(), p = document.getElementById('chPanel').getBoundingClientRect(); const w = document.getElementById('cbWhy').getBoundingClientRect(), sv = document.getElementById('cbSave').getBoundingClientRect(); return w.top >= 0 && sv.bottom <= p.top + 1 && b.bottom <= p.top + 1 }), '390px: Why and Submit sit above the sheet');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'contest-panel-390.png') });
+  await page.click('#cbCancel'); await page.waitForTimeout(100);
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
+  ok(!(await pan()) && await page.locator('#cbox').count() === 0, 'panel and contest box closed before the contest checks');
+
   // ===== 5. contest from the scorecard: a different mark opens the contest box; the reason is required; saving re-scores live and marks the row
   const marks = Object.assign({}, realA.grade.scores, { amt: 3 });
   const want = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks);
@@ -484,6 +560,37 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE, 'after saving, the ticket shows the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }
+  // ===== 6b. Dashboard: the week's numbers, then one card per SA with the average score, lowest first
+  await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
+  const DB = await page.evaluate(w => { const L = Object.entries(window.__data).filter(([p]) => p.startsWith(`chatWeeks/${w}/chats/`)).map(([, d]) => d);
+    const aud = s => window.__data[`chatWeeks/${w}/audits/${s}`], rev = s => window.__data[`chatWeeks/${w}/reviews/${s}`];
+    return L.map(c => ({ sid: String(c.sid), sa: c.sa, ai: aud(c.sid) ? aud(c.sid).pct : null, rv: rev(c.sid) ? rev(c.sid).pct : null, fr: chFirstMin(c, aud(c.sid)) })) }, WEEK);
+  const mean = L => L.length ? L.reduce((t, v) => t + v, 0) / L.length : null;
+  const med = L => { const x = L.slice().sort((a, b) => a - b), k = x.length; return k ? (k % 2 ? x[(k - 1) / 2] : (x[k / 2 - 1] + x[k / 2]) / 2) : null };
+  const cur = d => d.rv != null ? d.rv : d.ai, scored = DB.filter(d => cur(d) != null), teamAvg = mean(scored.map(cur));
+  const realD = DB.find(d => d.sid === SID);
+  ok(realD.rv != null && realD.ai != null && realD.rv !== realD.ai && fmt(teamAvg) !== fmt(mean(DB.filter(d => d.ai != null).map(d => d.ai))), `the reviewed chat's % (${fmt(realD.rv)}) differs from Claude's (${fmt(realD.ai)}), so the override shows`);
+  ok((await txt(page, '#dmScore .dmv')) === fmt(teamAvg) + '%' && (await txt(page, '#dmScore .dms')).endsWith(`${scored.length} chats`), `Team quality score ${fmt(teamAvg)}% over ${scored.length} chats: the mean, reviewed % over Claude's`);
+  const vmix = {}; scored.forEach(d => { const v = B.chatVerdict(cur(d)).id; vmix[v] = (vmix[v] || 0) + 1 });
+  ok(await page.evaluate(() => [...document.querySelectorAll('#dmMix .dmixl li')].map(li => [li.dataset.v, Number(li.querySelector('b').textContent)])).then(x => x.every(([v, k]) => k === (vmix[v] || 0)) && x.length === 5), `verdict mix: ${JSON.stringify(vmix)}`);
+  const frs = DB.map(d => d.fr).filter(x => x != null), teamFr = med(frs);
+  ok((await txt(page, '#dmFr .dmv')) === await page.evaluate(m => chFrt(m), teamFr), `first reply median ${await page.evaluate(m => chFrt(m), teamFr)} over ${frs.length} chats`);
+  const tally = await page.evaluate(() => chCompTally(chatsOfWeek()));
+  ok((await txt(page, '#dmComp .dmv')) === `${tally.right} of ${tally.n}` && (await txt(page, '#dmRev .dmv')) === `1 of ${DB.length}`, `comp accuracy ${tally.right} of ${tally.n}; reviewed by you 1 of ${DB.length}`);
+  const cardsDom = await page.evaluate(() => [...document.querySelectorAll('#chatStrip .sacard')].map(c => ({ sa: c.dataset.sa, score: c.querySelector('.sascore').textContent, fr: (c.querySelector('.safr b') || {}).textContent || null })));
+  const bySa = {}; DB.forEach(d => (bySa[d.sa] = bySa[d.sa] || []).push(d));
+  const wantCards = Object.entries(bySa).map(([sa, L]) => ({ sa, avg: mean(L.filter(d => cur(d) != null).map(cur)), fr: med(L.map(d => d.fr).filter(x => x != null)) })).sort((x, y) => (x.avg == null) - (y.avg == null) || (x.avg ?? 0) - (y.avg ?? 0));
+  ok(cardsDom.length === wantCards.length && cardsDom.every((c, i) => c.sa === wantCards[i].sa && c.score === (wantCards[i].avg == null ? '–' : fmt(wantCards[i].avg) + '%')), `SA cards sorted lowest first: ${cardsDom.map(c => c.sa.split(' ')[0] + ' ' + c.score).join(', ')}`);
+  ok(await Promise.all(cardsDom.map((c, i) => wantCards[i].fr == null ? c.fr === null : page.evaluate(m => chFrt(m), wantCards[i].fr).then(t => t === c.fr))).then(x => x.every(Boolean)), 'each card: its first reply median');
+  await page.click(`#chatStrip .sacard[data-sa="${cardsDom[0].sa}"]`); await page.waitForTimeout(500);
+  ok(await page.evaluate(sa => { const g = [...document.querySelectorAll('.sagroup')].find(x => x.querySelector('h3 span').textContent.startsWith(sa)); const r = g.getBoundingClientRect(); return r.top >= -2 && r.top < innerHeight / 2 }, cardsDom[0].sa), 'a card jumps to that SA\'s chats');
+  await shot(page, 'dashboard.png');
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120); await shot(page, 'dashboard-dark.png'); await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#chatMetrics .dm, #chatStrip .sacard')].every(e => e.getBoundingClientRect().right <= 390)), `390px Dashboard: no horizontal overflow (${await width(page)})`);
+  await shot(page, 'dashboard-390.png'); await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(100);
+  await page.click(`.crow[data-open="${SID}"] .clink`); await page.waitForTimeout(300);
+
 
   // ===== 7. (calibration cases are no longer saved from the audit)
   ok(await page.locator('#calOpen, #calForm').count() === 0 && !(await page.evaluate(s => !!window.__data['chatCalib/' + s], SID)), 'no Save as calibration case');

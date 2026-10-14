@@ -30,7 +30,7 @@
 .satop b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .saavg{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .t-good{color:var(--s3)} .t-ok{color:var(--s2)} .t-bad{color:var(--s1)} .t-none{color:var(--muted)}
-.sanums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;font-size:11px;color:var(--muted)}
+.sanums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;font-size:11px;color:var(--muted)}
 .sanums span{display:flex;flex-direction:column;line-height:1.2;min-width:0}
 .sanums b{font-size:16px;color:var(--ink);font-weight:600}
 .sagroups{display:flex;flex-direction:column;gap:14px}
@@ -630,3 +630,87 @@ a.srcchip:hover{border-color:var(--accent)}
 .tkchat:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .tkchat .bub,.tkchat .sysline{scroll-margin-top:16px}
 @media (max-width:640px){.tktabs{padding-inline:8px}.tkchat{padding:12px 12px 14px;max-height:68vh}}
+
+/* ---------- the evidence panel: fixed on the right on desktop (the page narrows beside it), a bottom sheet on phones ---------- */
+:root{--chpw:clamp(420px,34vw,480px);--chph:min(52vh,520px)}
+body.chp-on{padding-right:var(--chpw)}
+@media (max-width:1700px){
+  body.chp-on .cdesk{grid-template-columns:minmax(0,1fr);grid-template-areas:"board" "main"}
+  body.chp-on .cdesk.has-tk{grid-template-areas:"ticket" "board" "main"}
+  body.chp-on .cverdict{position:static}
+}
+.srcbtn{margin-left:auto;border:0;background:none;padding:0 2px;color:var(--accent);font-weight:600;font-size:12.5px;white-space:nowrap}
+.srcbtn:hover,.srcbtn[aria-expanded="true"]{text-decoration:underline;text-underline-offset:3px}
+.chpanel{position:fixed;top:0;right:0;bottom:0;width:var(--chpw);z-index:15;display:flex;flex-direction:column;background:var(--panel);color:var(--ink);
+  border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px color-mix(in srgb,var(--ink) 45%,transparent);animation:chpin .18s ease-out}
+@keyframes chpin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.chphd{display:flex;align-items:center;gap:12px;padding:14px 12px 12px 18px;border-bottom:1px solid var(--line);background:var(--soft);flex:none}
+.chpttl{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.chpttl h2{margin:0;font-family:var(--f-display);font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.25;overflow-wrap:anywhere}
+.chpttl h2:focus{outline:none}
+.chpmark{display:flex;flex-direction:column;align-items:flex-end;gap:0}
+.chpmark .cbclaude{padding-top:0;font-size:18px}
+.chpx{width:34px;height:34px;flex:none;border-radius:8px;border:1px solid var(--line);background:var(--panel);font-size:20px;line-height:1;color:var(--muted);display:grid;place-items:center;padding:0}
+.chpx:hover{color:var(--ink);border-color:var(--muted)}
+.chph{margin:0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.chpused{flex:0 0 auto;max-height:44%;overflow-y:auto;overscroll-behavior:contain;padding:12px 18px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.chpwhy{margin:0;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+.chpcite{font-family:var(--f-mono);font-size:11.5px;font-weight:700;padding:0 5px;border-radius:5px;border:1px solid var(--line);background:var(--panel);color:var(--accent);line-height:1.5}
+.chpcite:hover{border-color:var(--accent)}
+.chplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.chpi{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;align-items:baseline;width:100%;text-align:left;padding:7px 10px;border-radius:0 8px 8px 0;
+  border:0;border-left:3px solid var(--tp);background:var(--tp-soft);color:var(--ink);font-size:13px;line-height:1.45;min-width:0}
+button.chpi:hover{background:color-mix(in srgb,var(--tp) 16%,var(--panel))}
+div.chpi{border-left-color:var(--line);background:var(--soft)}
+.chpchips{display:inline-flex;gap:4px;align-items:baseline}
+.chpq{min-width:0;overflow-wrap:anywhere}
+q.chpq{quotes:"\201C" "\201D" "\2018" "\2019"}
+.chpi .qflag{grid-column:2}
+.chpnone{margin:0;font-size:13px}
+.chpview{flex:1 1 0;min-height:120px;overflow-y:auto;overscroll-behavior:contain;padding:12px 18px 18px;background:var(--bg)}
+.chpvh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:12px}
+.chpchat{padding:2px 3px}
+.chpchat .bub{max-width:88%;scroll-margin-top:12px}
+.bub.cited,.sysline.cited{box-shadow:0 0 0 2px var(--tp)}
+.bub.me.cited{box-shadow:inset -3px 0 0 var(--accent),0 0 0 2px var(--tp)}
+.ctag{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:0 6px;border-radius:4px;background:var(--tp);color:var(--on-fill);line-height:1.6}
+.chpsrc{display:flex;flex-direction:column;gap:10px;min-width:0}
+.chpsh{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px}
+.chpsh b{font-size:15px}
+.chpsrc .txsum{margin:0;padding-left:18px;font-size:13px}
+.chpsrc .txtext{max-height:none;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55}
+mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(--s2);border-radius:3px}
+.chplink{margin:0;font-size:13px}
+@media (max-width:860px){
+  body.chp-on{padding-right:0;padding-bottom:var(--chph)}
+  .chpanel{top:auto;left:0;width:auto;height:var(--chph);border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0;overflow:hidden;
+    box-shadow:0 -18px 40px -24px color-mix(in srgb,var(--ink) 45%,transparent);animation-name:chpup}
+  .chphd{padding:10px 10px 10px 16px}
+  .chpused{max-height:40%;padding:10px 16px}
+  .chpview{padding:10px 16px 16px}
+}
+@keyframes chpup{from{transform:translateY(32px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.chpanel{animation:none}}
+
+/* ---------- Dashboard: the week's numbers on top; the SA cards lead with the average score ---------- */
+.dmet{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.dm{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+.dmv{font-family:var(--f-display);font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.dm.dmain .dmv{font-size:30px;font-family:var(--f-display);font-weight:800}
+.dm.t-good .dmv{color:var(--s3)} .dm.t-ok .dmv{color:var(--s2)} .dm.t-bad .dmv{color:var(--s1)}
+.dms{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.dm.dmain{border-top:4px solid currentColor;padding-top:9px}
+.dm.dmain.t-none{border-top-color:var(--line)}
+.dbar{height:10px;border-radius:5px;margin-top:4px}
+.dmixl{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
+.dmixl li{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.dmixl i{width:8px;height:8px;border-radius:2px;display:block}
+.dmixl i.s3{background:var(--s3)} .dmixl i.s3.lt{background:var(--s3);opacity:.55} .dmixl i.s2{background:var(--s2)} .dmixl i.s1{background:var(--s1)} .dmixl i.s0{background:var(--s0)}
+.dmixl b{color:var(--ink);font-weight:700}
+.sascore{font-family:var(--f-display);font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.saverd{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.sacard{border-top:4px solid var(--line)}
+.sacard:has(.sascore.t-good){border-top-color:var(--s3)} .sacard:has(.sascore.t-ok){border-top-color:var(--s2)} .sacard:has(.sascore.t-bad){border-top-color:var(--s1)}
+@media (max-width:1000px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr))}.dm.dmain{grid-column:span 1}.dm.dmix{grid-column:span 2}}
+@media (max-width:560px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dm.dmain,.dm.dmix{grid-column:1/-1}.dm{padding:10px 10px 11px}.dm .lbl-sm{font-size:10px;letter-spacing:.05em}.dmv{font-size:18px}.dm.dmain .dmv{font-size:28px}.dms{font-size:11.5px}
+  .sascore{font-size:24px}}
