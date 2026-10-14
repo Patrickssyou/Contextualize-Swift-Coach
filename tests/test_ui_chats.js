@@ -57,7 +57,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await sel(page) === 'chats' && await page.locator('#view-chats').isVisible() && await page.locator('[data-area="chats"][aria-current="page"]').count() === 1, 'lands on Chats › Queue');
   ok((await page.locator('.weekpick small').textContent()) === 'Week' && (await txt(page, '#wkLabel')).startsWith('Oct 12'), 'week picker says Week and opens on the case week');
   const subs = (await page.locator('#sub-chats [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-  ok(subs.length === 4 && ['Queue', 'Audit', 'Learning', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Queue, Audit, Learning, Brain');
+  ok(subs.length === 4 && ['Dashboard', 'Audit', 'Learning', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Dashboard, Audit, Learning, Brain');
   ok(/Not pulled yet/.test(await txt(page, '#chatStatus')) && await page.locator('#chatPull').isEnabled(), 'empty week: Pull chats ready');
   await page.click('[data-tab="learn"]'); await page.waitForTimeout(200);
   ok(await sel(page) === 'learn' && await page.evaluate(() => location.hash) === '#learn' && (await txt(page, '#lrNoCp')) === 'No checkpoint yet.' && /No round yet/.test(await txt(page, '#lrRound')) && await page.locator('#lrChart').isHidden(), 'Learning with no brainRuns: No checkpoint yet, no round, no chart');
