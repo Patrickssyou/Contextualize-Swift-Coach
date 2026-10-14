@@ -191,5 +191,15 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   const gpt = B.chatGradePrompt(k2, R.F, R.A, R.comp, R.offer, [], R.check, [{ crit: 'fr', label: 'First response', type: 'Defended before checking', what: 'said the call was fine', note: 'checking took a minute' }]);
   ok(/COMPENSATION CHECK \(system, final\): wrong/.test(gpt) && /score it 1/.test(gpt) && /not a mistake: checking took a minute/.test(gpt) && /"findings"/.test(gpt), 'grade prompt carries the check, the lead\'s corrections and asks for findings');
   ok(R.check.applies && doc.check && doc.priority === 'P1', 'the audit doc keeps the check and the ticket priority');
+  /* order status: voided and refunded orders are named; a plain submitted order says nothing */
+  const OA = 'greendot_orders_analytics_aggregate_';
+  const vo = B.orderRow({ [OA + 'order_id']: 'W1', [OA + 'order_status']: 'voided', [OA + 'list_void_reason_type']: 'no_pick_up', [OA + 'total_sales_amount']: 20 });
+  ok(B.orderState(vo) === 'VOIDED (no_pick_up)', 'a voided order shows its status and reason');
+  const rf = B.orderRow({ [OA + 'order_id']: 'W2', [OA + 'order_status']: 'submitted', [OA + 'payment_state']: 'payment_state_fully_refunded', [OA + 'payment_refunded_amount']: 41.35, [OA + 'refund_type']: 'full' });
+  ok(B.orderState(rf) === 'refunded $41.35 full' && rf.pay === 'fully_refunded', 'a refunded order shows the amount');
+  ok(B.orderState(B.orderRow({ [OA + 'order_status']: 'submitted' })) === '', 'a submitted order shows no status');
+  /* reinforce: right mark, corrected reasoning */
+  const rl = B.lessonLines([{ kind: 'reinforce', crit: 'fr', label: 'First response', from: '2/2', to: '2/2', what: 'replied fast', reason: 'the reply named the order and the fix' }]);
+  ok(/mark is right, but the reasoning was off/.test(rl) && /The right reason: the reply named the order/.test(rl), 'a reinforce lesson keeps the mark and teaches the reason');
   console.log(`chat brain: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });

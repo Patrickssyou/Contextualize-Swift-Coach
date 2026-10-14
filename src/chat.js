@@ -16,7 +16,7 @@ const REL_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id
   "wira_project_tasks_status","wira_project_tasks_assigned_user","wira_project_tasks_created_by","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
   "wira_project_tasks_wira_ticket_url","wira_project_tasks_order2_root_wids_array"];
 const OA = "greendot_orders_analytics_aggregate_";
-const ORDER_DIMS = ["order_id","order_ticket_number","order_created_at_est","order_source","order_type","list_coupon_name","call_id","list_call_ids"].map(x=>OA+x);
+const ORDER_DIMS = ["order_id","order_ticket_number","order_created_at_est","order_source","order_type","list_coupon_name","call_id","list_call_ids","order_status","list_void_reason_type","list_void_reason_detail","payment_state","payment_refunded_amount","refund_type"].map(x=>OA+x);
 const ORDER_METRICS = ["total_sub_total_sales","total_sales_amount","total_tax_amount","total_tip_amount"].map(x=>OA+x);
 const CALL_DIMS = ["calls_conversation_id","calls_call_started_at_est","calls_call_duration_in_seconds","internal_users_full_name","internal_users_user_login_name",
   "calls_call_type","calls_call_phone_detail","asr_transcript_call_transcript"];
@@ -224,7 +224,13 @@ function orderRow(x){const g=k=>x[OA+k];const ids=new Set([String(g("call_id")||
   const items=r2(g("total_sub_total_sales")),tax=r2(g("total_tax_amount")),tip=r2(g("total_tip_amount")),total=g("total_sales_amount")==null?r2(items+tax+tip):r2(g("total_sales_amount"));
   return {id:String(g("order_id")||""),ticket:g("order_ticket_number")==null?"":String(g("order_ticket_number")),at:String(g("order_created_at_est")||"").slice(0,19),
     source:String(g("order_source")||""),type:String(g("order_type")||""),coupon:String(g("list_coupon_name")||""),callIds:[...ids],items,tax,tip,total,
-    other:r2(total-items-tax-tip)}}
+    other:r2(total-items-tax-tip),status:String(g("order_status")||"").toLowerCase(),
+    voidWhy:[g("list_void_reason_type"),g("list_void_reason_detail")].map(v=>String(v||"").trim()).filter(Boolean).join(": "),
+    pay:String(g("payment_state")||"").toLowerCase().replace(/^payment_state_/,""),refunded:r2(g("payment_refunded_amount")),refundType:String(g("refund_type")||"")}}
+/* order status line: voided, refunded, never finalized; empty for a normal submitted order */
+function orderState(o){const p=[];if(o.status&&o.status!=="submitted")p.push(o.status.toUpperCase()+(o.voidWhy?` (${o.voidWhy})`:""));
+  if(o.refunded>0)p.push(`refunded ${money(o.refunded)}${o.refundType?" "+o.refundType:""}`);else if(/refunded/.test(o.pay))p.push("payment refunded");
+  return p.join(", ")}
 /* references the chat and its tasks make to an order: ticket numbers, dollar amounts, phone numbers, and whether it is about money or about yesterday */
 const MIN_AMT = 5;  /* amounts of $5 or less are fees, tips and credits, not order totals */
 const YESTERDAY_RE = /\b(?:yesterday|ytd|last night|previous day)\b/i, COMP_RE = /\b(?:comp|compensat\w*|credit(?:ed|s)?|refund\w*|cogs|remake\w*|redeliver\w*)\b|\b30\s?%/i;
@@ -392,7 +398,7 @@ function chatEvidence(k){const c=k.chat,L=[];
   if((k.tasks||[]).length){L.push("","LINKED TASKS");k.tasks.forEach(t=>{L.push(`\nTASK ${t.sid}${t.parent===c.wid?" (child of this chat)":" (the SA's other task at this restaurant; may be another case)"} · created ${t.at.replace("T"," ")} ET by ${t.by||"unknown"} · assigned ${t.assigned||"nobody"} · ${t.intent||t.project} · status ${t.status}`);
     L.push(`Title: ${t.title}`);if(t.desc)L.push(`Description: ${t.desc}`);if(t.fields&&t.fields!=="{}")L.push(`Fields: ${capText(muUsd(t.fields),300)}`);
     t.comments.forEach(cm=>L.push(`- ${cm.who||"someone"}: ${cm.text}`))})}
-  if((k.orders||[]).length){L.push("","LINKED ORDERS (Tarro's order data, matched automatically from clues in the chat and tasks; may be wrong)");k.orders.forEach(o=>L.push(`${o.label} · ticket ${o.ticket||"?"} · created ${o.at.replace("T"," ")} ET · ${o.source}${o.type?" · "+o.type:""}${o.coupon?" · coupon "+o.coupon:""} · items ${money(o.items)} + tax ${money(o.tax)}${o.tip?" + tip "+money(o.tip):""}${o.other?` + other ${money(o.other)}`:""} = total ${money(o.total)}`))}
+  if((k.orders||[]).length){L.push("","LINKED ORDERS (Tarro's order data, matched automatically from clues in the chat and tasks; may be wrong)");k.orders.forEach(o=>L.push(`${o.label} · ticket ${o.ticket||"?"} · created ${o.at.replace("T"," ")} ET · ${o.source}${o.type?" · "+o.type:""}${o.coupon?" · coupon "+o.coupon:""} · items ${money(o.items)} + tax ${money(o.tax)}${o.tip?" + tip "+money(o.tip):""}${o.other?` + other ${money(o.other)}`:""} = total ${money(o.total)}${orderState(o)?" · STATUS "+orderState(o):o.status?" · status "+o.status:""}`))}
   else L.push("","LINKED ORDERS: none matched with confidence.");
   if(k.orderNote)L.push(k.orderNote);
   let budget=CHAT.budget;
@@ -435,6 +441,7 @@ function chatFactLines(F){return F.timeline.map(t=>`${t.id} · ${[t.when,t.src].
 function calibLines(cal){return (cal||[]).slice(0,CHAT.calibMax).map((c,i)=>`CASE ${i+1} · ${c.agent||"SA"} · ${c.restaurant||""} · ${c.date||""} · QA lead's verdict: ${String(c.verdict||"").toUpperCase()}\n`+(c.lessons||[]).map(l=>"- "+l).join("\n")).join("\n\n")}
 /* the QA lead's corrections: findings marked "not a mistake" (newest first) */
 function lessonLines(ls){return (ls||[]).slice(0,CHAT.lessonMax).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.type?` · ${l.type}`:""}`,why=l.note||l.reason;
+  if(l.kind==="reinforce")return `- ${c}${l.caseType?` (${l.caseType} case)`:""}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
   if(l.kind==="contest")return `- ${c}${l.caseType?` (${l.caseType} case)`:""}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
   return `- ${c}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${why?`: ${capText(why,200)}`:"."}`}).join("\n")}
 /* what the client asked for; only "compensation" uses the policy buckets and the money */
@@ -491,9 +498,9 @@ function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA"
     ``,`COMPENSATION POLICY (${policy&&policy.version||"none loaded"})`,(policy&&policy.text)||"No policy loaded: say so in every answer that depends on it.",
     `Buckets: ${buckets}. Approval limit: ${money(P.approvalLimit)} (above it, ${P.approver||"the lead"} approves first).`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
-    ...(lessons&&lessons.length?[``,`QA LEAD'S CORRECTIONS (findings the lead marked "not a mistake")`,lessonLines(lessons)]:[]),
+    ...(lessons&&lessons.length?[``,`QA LEAD'S CORRECTIONS (findings the lead marked "not a mistake", and right marks given for the wrong reason)`,lessonLines(lessons)]:[]),
     ``,`CHAT ${k.chat.sid} · ${k.chat.restaurant} · audited SA ${sa}`,
-    `ORDERS`,(k.orders||[]).map(o=>`${o.label} · ticket ${o.ticket||"?"} · ${o.type||o.source} · items ${money(o.items)}, tax ${money(o.tax)}${o.tip?`, tip ${money(o.tip)}`:""}, total ${money(o.total)}`).join("\n")||"None linked.",
+    `ORDERS`,(k.orders||[]).map(o=>`${o.label} · ticket ${o.ticket||"?"} · ${o.type||o.source} · items ${money(o.items)}, tax ${money(o.tax)}${o.tip?`, tip ${money(o.tip)}`:""}, total ${money(o.total)}${orderState(o)?` · ${orderState(o)}`:""}`).join("\n")||"None linked.",
     ``,`RECORD`,chatFactLines(F)].join("\n")}
 /* naWhen (added): the only situation in which a row may be marked N/A; the grade prompt prints it */
 const CHAT_RUBRIC = [
@@ -533,7 +540,7 @@ function chatGradePrompt(k,F,A,comp,offer,cal,check,lessons){const sa=k.chat.sa|
     ` "findings": [{"criterion": "${CHAT_RUBRIC.map(r=>r.id).join(" | ")}", "type": "under 6 words", "what": "under 30 words", "why": "why it matters, under 25 words", "evidence": [{"src": "M8 | Call 2 | O1 | Task 1234567", "quote": "exact words from that source, under 25 words"}], "should": "under 30 words", "model": "a message ${first} could have sent"}],`,
     ` "verdictWhy": "two sentences on the overall grade"}`,
     ``,`QA LEAD'S CALIBRATION CASES`,calibLines(cal)||"None yet.",
-    ``,`QA LEAD'S CORRECTIONS (marks the lead contested and findings marked "not a mistake"; grade the same way)`,lessonLines(lessons)||"None yet.",
+    ``,`QA LEAD'S CORRECTIONS (marks the lead contested, findings marked "not a mistake", and right marks whose reasoning the lead corrected; grade and reason the same way)`,lessonLines(lessons)||"None yet.",
     ``,`ANALYSIS`,JSON.stringify({caseType:A.caseType,request:A.request,summary:A.summary,fault:A.fault,bucket:A.bucket,ideal:A.ideal,saOffer:A.saOffer,approval:A.approval,saPath:A.saPath,aeInvolvement:A.aeInvolvement,firstResponse:A.firstResponse}),
     A.caseType&&A.caseType!=="compensation"?`COMPENSATION: not a compensation case (${A.caseType}); the policy amount does not apply.`:
     check&&check.applies?`COMPENSATION CHECK (system, final): ${check.status}. ${check.summary}${check.errors.length?` Errors: ${check.errors.map(e=>`${e.label} (${e.detail})`).join("; ")}.`:""}${check.flags.length?` Flags: ${check.flags.map(f=>f.detail).join("; ")}`:""}`:
@@ -756,10 +763,10 @@ function chatQueueDoc(c,picked){return Object.assign({v:CHAT_V,week:chatWeek(c.a
 function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
   return {v:CHAT_V,sid:c.sid,wid:c.wid,url:c.url,week:chatWeek(c.at),at:c.at,sa:c.sa,restaurant:c.restaurant,code:c.code,initiator:c.initiator,title:c.title,frt:c.frt,timing:k.timing||c.timing||null,clientName:c.clientName,
     tasks:k.tasks.map(t=>({sid:t.sid,wid:t.wid,parent:t.parent===c.wid,at:t.at,project:t.project,intent:t.intent,title:t.title,desc:capText(t.desc,800),status:t.status,by:t.by,assigned:t.assigned,url:t.url,comments:t.comments.slice(0,12)})),
-    orders:k.orders.map(o=>({label:o.label,id:o.id,ticket:o.ticket,at:o.at,source:o.source,type:o.type,coupon:o.coupon,items:o.items,tax:o.tax,tip:o.tip,other:o.other,total:o.total,callIds:o.callIds})),
+    orders:k.orders.map(o=>({label:o.label,id:o.id,ticket:o.ticket,at:o.at,source:o.source,type:o.type,coupon:o.coupon,items:o.items,tax:o.tax,tip:o.tip,other:o.other,total:o.total,callIds:o.callIds,status:o.status,voidWhy:o.voidWhy,pay:o.pay,refunded:o.refunded,refundType:o.refundType})),
     candidates:k.ranked.map(r=>({id:r.order.id,ticket:r.order.ticket,at:r.order.at,type:r.order.type,source:r.order.source,items:r.order.items,total:r.order.total,score:r.score,why:r.why})),
     /* every order the restaurant had on the chat day and the day before, newest first, for the reviewer's "Change order" */
-    dayOrders:(k.allOrders||[]).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,150).map(o=>({id:o.id,ticket:o.ticket,at:o.at,type:o.type,source:o.source,items:o.items,total:o.total})),
+    dayOrders:(k.allOrders||[]).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,150).map(o=>({id:o.id,ticket:o.ticket,at:o.at,type:o.type,source:o.source,items:o.items,total:o.total,status:o.status})),
     orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
     calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk"})),
     slack:k.slack,notFound:k.notFound,
@@ -769,7 +776,7 @@ function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
 function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:l.id,text:capText(l.text,CHAT.txCap)}))}}
 /* CHAT-CORE END */
 if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(globalThis,core);
-  module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,
+  module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,orderState,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
