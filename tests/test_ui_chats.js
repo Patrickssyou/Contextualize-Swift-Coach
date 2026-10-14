@@ -162,10 +162,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   // first reply: the times (timing.firstReplyMin), red when slow, WIRA's own figure when it's off by a minute or more; the SA card's average
   const slowRow = page.locator('.crow[data-open="9900106"] .cfr'), wiraRow = page.locator('.crow[data-open="9900104"]');
   ok((await slowRow.innerText()) === 'Reply 24 min' && await slowRow.evaluate(e => e.classList.contains('t-bad') && getComputedStyle(e).color === getComputedStyle(document.querySelector('.t-bad')).color && getComputedStyle(e).color !== getComputedStyle(e.parentElement).color), 'a slow first reply (24 min) shows in red in the queue');
-  ok((await wiraRow.locator('.cfr').innerText()) === 'Reply 9 min' && (await wiraRow.locator('.wsays').innerText()) === 'WIRA 2.1 min' && await page.locator(`.crow[data-open="${SID}"] .wsays`).count() === 0, "the queue shows WIRA's figure only where it differs by 1 min or more");
+  ok((await wiraRow.locator('.cfr').innerText()) === 'Reply 2.1 min' && await page.locator('.wsays').count() === 0, "first reply is WIRA's own first response time (the Lightdash metric), not recomputed");
   ok((await page.locator(`.crow[data-open="${SID}"] .cfr`).innerText()) === 'Reply 2.3 min' && await page.locator(`.crow[data-open="${SID}"] .cfr.t-bad`).count() === 0, 'the real case: Reply 2.3 min, not slow');
   const mara = (await page.locator('.sacard', { hasText: 'Mara Quill' }).innerText()).replace(/\s+/g, ' ');
-  ok(/Avg first reply \d+(\.\d)? min/.test(mara) && (await page.locator('.sacard', { hasText: SA0 }).locator('.safr').innerText()).includes('Avg first reply'), `SA cards add Avg first reply (${mara.match(/Avg first reply [^ ]+ min/)[0]})`);
+  ok(/First reply \d+(\.\d)? min median · \d+(\.\d)? min p90/.test(mara) && !/Avg first reply/.test(mara), `SA cards show the median and p90 first reply, like the Lightdash chart (${(mara.match(/First reply .*? p90/) || [''])[0]})`);
   await shot(page, 'chats-queue.png'); await shot(page, 'queue-ticket.png');
   for (const wd of [1100, 900]) { await page.setViewportSize({ width: wd, height: 900 }); await page.waitForTimeout(120);
     ok(await width(page) <= wd && await page.evaluate(() => [...document.querySelectorAll('.crow .cmain')].every(m => m.getBoundingClientRect().width >= 160)), `${wd}px queue: rows keep room for the chat, no overflow`) }
@@ -201,14 +201,14 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(tm.segs.length === 2 && /on-support/.test(tm.segs[0]) && !/now/.test(tm.segs[0]) && /on-client/.test(tm.segs[1]) && /\bnow\b/.test(tm.segs[1]) && /^Support's turn 2\.3 min/.test(tm.legend[0]) && /^Waiting on client now/.test(tm.legend[1]), `status strip: ${tm.legend.join(' → ')}`);
   ok(tm.tot[0] === "On Support's side 2.3 min" && tm.tot[1] === "On the client's side –" && tm.tot[2] === 'In handoff –', 'totals: Support 2.3 min, client –, handoff –');
   ok(tm.note === "WIRA doesn't record a time for each message, so only the first reply can be timed." && await page.locator('#cTicket .tmnote').count() === 1, 'the note says why only the first reply is timed');
-  const tmx = await page.evaluate(() => { const d = document.createElement('div'), c = { sid: '1', at: '2026-10-12T10:00:00', frt: 2.1 };
+  const tmx = await page.evaluate(() => { const d = document.createElement('div'), c = { sid: '1', at: '2026-10-12T10:00:00', frt: 22 };
     d.innerHTML = chTimingHtml(c, { timing: { opened: c.at, firstClientAt: c.at, firstReplyAt: '2026-10-12T10:22:00', firstReplyMin: 22, wiraFirstReplyMin: 2.1, slowFirstReply: true, closedAt: '2026-10-12T12:40:00', handleMin: 160,
       states: [{ at: c.at, on: 'support', min: 22 }, { at: '2026-10-12T10:22:00', on: 'handoff', min: 60 }, { at: '2026-10-12T11:22:00', on: 'client', min: 78 }, { at: '2026-10-12T12:40:00', on: 'closed', min: null }], waitingOnSupportMin: 22, waitingOnClientMin: 78, waitingOnHandoffMin: 60 } });
     const old = document.createElement('div'); old.innerHTML = chTkFields({ sid: '2', frt: 4, at: c.at }, { sid: '2' }) + chTimingHtml({ sid: '2', frt: 4 }, { sid: '2' });
-    return { slow: [...d.querySelectorAll('.slowb')].map(x => x.textContent), red: !!d.querySelector('.tmfr .frm.t-bad'), wira: d.querySelector('.wsays').textContent, handle: d.textContent.includes('2 h 40 min'), closed: d.textContent.includes('12:40 PM'),
+    return { slow: [...d.querySelectorAll('.slowb')].map(x => x.textContent), red: !!d.querySelector('.tmfr .frm.t-bad'), wira: d.querySelector('.wsays') ? d.querySelector('.wsays').textContent : null, handle: d.textContent.includes('2 h 40 min'), closed: d.textContent.includes('12:40 PM'),
       legend: [...d.querySelectorAll('.tmst')].map(x => [...x.children].map(c => c.textContent.trim()).filter(Boolean).join(' ')), oldFr: [...old.querySelectorAll('.tkf')].find(x => x.querySelector('dt').textContent === 'First reply').querySelector('dd').textContent, oldTiming: !!old.querySelector('#tkTiming') } });
   ok(tmx.slow.includes('Slow first reply') && tmx.slow.includes('Slow') && tmx.red && tmx.handle && tmx.closed, 'a slow chat: Slow badge, red minutes, closed time and handle time 2 h 40 min');
-  ok(tmx.wira === 'WIRA says 2.1 min', 'the WIRA mismatch hint shows when the two first-reply values differ (22 vs 2.1)');
+  ok(tmx.wira === null, 'no second first-reply figure: WIRA\'s is the one shown');
   ok(tmx.legend.length === 4 && /^Handoff 1 h/.test(tmx.legend[1]) && /^Closed/.test(tmx.legend[3]), `status labels: ${tmx.legend.join(' → ')}`);
   ok(tmx.oldFr === '4 min' && !tmx.oldTiming, 'an older audit without timing: first reply from frt, no Timing block');
   // full width: What happened and the Analysis rows fill their cards at 1280, 1100 and 900

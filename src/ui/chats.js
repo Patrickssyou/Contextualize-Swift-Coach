@@ -39,10 +39,11 @@ function chFrt(m){if(m==null||isNaN(m))return "–";m=Number(m);return m<60?(Mat
 /* ---------- timing. WIRA keeps no time per message: only the first reply and the status changes (timing.states) are timed. An audit's timing has the states; a queue doc's may not ---------- */
 const chTim=(c,a)=>(a&&a.timing)||(c&&c.timing)||null;
 const chNum=v=>v==null||v===""||isNaN(v)?null:Number(v);
-function chFirstMin(c,a){const t=chTim(c,a),m=t&&chNum(t.firstReplyMin);return m!=null?m:chNum(c&&c.frt)!=null?chNum(c.frt):chNum(a&&a.frt)}
-function chSlow(c,a){const t=chTim(c,a);if(t&&typeof t.slowFirstReply==="boolean"&&chNum(t.firstReplyMin)!=null)return t.slowFirstReply;const m=chFirstMin(c,a);return m!=null&&m>(CHAT.slowReplyMin||15)}
+/* first reply = WIRA's own first response time (the Lightdash metric); the timestamps only fill in when WIRA has none */
+function chFirstMin(c,a){const f=chNum(c&&c.frt)!=null?chNum(c.frt):chNum(a&&a.frt);if(f!=null)return f;const t=chTim(c,a);return t?chNum(t.firstReplyMin):null}
+function chSlow(c,a){const m=chFirstMin(c,a);return m!=null&&m>(CHAT.slowReplyMin||15)}
 /* WIRA's own first-response figure, when it is 1 min or more off the times */
-function chWiraSays(c,a){const t=chTim(c,a),w=t&&chNum(t.wiraFirstReplyMin),f=t&&chNum(t.firstReplyMin);return w!=null&&f!=null&&Math.abs(w-f)>=1?w:null}
+function chWiraSays(){return null}
 /* a duration: 2.3 min, 1 h 5 min, 2 d 3 h */
 function chHm(m){m=chNum(m);if(m==null)return "–";if(m<60)return (Math.round(m*10)/10)+" min";const t=Math.round(m);if(t<1440)return Math.floor(t/60)+" h"+(t%60?" "+(t%60)+" min":"");
   const h=Math.round(t/60);return Math.floor(h/24)+" d"+(h%24?" "+(h%24)+" h":"")}
@@ -301,10 +302,10 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
     chatNote?esc(chatNote.text):!db?"Sign in to claude.ai to pull chats.":!mcp?"Lightdash isn't available in this view.":
     !wk.length?(ready?"Not pulled yet":"Loading…"):esc(`${wk.length} chats · ${picked} picked · ${graded} graded · ${reviewed} reviewed`+(chatPolicyDoc?"":" · No compensation policy saved"));
   const sas=chSaOrder(wk.map(c=>c.sa));
-  $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l),fr=avg(l.map(c=>chFirstMin(c,chatAud[c.sid])).filter(x=>x!=null));
+  $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l),frs=l.map(c=>chFirstMin(c,chatAud[c.sid])).filter(x=>x!=null).sort((x,y)=>x-y),pq=q=>frs.length?frs[Math.min(frs.length-1,Math.ceil(q*frs.length)-1)]:null,fr=pq(.5),f90=pq(.9);
     return `<button type="button" class="sacard" data-sajump="${i}"><span class="satop"><b>${esc(sa)}</b><span class="saavg num t-${chVB(av)}">${av==null?"–":fmt(av)+"%"}</span></span>
       <span class="sanums">${[["chats",l.length],["picked",l.filter(c=>c.picked).length],["graded",l.filter(c=>chatAud[c.sid]).length],["reviewed",rv.length]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span>
-      ${fr!=null?`<span class="safr">Avg first reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b></span>`:""}
+      ${fr!=null?`<span class="safr">First reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b> median · <b class="num${f90>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(f90))}</b> p90</span>`:""}
       ${ct.n?`<span class="sacomp t-${ct.right===ct.n?"good":"bad"}">Comp right <b class="num">${ct.right} of ${ct.n}</b></span>`:""}</button>`}).join("");
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";
