@@ -557,3 +557,48 @@ a.srcchip:hover{border-color:var(--accent)}
   .chr>span:nth-child(n+5){display:none}
 }
 @media (max-width:560px){.lrcharts{grid-template-columns:minmax(0,1fr)}.cprow>summary .cpmix{grid-column:2/-1}.cpsr{grid-template-columns:minmax(0,1fr) 40px 60px}.cpsr>span:nth-child(4){grid-column:1/-1}}
+
+/* ---------- the audit's four sections: 1 Ticket (numbered in its header), 2 Evidence, 3 Scorecard, 4 Coaching ---------- */
+.tkhd .tknum{align-self:center;margin-right:-6px}.tkhd .tknum+.tkttl{flex:1}
+.evh{margin:0 0 8px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+#cs-ev .qbody{display:flex;flex-direction:column;gap:16px}
+.evbrief{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:14px;line-height:1.45}
+.evbrief li{overflow-wrap:anywhere}
+.evbrief li::marker{color:var(--tp)}
+.evstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:0}
+.evi{background:var(--soft);border-radius:8px;padding:8px 10px;min-width:0}
+.evi.wide{grid-column:1/-1}
+.evi dt{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:3px}
+.evi dd{margin:0;font-size:13.5px;line-height:1.4;overflow-wrap:anywhere}
+.evwhy{color:var(--ink)}
+.evi .cites{margin-left:4px}
+.evsrc{display:flex;flex-direction:column}
+.srcf{border-top:1px solid var(--line);scroll-margin-top:12px}
+.srcf:last-child{border-bottom:1px solid var(--line)}
+.srcf>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:10px;padding:10px 2px;min-width:0}
+.srcf>summary::-webkit-details-marker{display:none}
+.srcf>summary::before{content:"▸";color:var(--muted);transition:transform .15s;flex:none}
+.srcf[open]>summary::before{transform:rotate(90deg)}
+.srcf>summary:hover .srct{color:var(--accent)}
+.srct{font-weight:600;font-size:14px;flex:none}
+.srcs{font-size:12.5px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srcb{padding:4px 0 16px;min-width:0}
+.srcb>.bubbles{padding-top:4px}
+/* coaching cards */
+#cs-coach .qbody{gap:12px}
+.cwell .wchips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.wchips li{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--s3-soft);color:var(--s3);font-weight:600;overflow-wrap:anywhere}
+.fixes{display:flex;flex-direction:column;gap:10px}
+.fixcard{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0;background:var(--panel)}
+.fixcard.p1{border-left-color:var(--s1)} .fixcard.p2{border-left-color:var(--s2)} .fixcard.p3{border-left-color:var(--na)}
+.fixhd{display:flex;align-items:center;gap:8px;min-width:0}
+.fixhd h4{margin:0;font-size:14.5px;font-weight:700;min-width:0;overflow-wrap:anywhere}
+.fixb h5{margin:0 0 2px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.fixb p{margin:0;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}
+.fixdo h5{color:var(--s3)}
+.fixmodel{margin:0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.fixmodel p{margin:0;font-size:13.5px;line-height:1.45;font-style:italic;min-width:0;overflow-wrap:anywhere}
+.fixmodel .btn{flex:none}
+.coachbar{align-items:center}
+.nofix{margin:0}
+@media (max-width:560px){.fixmodel{flex-direction:column}.evstrip{grid-template-columns:repeat(2,minmax(0,1fr))}}
