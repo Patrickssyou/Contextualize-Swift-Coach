@@ -30,7 +30,7 @@
 .satop b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .saavg{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .t-good{color:var(--s3)} .t-ok{color:var(--s2)} .t-bad{color:var(--s1)} .t-none{color:var(--muted)}
-.sanums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;font-size:11px;color:var(--muted)}
+.sanums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;font-size:11px;color:var(--muted)}
 .sanums span{display:flex;flex-direction:column;line-height:1.2;min-width:0}
 .sanums b{font-size:16px;color:var(--ink);font-weight:600}
 .sagroups{display:flex;flex-direction:column;gap:14px}
@@ -691,3 +691,26 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 }
 @keyframes chpup{from{transform:translateY(32px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.chpanel{animation:none}}
+
+/* ---------- Dashboard: the week's numbers on top; the SA cards lead with the average score ---------- */
+.dmet{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.dm{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+.dmv{font-family:var(--f-display);font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.dm.dmain .dmv{font-size:30px;font-family:var(--f-display);font-weight:800}
+.dm.t-good .dmv{color:var(--s3)} .dm.t-ok .dmv{color:var(--s2)} .dm.t-bad .dmv{color:var(--s1)}
+.dms{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.dm.dmain{border-top:4px solid currentColor;padding-top:9px}
+.dm.dmain.t-none{border-top-color:var(--line)}
+.dbar{height:10px;border-radius:5px;margin-top:4px}
+.dmixl{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
+.dmixl li{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.dmixl i{width:8px;height:8px;border-radius:2px;display:block}
+.dmixl i.s3{background:var(--s3)} .dmixl i.s3.lt{background:var(--s3);opacity:.55} .dmixl i.s2{background:var(--s2)} .dmixl i.s1{background:var(--s1)} .dmixl i.s0{background:var(--s0)}
+.dmixl b{color:var(--ink);font-weight:700}
+.sascore{font-family:var(--f-display);font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.saverd{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.sacard{border-top:4px solid var(--line)}
+.sacard:has(.sascore.t-good){border-top-color:var(--s3)} .sacard:has(.sascore.t-ok){border-top-color:var(--s2)} .sacard:has(.sascore.t-bad){border-top-color:var(--s1)}
+@media (max-width:1000px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr))}.dm.dmain{grid-column:span 1}.dm.dmix{grid-column:span 2}}
+@media (max-width:560px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dm.dmain,.dm.dmix{grid-column:1/-1}.dm{padding:10px 10px 11px}.dm .lbl-sm{font-size:10px;letter-spacing:.05em}.dmv{font-size:18px}.dm.dmain .dmv{font-size:28px}.dms{font-size:11.5px}
+  .sascore{font-size:24px}}

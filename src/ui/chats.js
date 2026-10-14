@@ -289,14 +289,33 @@ function chRowHtml(c){const n=(c.msgs||[]).length,g=chCanGrade(c);
     <span class="cfl">${chFlags(c)}</span>
     <span class="cstat">${chStatusPill(c)}</span>
     <button type="button" class="cpick" data-pick="${esc(c.sid)}" aria-pressed="${!!c.picked}" aria-label="Pick ${esc(c.restaurant||c.sid)}"${g?"":" disabled"}>✓</button></div>`}
+/* ---------- DASHBOARD: the week's numbers, one card per SA (lowest score first), then the chats by SA ---------- */
+/* a chat's current score: the reviewer's % where there is a review, else Claude's */
+function chCurPct(c){const r=chatRev[c.sid],a=chatAud[c.sid];return r&&r.pct!=null?Number(r.pct):a&&a.pct!=null?Number(a.pct):null}
+function chMedian(L){const x=L.filter(v=>v!=null&&!isNaN(v)).map(Number).sort((p,q)=>p-q),n=x.length;return n?(n%2?x[(n-1)/2]:(x[n/2-1]+x[n/2])/2):null}
+function chMeanPct(L){const x=L.filter(v=>v!=null);return x.length?x.reduce((t,v)=>t+v,0)/x.length:null}
+const CH_VMIX=[["great","s3"],["good","s3 lt"],["okay","s2"],["needs_work","s1"],["miss","s0"]];
+function chStats(list){const sc=list.map(chCurPct).filter(v=>v!=null),fr=list.map(c=>chFirstMin(c,chatAud[c.sid]));
+  const mine=list.filter(c=>{const r=chatRev[c.sid];return r&&(!myId||!r.by||r.by===myId)}).length,mix={};
+  sc.forEach(p=>{const v=chatVerdict(p);if(v)mix[v.id]=(mix[v.id]||0)+1});
+  return {n:list.length,scored:sc.length,avg:chMeanPct(sc),fr:chMedian(fr),nfr:fr.filter(v=>v!=null).length,comp:chCompTally(list),mine,mix,
+    graded:list.filter(c=>chatAud[c.sid]).length,reviewed:list.filter(c=>chatRev[c.sid]).length}}
+function chMetricsHtml(S){const v=chatVerdict(S.avg),slowL=CHAT.slowReplyMin||15,cell=(id,k,big,sub,cls)=>`<div class="dm${cls?" "+cls:""}" id="${id}"><span class="lbl-sm">${k}</span><b class="dmv num">${big}</b>${sub?`<span class="dms">${sub}</span>`:""}</div>`;
+  const mixN=CH_VMIX.reduce((t,[id])=>t+(S.mix[id]||0),0);
+  const mix=`<div class="dm dmix" id="dmMix"><span class="lbl-sm">Verdicts</span>${mixN?`<div class="vbar dbar" role="img" aria-label="${esc(CH_VMIX.map(([id])=>`${chVLabel(id)} ${S.mix[id]||0}`).join(", "))}">${CH_VMIX.filter(([id])=>S.mix[id]).map(([id,cl])=>`<i class="${cl}" style="flex-grow:${S.mix[id]}"></i>`).join("")}</div>`:""}
+    <ul class="dmixl">${CH_VMIX.map(([id,cl])=>`<li data-v="${id}"><i class="${cl}"></i>${esc(chVLabel(id))} <b class="num">${S.mix[id]||0}</b></li>`).join("")}</ul></div>`;
+  return cell("dmScore","Team quality score",S.avg==null?"–":fmt(S.avg)+"%",`${v?esc(v.label)+" · ":""}${chPl(S.scored,"chat")}`,"dmain t-"+chVB(S.avg))+mix+
+    cell("dmFr","First reply median",S.fr==null?"–":esc(chFrt(S.fr)),S.fr!=null&&S.fr>slowL?`<span class="t-bad">Slower than ${slowL} min</span>`:chPl(S.nfr,"chat"),S.fr!=null&&S.fr>slowL?"t-bad":"")+
+    cell("dmComp","Comp accuracy",S.comp.n?`${S.comp.right} of ${S.comp.n}`:"–",S.comp.n?`${fmt(S.comp.right/S.comp.n*100)}% right`:"No checks",S.comp.n?"t-"+(S.comp.right===S.comp.n?"good":S.comp.right/S.comp.n>=.8?"ok":"bad"):"")+
+    cell("dmRev","Reviewed by you",`${S.mine} of ${S.n}`,`${S.graded} graded`)}
 function renderChatQueue(){const v=$("#view-chats");if(!v)return;
-  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="panel quest" id="chatQuest"></div>
+  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="chatMetrics" aria-label="This week"></div><div class="panel quest" id="chatQuest"></div>
     <div class="panel pullbar chatbar"><div class="cbinfo"><div class="h2" style="margin:0">WIRA chats</div><div class="hint cstatus" id="chatStatus" role="status"></div></div><div class="cbtns" id="chatBtns"></div></div>
     <div class="sastrip" id="chatStrip"></div><div class="sagroups" id="chatGroups"></div>`}
   const wk=chatsOfWeek(),ready=chatsReady&&chW.week===week,can=!!(db&&mcp),canAi=can&&!!sampleFn,busy=!!(chatRun||chatPullRun),pk=chGradeList("picks").length,all=chGradeList("all").length;
   const graded=wk.filter(c=>chatAud[c.sid]).length,reviewed=wk.filter(c=>chatRev[c.sid]).length,picked=wk.filter(c=>c.picked).length;
   /* a week with no pull shows the Pull button only */
-  $("#chatQuest").hidden=!wk.length;
+  $("#chatQuest").hidden=!wk.length;$("#chatMetrics").hidden=!wk.length;if(wk.length)$("#chatMetrics").innerHTML=chMetricsHtml(chStats(wk));
   $("#chatBtns").innerHTML=`<button type="button" class="btn${wk.length?"":" primary"}" id="chatPull"${can&&!busy&&ready?"":" disabled"}>${chatPullRun?"Pulling…":wk.length?"Pull again":"Pull chats"}</button>`+
     (wk.length?`<button type="button" class="btn${pk?" primary":""}" id="chatGradePicks"${canAi&&!busy&&pk?"":" disabled"}>Grade picks<span class="bc num">${pk||""}</span></button>
     <button type="button" class="btn" id="chatGradeAll"${canAi&&!busy&&all?"":" disabled"}>Grade all<span class="bc num">${all||""}</span></button>`:"")+
@@ -306,11 +325,14 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
     chatNote?esc(chatNote.text):!db?"Sign in to claude.ai to pull chats.":!mcp?"Lightdash isn't available in this view.":
     !wk.length?(ready?"Not pulled yet":"Loading…"):esc(`${wk.length} chats · ${picked} picked · ${graded} graded · ${reviewed} reviewed`+(chatPolicyDoc?"":" · No compensation policy saved"));
   const sas=chSaOrder(wk.map(c=>c.sa));
-  $("#chatStrip").innerHTML=sas.map((sa,i)=>{const l=wk.filter(c=>c.sa===sa),rv=l.filter(c=>chatRev[c.sid]),av=avg(rv.map(c=>chatRev[c.sid].pct)),ct=chCompTally(l),frs=l.map(c=>chFirstMin(c,chatAud[c.sid])).filter(x=>x!=null).sort((x,y)=>x-y),pq=q=>frs.length?frs[Math.min(frs.length-1,Math.ceil(q*frs.length)-1)]:null,fr=pq(.5),f90=pq(.9);
-    return `<button type="button" class="sacard" data-sajump="${i}"><span class="satop"><b>${esc(sa)}</b><span class="saavg num t-${chVB(av)}">${av==null?"–":fmt(av)+"%"}</span></span>
-      <span class="sanums">${[["chats",l.length],["picked",l.filter(c=>c.picked).length],["graded",l.filter(c=>chatAud[c.sid]).length],["reviewed",rv.length]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span>
-      ${fr!=null?`<span class="safr">First reply <b class="num${fr>(CHAT.slowReplyMin||15)?" t-bad":""}">${esc(chFrt(fr))}</b> median</span>`:""}
-      ${ct.n?`<span class="sacomp t-${ct.right===ct.n?"good":"bad"}">Comp right <b class="num">${ct.right} of ${ct.n}</b></span>`:""}</button>`}).join("");
+  /* one card per SA, the lowest score first (no score yet last); the jump goes to that SA's group below */
+  const cards=sas.map((sa,i)=>({sa,i,l:wk.filter(c=>c.sa===sa)})).map(x=>Object.assign(x,{S:chStats(x.l)})).sort((x,y)=>(x.S.avg==null)-(y.S.avg==null)||(x.S.avg??0)-(y.S.avg??0)||x.i-y.i);
+  $("#chatStrip").innerHTML=cards.map(({sa,i,S})=>{const vd=chatVerdict(S.avg),slow=S.fr!=null&&S.fr>(CHAT.slowReplyMin||15);
+    return `<button type="button" class="sacard" data-sajump="${i}" data-sa="${esc(sa)}"><span class="satop"><b>${esc(sa)}</b>${vd?`<span class="saverd t-${chVB(S.avg)}">${esc(vd.label)}</span>`:""}</span>
+      <span class="sascore num t-${chVB(S.avg)}">${S.avg==null?"–":fmt(S.avg)+"%"}</span>
+      ${S.fr!=null?`<span class="safr">First reply <b class="num${slow?" t-bad":""}">${esc(chFrt(S.fr))}</b> median</span>`:""}
+      ${S.comp.n?`<span class="sacomp t-${S.comp.right===S.comp.n?"good":"bad"}">Comp right <b class="num">${S.comp.right} of ${S.comp.n}</b></span>`:""}
+      <span class="sanums">${[["chats",S.n],["graded",S.graded],["reviewed",S.reviewed]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span></button>`}).join("");
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";
     return `<div class="panel sagroup" id="sag-${i}"><h3><span>${esc(sa)}${pips}</span><span class="num hint">${done} of ${picks.length} picks reviewed</span></h3>${l.map(chRowHtml).join("")}</div>`}).join(""):"";

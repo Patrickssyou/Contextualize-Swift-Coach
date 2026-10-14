@@ -560,6 +560,37 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE, 'after saving, the ticket shows the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }
+  // ===== 6b. Dashboard: the week's numbers, then one card per SA with the average score, lowest first
+  await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
+  const DB = await page.evaluate(w => { const L = Object.entries(window.__data).filter(([p]) => p.startsWith(`chatWeeks/${w}/chats/`)).map(([, d]) => d);
+    const aud = s => window.__data[`chatWeeks/${w}/audits/${s}`], rev = s => window.__data[`chatWeeks/${w}/reviews/${s}`];
+    return L.map(c => ({ sid: String(c.sid), sa: c.sa, ai: aud(c.sid) ? aud(c.sid).pct : null, rv: rev(c.sid) ? rev(c.sid).pct : null, fr: chFirstMin(c, aud(c.sid)) })) }, WEEK);
+  const mean = L => L.length ? L.reduce((t, v) => t + v, 0) / L.length : null;
+  const med = L => { const x = L.slice().sort((a, b) => a - b), k = x.length; return k ? (k % 2 ? x[(k - 1) / 2] : (x[k / 2 - 1] + x[k / 2]) / 2) : null };
+  const cur = d => d.rv != null ? d.rv : d.ai, scored = DB.filter(d => cur(d) != null), teamAvg = mean(scored.map(cur));
+  const realD = DB.find(d => d.sid === SID);
+  ok(realD.rv != null && realD.ai != null && realD.rv !== realD.ai && fmt(teamAvg) !== fmt(mean(DB.filter(d => d.ai != null).map(d => d.ai))), `the reviewed chat's % (${fmt(realD.rv)}) differs from Claude's (${fmt(realD.ai)}), so the override shows`);
+  ok((await txt(page, '#dmScore .dmv')) === fmt(teamAvg) + '%' && (await txt(page, '#dmScore .dms')).endsWith(`${scored.length} chats`), `Team quality score ${fmt(teamAvg)}% over ${scored.length} chats: the mean, reviewed % over Claude's`);
+  const vmix = {}; scored.forEach(d => { const v = B.chatVerdict(cur(d)).id; vmix[v] = (vmix[v] || 0) + 1 });
+  ok(await page.evaluate(() => [...document.querySelectorAll('#dmMix .dmixl li')].map(li => [li.dataset.v, Number(li.querySelector('b').textContent)])).then(x => x.every(([v, k]) => k === (vmix[v] || 0)) && x.length === 5), `verdict mix: ${JSON.stringify(vmix)}`);
+  const frs = DB.map(d => d.fr).filter(x => x != null), teamFr = med(frs);
+  ok((await txt(page, '#dmFr .dmv')) === await page.evaluate(m => chFrt(m), teamFr), `first reply median ${await page.evaluate(m => chFrt(m), teamFr)} over ${frs.length} chats`);
+  const tally = await page.evaluate(() => chCompTally(chatsOfWeek()));
+  ok((await txt(page, '#dmComp .dmv')) === `${tally.right} of ${tally.n}` && (await txt(page, '#dmRev .dmv')) === `1 of ${DB.length}`, `comp accuracy ${tally.right} of ${tally.n}; reviewed by you 1 of ${DB.length}`);
+  const cardsDom = await page.evaluate(() => [...document.querySelectorAll('#chatStrip .sacard')].map(c => ({ sa: c.dataset.sa, score: c.querySelector('.sascore').textContent, fr: (c.querySelector('.safr b') || {}).textContent || null })));
+  const bySa = {}; DB.forEach(d => (bySa[d.sa] = bySa[d.sa] || []).push(d));
+  const wantCards = Object.entries(bySa).map(([sa, L]) => ({ sa, avg: mean(L.filter(d => cur(d) != null).map(cur)), fr: med(L.map(d => d.fr).filter(x => x != null)) })).sort((x, y) => (x.avg == null) - (y.avg == null) || (x.avg ?? 0) - (y.avg ?? 0));
+  ok(cardsDom.length === wantCards.length && cardsDom.every((c, i) => c.sa === wantCards[i].sa && c.score === (wantCards[i].avg == null ? '–' : fmt(wantCards[i].avg) + '%')), `SA cards sorted lowest first: ${cardsDom.map(c => c.sa.split(' ')[0] + ' ' + c.score).join(', ')}`);
+  ok(await Promise.all(cardsDom.map((c, i) => wantCards[i].fr == null ? c.fr === null : page.evaluate(m => chFrt(m), wantCards[i].fr).then(t => t === c.fr))).then(x => x.every(Boolean)), 'each card: its first reply median');
+  await page.click(`#chatStrip .sacard[data-sa="${cardsDom[0].sa}"]`); await page.waitForTimeout(500);
+  ok(await page.evaluate(sa => { const g = [...document.querySelectorAll('.sagroup')].find(x => x.querySelector('h3 span').textContent.startsWith(sa)); const r = g.getBoundingClientRect(); return r.top >= -2 && r.top < innerHeight / 2 }, cardsDom[0].sa), 'a card jumps to that SA\'s chats');
+  await shot(page, 'dashboard.png');
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120); await shot(page, 'dashboard-dark.png'); await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#chatMetrics .dm, #chatStrip .sacard')].every(e => e.getBoundingClientRect().right <= 390)), `390px Dashboard: no horizontal overflow (${await width(page)})`);
+  await shot(page, 'dashboard-390.png'); await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(100);
+  await page.click(`.crow[data-open="${SID}"] .clink`); await page.waitForTimeout(300);
+
 
   // ===== 7. (calibration cases are no longer saved from the audit)
   ok(await page.locator('#calOpen, #calForm').count() === 0 && !(await page.evaluate(s => !!window.__data['chatCalib/' + s], SID)), 'no Save as calibration case');
