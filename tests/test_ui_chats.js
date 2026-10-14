@@ -43,7 +43,7 @@ const wantSubs = w => ['audits', 'chats', 'reviews'].map(k => `chatWeeks/${w}/${
 const caches = (page, from) => page.evaluate(n => window.__prompts.slice(n).map(p => p.cache), from);
 const nPrompts = page => page.evaluate(() => window.__prompts.length);
 const noteOf = page => page.evaluate(() => { const s = String(chatSel); return chNote(chatBy(s), chatAud[s], chatDraft(s)) });
-const sel = page => page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab');
+const sel = page => page.locator('[role=tab][data-tab][aria-selected="true"]').getAttribute('data-tab');   // the nav tabs (the ticket's own tabs have no data-tab)
 const width = page => page.evaluate(() => document.documentElement.scrollWidth);
 const txt = (page, s) => page.locator(s).innerText();
 const shot = async (page, name, full) => { await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; window.scrollTo(0, 0) }); await page.waitForTimeout(120);
@@ -81,14 +81,16 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(dts[0] === 'case type' && (await page.locator('#evStrip dd').first().innerText()).trim() === 'Menu setup' && !dts.includes('policy') && !dts.includes('request'), 'Evidence strip: the case type first; no Policy on a non-compensation case');
   ok((await page.locator('#evStrip .pill').first().innerText()) === 'No fault' && (await txt(page, '#cs-ev .qans')).startsWith('Menu setup · No order'), 'fault none shows as No fault');
   ok(JSON.stringify(await page.locator('#evBrief li').allInnerTexts()) === JSON.stringify(['The client asked for two price fixes; the SA sent them to the menu team and confirmed once live.']), 'an older audit without a brief: the analysis summary stands in');
-  ok(await page.locator('#cs-ev details.srcf').count() === 5 && await page.locator('#cs-ev details.srcf[open]').count() === 0 && (await txt(page, '#src-chat > summary')).replace(/\s+/g, ' ') === 'Chat transcript 6 messages', 'sources are folded by default, one line each');
+  ok(await page.locator('#cs-ev details.srcf').count() === 5 && await page.locator('#cs-ev details.srcf[open]').count() === 0 && (await txt(page, '#src-chat > summary')).replace(/\s+/g, ' ') === 'Chat 6 messages', 'sources are folded by default, one line each');
   await page.click('#src-chat > summary'); await page.waitForTimeout(80);
   ok(await page.locator('#src-chat[open]').count() === 1, 'a source opens on click');
   ok(await page.locator('#cs-chat .sysline').count() === 1 && /system/i.test(await txt(page, '#cm-2.sysline')) && (await txt(page, '#cm-2')).includes('Menu change request created') && await page.locator('#cs-chat .bub').count() === 5, 'bot message renders as a system line, not a bubble');
   ok(await page.locator('#cs-chat .bub.other').count() === 1 && (await txt(page, '#cs-chat .bub.other .bwho')).includes('trainer'), 'unknown role: neutral bubble labelled with the role');
   await page.click('#src-fields > summary'); await page.waitForTimeout(80);
   const rf = await txt(page, '#cxFields');
-  ok(/request fields/i.test(rf) && rf.includes('Large Margherita') && /new price/i.test(rf) && rf.includes('16.99') && (await txt(page, '#src-fields > summary')).includes('4 fields'), 'Evidence › Request fields');
+  ok(rf.includes('Large Margherita') && /new price/i.test(rf) && rf.includes('16.99') && (await txt(page, '#src-fields > summary')).replace(/\s+/g, ' ') === 'WIRA form Item, New price, Second item, Second price', 'Evidence › WIRA form: a plain title, the field names as the summary, label: value inside');
+  ok(JSON.stringify(await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = chVia({ fields: '{"message_source":"cma"}' }) + chVia({ fields: { message_source: 'pos' } }) + chVia({ fields: '{}' });
+    return [[...d.querySelectorAll('.viachip')].map(x => x.textContent), chFieldList({ message_source: 'cma', item: 'Pie' }), chFieldList('{"message_source":"pos"}')] })) === JSON.stringify([['via CMA', 'via POS'], [['Item', 'Pie']], []]), 'message_source leaves the form and shows as a "via" chip');
   ok(JSON.stringify(await page.evaluate(() => [chFieldList({ a_b: 'x', n: null }), chFieldList([{ name: 'Item', value: 'Pie' }, 'loose']), chFieldList('not json'), chFieldList('{}')]))
     === JSON.stringify([[['A b', 'x']], [['Item', 'Pie'], ['', 'loose']], [['', 'not json']], []]), 'request fields read objects, name/value lists and raw strings');
   // an older chat-1 audit (no check, no findings, no priority) still gets a ticket: fields, what happened, and no findings because every mark is full or N/A
@@ -192,10 +194,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await shot(page, 'ticket-top.png'); await shot(page, 'ticket-full.png', true);
   ok(await page.locator('#cvRoute .rm').count() === 4 && (await txt(page, '#cvEsc')) === 'Level ' + markL(realA.grade.scores.esc), `route marks with escalation Level ${markL(realA.grade.scores.esc)}`);
   ok((await txt(page, '#cvCase')).includes('COMPENSATION') && (await page.locator('#evStrip dt').allInnerTexts()).map(t => t.toLowerCase()).includes('policy'), 'a compensation case shows its policy row in the strip');
-  await page.click('#src-order > summary'); await page.waitForTimeout(80);
+  await page.click('#src-order > summary .srct'); await page.waitForTimeout(80);
   const ord = await txt(page, '.ordcard');
   ok(/Ticket 65/.test(ord) && ord.includes('$54.72') && ord.includes('$4.38') && ord.includes('$59.10'), 'Evidence › Order: ticket 65, items $54.72, tax $4.38, total $59.10');
-  await page.click('#src-order > summary'); await page.waitForTimeout(80);
+  await page.click('#src-order > summary .srct'); await page.waitForTimeout(80);
 
   // ===== 4b. the QA ticket: on top, fields, comp check, findings
   ok(await page.evaluate(() => { const t = document.getElementById('cTicket'), c = document.getElementById('cs-ev'); return !!t && !!c && !!(t.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) && t.getBoundingClientRect().bottom <= c.getBoundingClientRect().top }), 'the ticket sits above Evidence');
@@ -239,8 +241,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const wira = page.locator('#cTicket .tkf a', { hasText: 'WIRA ' + SID }), gdo = page.locator('#cTicket .tkf a', { hasText: 'Ticket 65' }), o1 = realA.orders[0];
   ok(await wira.getAttribute('href') === W.fx.chatRow.wira_project_tasks_wira_ticket_url && await wira.getAttribute('target') === '_blank', 'Chat: the WIRA link, new tab');
   ok((await gdo.getAttribute('href')) === `https://greendot.prod.letsdowonders.io/greendot/restaurant/${encodeURIComponent(W.code)}?orderId=${encodeURIComponent(o1.id)}` && (await gdo.getAttribute('href')).includes(encodeURIComponent(o1.id)) && (await fv('Order')).includes('$59.10'), 'Order: GreenDot order link with the order id, and the total');
-  const recs = page.locator('#cTicket .tkf a', { hasText: /^Rec/ });
-  ok(await recs.count() === realA.calls.length && (await recs.first().getAttribute('href')).includes('/callrecordings?callIds=' + encodeURIComponent(realA.calls[0].id)), `Recordings: ${realA.calls.length} Rec links`);
+  const recs = page.locator('#cTicket .tkf a', { hasText: /^▶ Call \d/ });
+  ok(await recs.count() === realA.calls.length && (await recs.first().getAttribute('href')).includes('/callrecordings?callIds=' + encodeURIComponent(realA.calls[0].id)) && /^▶ Call 1 \(\d{1,2}:\d{2} [AP]M\)$/.test((await recs.first().innerText()).trim()), `Recordings: ${realA.calls.length} links reading ▶ Call 1 (time)`);
   ok(await page.evaluate(() => [...document.querySelectorAll('#cTicket a[href^="http"]')].every(a => a.target === '_blank' && /noopener/.test(a.rel))), 'every ticket link opens in a new tab');
   const comp = (await txt(page, '#tkComp')).replace(/\s+/g, ' ');
   ok(comp.includes('Due') && comp.includes('$16.42') && comp.includes(`${first} gave`) && comp.includes('$17.73') && comp.includes('Taxes included') && comp.includes('Over by $1.31') && /Wrong/.test(await txt(page, '#tkComp .tkst')), `comp check: Due $16.42, ${first} gave $17.73, Taxes included, Over by $1.31, Wrong`);
@@ -250,9 +252,48 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok((await txt(page, '#tf-amt .tkfs')).includes('set by the comp check') && (await txt(page, '#tf-amt .tkfs')).includes('1/3') && (await txt(page, '#tf-amt .tktype')).includes('Taxes included'), 'the amount finding: 1/3, set by the comp check, typed by the check');
   ok(await page.locator('.tkfind .tkq .qok').count() >= 3 && await page.locator('.tkfind').first().locator('.tkfix h5').innerText().then(t => t.toLowerCase() === `what ${first.toLowerCase()} should have done`), 'verified quotes show ✓; What <SA> should have done');
   ok(await page.locator('.tkfind details.tkmodel').count() >= 1 && await page.locator('.tkfind details.tkmodel[open]').count() === 0, 'model messages are folded');
-  const mchip = page.locator('.tkfind .srcchip[data-jump^="cm-"]').first(), mid = (await mchip.getAttribute('data-jump'));
+  // ----- the ticket's tabs: Ticket | Chat N
+  const nMsg = await page.evaluate(s => chatBy(s).msgs.length, SID), nInt = await page.evaluate(s => chatBy(s).msgs.filter(m => m.internal).length, SID);
+  const tabs = (await page.locator('#cTicket [role=tablist] [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+  ok(JSON.stringify(tabs) === JSON.stringify(['Ticket', 'Chat ' + nMsg]) && await page.locator('#tkTab-ticket[aria-selected="true"]').count() === 1 && await page.locator('#tkPan-ticket').isVisible() && await page.locator('#tkPan-chat').isHidden(), `ticket tabs: Ticket | Chat ${nMsg}, Ticket open`);
+  ok(await page.evaluate(() => { const t = document.querySelectorAll('#cTicket [role=tab]'); return [...t].every(b => b.tagName === 'BUTTON' && b.getAttribute('aria-controls') && document.getElementById(b.getAttribute('aria-controls')).getAttribute('role') === 'tabpanel') && t[0].tabIndex === 0 && t[1].tabIndex === -1 }), 'tabs are buttons with aria-selected, aria-controls and a roving tabindex');
+  await page.click('#tkTab-chat'); await page.waitForTimeout(100);
+  const tc = await page.evaluate(() => { const P = document.getElementById('tkPan-chat'), L = [...P.querySelectorAll('#tkChat > li')];
+    return { vis: !P.hidden, tk: document.getElementById('tkPan-ticket').hidden, n: L.length, ms: L.map(x => (x.querySelector('.bn') || {}).textContent), ints: [...P.querySelectorAll('.bub.internal')].map(x => x.querySelector('.ntag').textContent),
+      cl: P.querySelectorAll('.bub.cl').length, me: P.querySelectorAll('.bub.me').length, left: (P.querySelector('.bub.cl') || P).getBoundingClientRect().left, right: (P.querySelector('.bub.me') || P).getBoundingClientRect().right, pl: P.getBoundingClientRect().left, pr: P.getBoundingClientRect().right,
+      scroll: getComputedStyle(P).overflowY, tall: P.scrollHeight > P.clientHeight, foot: !!document.querySelector('#cTicket .tkfoot') } });
+  ok(tc.vis && tc.tk && tc.n === nMsg && tc.ms.every((m, i) => m === 'M' + (i + 1)), `Chat tab: all ${nMsg} messages with M numbers, the ticket body hidden`);
+  ok(tc.ints.length === nInt && nInt > 0 && tc.ints.every(t => t.startsWith('internal')), `Chat tab: ${nInt} internal notes tagged`);
+  ok(tc.cl > 0 && tc.me > 0 && tc.left - tc.pl < 40 && tc.pr - tc.right < 40, 'Chat tab: client on the left, the SA on the right');
+  ok(tc.scroll === 'auto' && tc.tall, 'Chat tab: a long chat scrolls inside the card');
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; window.scrollTo(0, 0) }); await page.waitForTimeout(80);
+  await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-chat-tab.png') });
+  await page.focus('#tkTab-chat'); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => document.activeElement.id) === 'tkTab-ticket' && await page.locator('#tkTab-ticket[aria-selected="true"]').count() === 1 && await page.locator('#tkPan-chat').isHidden(), 'keyboard: ArrowLeft moves to Ticket and selects it');
+  await page.keyboard.press('End'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => document.activeElement.id) === 'tkTab-chat' && await page.locator('#tkPan-chat').isVisible(), 'keyboard: End selects Chat');
+  await page.keyboard.press('Enter'); await page.click('#tkTab-ticket'); await page.waitForTimeout(60);
+  const mchip = page.locator('.tkfind .srcchip[data-jump^="tm-"]').first(), mid = (await mchip.getAttribute('data-jump'));
   await mchip.click(); await page.waitForTimeout(700);
-  ok(await page.evaluate(id => { const el = document.getElementById(id), r = el.getBoundingClientRect(); return el.classList.contains('flash') && r.top >= 0 && r.bottom <= innerHeight && !!el.closest('#cs-chat') && !!el.closest('#src-chat[open]') }, mid) && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`, `an M# chip opens the chat transcript, scrolls to ${mid.replace('cm-', 'M')} and highlights it`);
+  ok(await page.evaluate(id => { const el = document.getElementById(id), r = el.getBoundingClientRect(), P = document.getElementById('tkPan-chat').getBoundingClientRect();
+    return el.classList.contains('flash') && !!el.closest('#tkPan-chat') && r.top >= Math.max(0, P.top) - 1 && r.bottom <= Math.min(innerHeight, P.bottom) + 1 }, mid) && await page.locator('#tkTab-chat[aria-selected="true"]').count() === 1 && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`,
+    `an M# chip on a finding opens the Chat tab, scrolls to ${mid.replace('tm-', 'M')} and highlights it`);
+  ok(await page.locator('#src-chat').count() === 1 && await page.locator('#cs-chat > li').count() === nMsg, 'the transcript fold stays in Evidence too');
+  // the tab is kept for the page view: a repaint and another chat keep Chat
+  await page.evaluate(() => { paintTicket(); renderChatAudit(true) }); await page.waitForTimeout(60);
+  ok(await page.locator('#tkTab-chat[aria-selected="true"]').count() === 1 && await page.locator('#tkPan-chat').isVisible(), 'a repaint keeps the Chat tab');
+  await page.evaluate(w => openChat('9900901', w), PW); await page.waitForFunction(() => !!document.querySelector('#cTicket[data-sid="9900901"]'), null, { timeout: 5000 });
+  ok(await page.locator('#tkTab-chat[aria-selected="true"]').count() === 1 && (await txt(page, '#tkTab-chat')).replace(/\s+/g, ' ') === 'Chat 6' && await page.locator('#tkPan-chat #tkChat > li').count() === 6, 'switching chats keeps the Chat tab (Chat 6 on the other chat)');
+  await page.evaluate(w => openChat(w[0], w[1]), [SID, WEEK]); await page.waitForFunction(s => !!document.querySelector(`#cTicket[data-sid="${s}"]`), SID, { timeout: 5000 });
+  ok(await page.locator('#tkTab-chat[aria-selected="true"]').count() === 1, 'and back: still on Chat');
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cTicket .tktab, #tkPan-chat .bub, #tkPan-chat .sysline')].every(e => e.getBoundingClientRect().right <= 390)), `390px Chat tab: no horizontal overflow (${await width(page)})`);
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-chat-390.png') });
+  await page.click('#tkTab-ticket'); await page.waitForTimeout(80);
+  ok(await width(page) <= 390, `390px Ticket tab: no horizontal overflow (${await width(page)})`);
+  await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; window.scrollTo(0, 0) }); await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-tab-390.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
+  ok(await page.locator('#tkTab-ticket[aria-selected="true"]').count() === 1, 'back on the Ticket tab');
   const tchip = page.locator('.tkfind .srcchip[data-jump^="cx-task-"]').first();
   if (await tchip.count()) { await tchip.click(); await page.waitForTimeout(700); ok(await page.evaluate(id => document.getElementById(id).classList.contains('flash') && !!document.getElementById(id).closest('#src-tasks[open]'), await tchip.getAttribute('data-jump')), 'a Task chip opens Tasks and scrolls to the task card') }
   ok(await page.evaluate(t => { const d = document.createElement('div'); d.innerHTML = chSrcChip('Call 2') + chSrcChip('O1') + chSrcChip('Task ' + t);
@@ -283,9 +324,19 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.evaluate(() => { const f = [...document.querySelectorAll('#cTicket .tkf')].map(x => x.getBoundingClientRect().left); return f.every(l => Math.abs(l - f[0]) < 1) }), '390px: the field grid stacks in one column');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-390.png') });
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
-  const ints = await page.locator('.bub.internal').allInnerTexts();
+  const ints = await page.locator('#cs-chat .bub.internal').allInnerTexts();
   ok(ints.length === 3 && ints.every(t => t.includes('internal · inferred')), '3 internal notes tagged internal · inferred');
   ok(await page.locator('.bub.cl').count() > 0 && await page.locator('.bub.me').count() > 0, 'client bubbles left, audited SA bubbles marked');
+  // folded, the Calls row lists each call with its recording link; the Order row has the GreenDot link
+  await page.evaluate(() => { const d = document.getElementById('src-calls'); if (d) d.open = false }); await page.waitForTimeout(60);
+  const crow = await page.evaluate(() => [...document.querySelectorAll('#src-calls > summary .srcrow')].map(r => { const a = r.querySelector('a.rec'), b = a && a.getBoundingClientRect(); return { t: r.innerText.replace(/\s+/g, ' ').trim(), href: a && a.getAttribute('href'), tgt: a && a.target, vis: !!b && b.width > 0 && b.height > 0 } }));
+  ok(crow.length === realA.calls.length && crow.every((r, i) => new RegExp(`^Call ${i + 1} · \\d{1,2}:\\d{2} [AP]M · \\d+:\\d{2} · .+ ▶ Recording$`).test(r.t) && r.vis && r.tgt === '_blank' && r.href.includes('/callrecordings?callIds=' + encodeURIComponent(realA.calls[i].id))) && await page.locator('#src-calls[open]').count() === 0,
+    `Calls folded: ${crow.map(r => r.t).join(' | ')}`);
+  const gd = page.locator('#src-order > summary a.srclink');
+  ok(await gd.count() === 1 && await gd.isVisible() && (await gd.getAttribute('href')).includes('?orderId=' + encodeURIComponent(realA.orders[0].id)) && await page.locator('#src-order[open]').count() === 0, 'Order folded: the GreenDot link works without opening');
+  await page.evaluate(() => document.querySelector('#src-calls > summary a.rec').addEventListener('click', e => e.preventDefault(), { once: true })); await page.click('#src-calls > summary a.rec'); await page.waitForTimeout(60);
+  ok(await page.locator('#src-calls[open]').count() === 0, 'clicking ▶ Recording does not open the fold');
+  ok(await page.locator('#src-fields').count() === 0 && /^via [A-Z]/.test(await txt(page, '#cTicket .tkid .viachip')), `a message_source-only chat: no WIRA form fold, the source as a chip (${await txt(page, '#cTicket .tkid .viachip')})`);
   ok(await page.locator('#src-calls .txcall').count() === 2 && await page.locator('#src-calls .txcall a', { hasText: 'Rec' }).count() === 2 && await page.locator('#src-calls .txsum li').count() > 4 && (await txt(page, '#src-calls > summary')).includes('2 calls'), 'Calls: two call cards with recordings and Claude bullets');
   if (!(await page.locator('#src-calls[open]').count())) await page.click('#src-calls > summary');
   await page.locator('#src-calls details.txd summary').first().click();
@@ -293,7 +344,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(true, 'transcript loads from chatTx');
   ok(await page.locator('#src-tasks .task').count() === 1 && await page.locator('#src-tasks .task .ttag', { hasText: 'From this chat' }).count() === 1, 'linked task from this chat');
   const fsum = (await txt(page, '#src-facts > summary')).replace(/\s+/g, ' '), ncon = realA.facts.claims.filter(c => c.check === 'contradicted').length;
-  ok(fsum === `Timeline and SA claims check ${realA.facts.timeline.length} facts · ${realA.facts.claims.length} claims (${ncon} contradicted)` && (await txt(page, '#src-order > summary')).replace(/\s+/g, ' ') === 'Order Ticket 65 · $59.10', `source lines: ${fsum}; Order Ticket 65 · $59.10`);
+  const osum = (await txt(page, '#src-order > summary')).replace(/\s+/g, ' ').trim();
+  ok(fsum === `Timeline and SA claims ${realA.facts.timeline.length} facts · ${realA.facts.claims.length} claims · ${ncon} wrong` && /^Order Ticket 65 · \$59\.10 · [a-z ]+ · \d{1,2}:\d{2} [AP]M Open in GreenDot ↗$/.test(osum), `source lines: ${fsum}; ${osum}`);
   const brief0 = await page.locator('#evBrief li').allInnerTexts();
   ok(brief0.length === 1 + realA.calls.length && brief0[0] === realA.analysis.summary && brief0[1].startsWith('Call 1: '), 'no brief on the real case: the summary plus each call\'s first bullet');
   ok(await page.locator('.cfacts .fact').count() === realA.facts.timeline.length && await page.locator('.claim').count() === realA.facts.claims.length, `case facts: ${realA.facts.timeline.length} facts, ${realA.facts.claims.length} claims`);
@@ -437,7 +489,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.locator('#calOpen, #calForm').count() === 0 && !(await page.evaluate(s => !!window.__data['chatCalib/' + s], SID)), 'no Save as calibration case');
 
   // ===== 8. change order: ranked matches, then the whole day (searchable), then No order; every pick re-grades fresh
-  if (!(await page.locator('#src-order[open]').count())) await page.click('#src-order > summary');
+  if (!(await page.locator('#src-order[open]').count())) await page.click('#src-order > summary .srct');
   await page.click('#ordChange'); await page.waitForTimeout(100);
   const cids = new Set(realA.candidates.map(x => x.id)), rest = realA.dayOrders.filter(o => !cids.has(o.id)), c65 = realA.candidates.find(x => x.ticket === '65');
   ok(realA.dayOrders.length === 101 && await page.locator('.opick .ocand').count() === realA.candidates.length && (await page.locator('.opick .ocand', { hasText: 'Ticket 65' }).innerText()).includes(c65.why[0]), `Change order: ${realA.candidates.length} ranked matches first, with their reasons`);
@@ -583,7 +635,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     ['#facts', 'facts', '#view-facts'], ['#score', 'calls', '#view-calls'], ['#results', 'results', '#view-results'], ['#data', 'data', '#view-data']]) {
     ({ page, ctx, errors } = await openPage(b, Object.entries(dump), { viewer: true }, { width: 1280, height: 900 }, more));
     await page.goto('http://qa.test/' + h); await page.waitForTimeout(300);
-    let good = (['results', 'data'].includes(t) ? await page.locator(`[data-area="${t}"][aria-current="page"]`).count() === 1 && !(await page.locator('[role=tab][aria-selected="true"]').count()) : await sel(page) === t) && await page.locator(view).isVisible();
+    let good = (['results', 'data'].includes(t) ? await page.locator(`[data-area="${t}"][aria-current="page"]`).count() === 1 && !(await page.locator('[role=tab][data-tab][aria-selected="true"]').count()) : await sel(page) === t) && await page.locator(view).isVisible();
     if (h.endsWith('/' + SID)) good = good && (await txt(page, '#cvWord')).length > 0 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1;
     if (h.endsWith('/9900901')) good = good && (await txt(page, '#cvWord')) === 'Great' && (await txt(page, '#wkLabel')).startsWith('Oct 5') && await weekSubs(page) === wantSubs(PW);
     if (h === '#chat') good = good && /No chat open/.test(await txt(page, '#view-chat'));
