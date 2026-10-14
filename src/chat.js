@@ -422,7 +422,8 @@ function chatFactsPrompt(k){const sa=k.chat.sa||"the SA";
     `- "supported": the evidence shows it. "contradicted": the evidence shows otherwise. "cant_check": the evidence here doesn't cover it (the SA may have seen it in GreenDot).`,
     `- Evidence is a short quote or fact from a call, order or task. Judge each claim on its own, including claims ${sa} later took back.`,
     ``,`Reply with only a JSON object:`,
-    `{"calls": [{"n": 1, "bullets": ["3 to 5 bullets, each under 15 words: who called and why, what happened, how it ended"]}],`,
+    `{"brief": ["5 to 7 bullets, each under 18 words, that tell the case at a glance: what the client asked, what the order and calls show, what ${sa} did and said, how it ended. Facts only, no judging."],`,
+    ` "calls": [{"n": 1, "bullets": ["3 to 5 bullets, each under 15 words: who called and why, what happened, how it ended"]}],`,
     ` "timeline": [{"src": "M3 | Call 2 | O1 | Task 1234567 | Slack | Header", "when": "time if known, else empty", "who": "who said or did it, or unclear", "kind": "said | did | internal", "what": "the fact, under 25 words"}],`,
     ` "claims": [{"src": "M3", "claim": "what ${sa} claimed, under 20 words", "check": "supported | contradicted | cant_check", "evidence": "quote or fact, under 25 words"}],`,
     ` "promises": [{"src": "M8", "who": "", "to": "", "what": "under 12 words"}]}`,
@@ -552,7 +553,9 @@ function cleanChatFacts(x,calls){if(!x||typeof x!=="object"||Array.isArray(x))re
   const timeline=arr(x.timeline).filter(t=>t&&t.what).slice(0,80).map((t,i)=>({id:"F"+(i+1),src:chS(t.src,40),when:chS(t.when,40),who:chS(t.who,60),kind:KINDS.includes(String(t.kind).toLowerCase())?String(t.kind).toLowerCase():"said",what:chS(t.what,260)}));
   const claims=arr(x.claims).filter(c=>c&&c.claim).slice(0,30).map((c,i)=>{const k=String(c.check||"").toLowerCase().replace(/[\s-]+/g,"_");return {id:"C"+(i+1),src:chS(c.src,20),claim:chS(c.claim,220),check:CHECKS.includes(k)?k:"cant_check",evidence:chS(c.evidence,260)}});
   const promises=arr(x.promises).filter(p=>p&&p.what).slice(0,15).map((p,i)=>({id:"P"+(i+1),src:chS(p.src,20),who:chS(p.who,60),to:chS(p.to,60),what:chS(p.what,160)}));
-  if(!timeline.length)return null;return {calls:callsOut,timeline,claims,promises}}
+  /* brief (added chat-2): the case at a glance, 5-7 bullets */
+  const brief=arr(x.brief).map(t=>chS(t,220).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,8);
+  if(!timeline.length)return null;return {brief,calls:callsOut,timeline,claims,promises}}
 const FAULTS=["tarro","restaurant","customer","shared_tarro","shared_other","unclear","none"],AE_KINDS=["over_head","corrected_sa","ae_initiated","context","none"],MATCH=["yes","partly","no"];
 function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray(x))return null;const ids=new Set(F.timeline.map(t=>t.id).concat(F.claims.map(c=>c.id),F.promises.map(p=>p.id)));
   const cites=a=>arr(a).map(v=>String(v).trim().toUpperCase()).filter(v=>ids.has(v)).slice(0,8),o=v=>v&&typeof v==="object"?v:{},low=v=>String(v||"").trim().toLowerCase().replace(/[\s-]+/g,"_");
