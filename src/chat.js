@@ -2,7 +2,7 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:2, lessonMax:20, slowReplyMin:15};
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15};
 const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",

@@ -113,8 +113,8 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   ok(titles.some(t => / · same caller$/.test(t)), 'looks for the same caller');
   ok(!k2.notFound.length, 'nothing missing');
   const R = await B.gradeChat(k2, deps);
-  ok(asked.join(',') === 'refs,facts,analysis,grade,grade*', 'passes in route order; the grade is read twice, the second fresh');
-  ok(R.G.runs && R.G.runs.length === 2 && R.G.spread === 0, 'two identical reads merge to the same marks');
+  ok(asked.join(',') === 'refs,facts,analysis,grade', 'passes in route order; one grade read (the QA lead\'s choice, Oct 15)');
+  ok(!R.G.runs, 'one read: no merged runs');
   // the QA lead's standing decisions reach the analysis and grade passes
   ok(/clean handoff/.test(prompts.analysis) && /clean handoff/.test(prompts.grade), 'shared chat: grade the SA\'s own messages, credit a handoff');
   ok(/recorded nowhere is a failed Resolution accuracy/.test(prompts.grade) && /internal note or a WIRA ticket/.test(prompts.grade), 'comp amount checked wherever recorded; nowhere = 0');
@@ -126,9 +126,9 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
   ok(B.mergeGrades({ scores: { fr: 'na' } }, { scores: { fr: 'na' } }).scores.fr === 'na', 'N/A when both reads agree');
   // a second read that fails keeps the first; a stop error still stops
   let n2 = 0; const quiet = Object.assign({}, deps, { step: () => {} }); const k4 = await B.chatContext(chat, quiet);
-  const R2 = await B.gradeChat(k4, Object.assign({}, quiet, { ask: async (p, pass, o) => { if (o && o.fresh) { n2++; throw { code: 'upstream_error' }; } return pass === 'refs' ? {} : out(pass); }, isStop: e => e.code === 'rate_limited' }));
+  const R2 = await B.gradeChat(k4, Object.assign({}, quiet, { gradeRuns: 2, ask: async (p, pass, o) => { if (o && o.fresh) { n2++; throw { code: 'upstream_error' }; } return pass === 'refs' ? {} : out(pass); }, isStop: e => e.code === 'rate_limited' }));
   ok(n2 === 1 && R2.pct === 74.2 && !R2.G.runs, 'a failed second read keeps the first');
-  let stopped = null; try { await B.gradeChat(k4, Object.assign({}, quiet, { ask: async (p, pass, o) => { if (o && o.fresh) throw { code: 'rate_limited' }; return out(pass); }, isStop: e => e.code === 'rate_limited' })); } catch (e) { stopped = e.code; }
+  let stopped = null; try { await B.gradeChat(k4, Object.assign({}, quiet, { gradeRuns: 2, ask: async (p, pass, o) => { if (o && o.fresh) throw { code: 'rate_limited' }; return out(pass); }, isStop: e => e.code === 'rate_limited' })); } catch (e) { stopped = e.code; }
   ok(stopped === 'rate_limited', 'a stop error on the second read stops the batch');
   ok(B.CHAT_RUBRIC.find(r => r.id === 'amt').naWhen === 'no compensation, credit, refund or fee was given, promised or due', 'amount is N/A only when nothing was due');
   ok(R.comp.amount === 16.42 && R.offer.match === 'wrong_base', 'money from code');
