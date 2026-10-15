@@ -47,7 +47,7 @@ const MOCK = ([seed, ld, opts, extra]) => {
   const db = { doc: docRef, collection(c) { return { path: c, doc: id => docRef(c + '/' + (id || Math.random().toString(36).slice(2))),
     async get() { window.__gets.push(c); guard(c + '/x', false); return qsnap(c) },
     onSnapshot(next, err) { if (deny(c + '/x', false)) { setTimeout(() => err && err({ code: 'permission_denied' }), 0); return () => {} } return listen(c, 'coll', () => next(qsnap(c))) } } } };
-  window.__data = data; window.__saved = []; window.__ld = []; window.__leases = []; window.__opts = opts; window.__prompts = []; window.__slack = []; window.__subs = subs; window.__gets = [];
+  window.__data = data; window.__saved = []; window.__ld = []; window.__leases = []; window.__opts = opts; window.__prompts = []; window.__slack = []; window.__subs = subs; window.__gets = []; window.__gradeCalls = [];
   const TX = new Map(extra.tx);
   // Lightdash: apply "day inBetween=a,b AND field equals=v1,v2" to the fixture rows, cap at __opts.cap
   const parse = expr => { const out = {}; expr.split(' AND ').forEach(r => { const m = r.match(/^(\S+) (inBetween|equals)=(.*)$/); if (!m) throw { code: 'tool_error', message: 'bad filter ' + r };
@@ -118,9 +118,16 @@ const MOCK = ([seed, ld, opts, extra]) => {
     json: (input, o) => new Promise((resolve, reject) => { window.__prompts.push({ input, tier: o && o.modelTier, cache: o && o.cache });
       const sig = o && o.signal; if (sig) sig.addEventListener('abort', () => reject({ code: 'cancelled', message: 'stopped' }));
       setTimeout(() => { if (sig && sig.aborted) return; if (window.__opts.sampleFail) { reject({ code: window.__opts.sampleFail, message: 'mock' }); return }
+        const cg = /^MOCK CALL (FACTS|GRADE) (\S*)/.exec(String(input)); if (cg) { const O = window.__opts; resolve(clone(cg[1] === 'FACTS' ? (O.callFacts || { timeline: [] }) : ((O.callGrades || {})[cg[2]] || O.callGrade || {}))); return }
         const ch = chatReply(input); if (ch) { resolve(clone(ch)); return }
         resolve(clone(/note-taker/.test(input) ? (window.__opts.factsReply || extra.factsReply || {calls:[{n:1,bullets:['Store calls about an order','Agent checks and fixes it']}],timeline:[{src:'Call 1',when:'11:37 AM',who:'Store',kind:'said',what:'Says orders are not reaching the store'},{src:'Call 1',when:'11:38 AM',who:'Agent',kind:'did',what:'Escalated to the product team'}],promises:[{src:'Call 1',who:'Agent',to:'Store',what:'Call back once fixed',by:''}]}) : (window.__opts.aiReply || extra.aiReply))) }, window.__opts.sampleMs || 150) }),
     limits: async () => ({ maxPromptBytes: 262144 }) });
+  // a stand-in for core.js's gradeCall (opts.gradeCall): two Claude passes through deps.ask, answered from __opts.callFacts and __opts.callGrades[<queueId>].
+  // Put back on DOMContentLoaded so it stays the one under test once the real gradeCall is in the page
+  if (opts.gradeCall) { const gc = async (c, deps) => { const id = String(c.queueId || c.id || '');
+      window.__gradeCalls.push({ id, legs: (c.legs || []).length, tx: Object.values(deps.transcripts || {}).filter(t => String(t).trim()).length, items: (deps.items || []).map(x => x.id), lessons: (deps.lessons || []).map(l => l.id) });
+      const F = await deps.ask('MOCK CALL FACTS ' + id, 'facts'); const G = await deps.ask('MOCK CALL GRADE ' + id, 'grade'); return { F, A: { summary: 'Mock analysis' }, G } };
+    window.gradeCall = gc; document.addEventListener('DOMContentLoaded', () => { window.gradeCall = gc }) }
   window.claude = { use: async n => (window.__opts.noSample && n === 'sample') ? null : ({ db, user, downloads, mcp, sample, room })[n] ?? null };
 };
 

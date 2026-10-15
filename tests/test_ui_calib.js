@@ -360,6 +360,111 @@ const tab = page => page.evaluate(() => tab);
     ok(!errors.length, 'no console errors (pending graders) ' + JSON.stringify(errors));
     await ctx.close();
   }
+
+  // ===== 10. World D: Claude grades calls. qana1 comes pre-graded (callGrades/qana1), the rest are not; gradeCall is the mock's stand-in
+  {
+    const QG = 'qana1', cgScores = Object.assign(callMarks(3), { '2b': 2, '2d': 1, '3b': 'na' }), cgPct = callPct(cgScores);
+    const cgF = { timeline: [{ id: 'F1', src: 'Call 1', when: '0:12', who: 'Caller', kind: 'said', what: 'Says the pickup order was not ready' },
+      { id: 'F2', src: 'Call 1', when: '1:40', who: 'Ana Ruiz', kind: 'did', what: 'Called the store, which said the ticket never printed' },
+      { id: 'F3', src: 'Call 1', when: '3:05', who: 'Ana Ruiz', kind: 'said', what: 'Says someone will call back about the printer' }], claims: [], promises: [] };
+    const grade = (s, why) => ({ scores: s, reasons: Object.fromEntries(Object.keys(s).map(k => [k, why[k] || 'Handled as expected (F1).'])), cites: { '2b': ['F2'], '2d': ['F2', 'F3'] },
+      wentWell: ['Called the store at once', 'Kept the caller updated'], fixes: [{ id: '2b', what: "Took the store's word that the ticket never printed.", should: 'Check the printer log before naming the fault.' },
+        { id: '2d', what: 'No fix for the next order.', should: 'Log a WIRA task for the printer.' }], summary: 'Quick and polite; blamed the store without checking.' });
+    const G1 = grade(cgScores, { '2b': 'Named the store as the fault without checking the printer.', '2d': 'Promised a callback with no time.' });
+    const cgDoc = Object.assign({ v: 1, at: '2026-10-13T20:00:00.000Z', by: 'claude-checkpoint', items: V2I.map(x => x.id), F: cgF, A: { summary: 'The ticket did not print.' } }, G1);
+    const oldLessons = Array.from({ length: 22 }, (_, i) => [`callLessons/qold${i}_1a`, { kind: 'contest', item: 'call', queueId: 'qold' + i, crit: '1a', from: '3/3', to: '2/3', reason: 'Old lesson', by: 'panel', at: `2026-09-${String(10 + (i % 18)).padStart(2, '0')}T10:00:00.000Z` }]);
+    const seedD = base0.concat([['learning/state', stateA], prevRound, roundA, ['callGrades/' + QG, cgDoc]], joined, oldLessons);
+    const G3 = grade(Object.assign(callMarks(2), { '1a': 3 }), {});
+    ({ page, ctx, errors } = await openPage(b, seedD, { people, room: true, sampleMs: 30, gradeCall: true, callFacts: cgF, callGrade: G3 }, { width: 1280, height: 900 }, { now: NOW, tx: TXI }));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(700);
+    const nCG = () => page.evaluate(() => Object.keys(window.__data).filter(p => p.startsWith('callGrades/')).length);
+    // the Round tab: call rows carry Claude's score, read once with get(), never a live listener on the whole collection
+    await page.waitForFunction(q => /Claude \d/.test((document.querySelector(`#cbItems .cbirow[data-ik="call_${q}"]`) || {}).innerText || ''), QG, { timeout: 4000 });
+    ok((await txt(page, `#cbItems .cbirow[data-ik="call_${QG}"]`)).replace(/\s+/g, ' ').includes(`CL · 4:10 · Claude ${fmt(cgPct)}%`) && (await txt(page, '#cbItems .cbirow[data-ik="call_qana3"]')).includes('Claude –'), `Round rows: a graded call shows Claude ${fmt(cgPct)}%, an ungraded one "Claude –"`);
+    ok(!(await page.evaluate(() => window.__subs.some(s => s.path === 'callGrades' && s.on))), 'no listener on the callGrades collection (docs are big)');
+    ok((await txt(page, '#cbGradeAll')).replace(/\s+/g, ' ') === "Grade the round's calls (8)", "the owner gets \"Grade the round's calls (8)\"");
+    // the call audit: Claude's column, score, draft coaching
+    await page.click(`[data-cb="open"][data-ik="call_${QG}"]`); await page.waitForTimeout(400);
+    ok(await page.evaluate(q => window.__subs.some(s => s.path === 'callGrades/' + q && s.kind === 'doc' && s.on), QG), 'the open call watches only its own grade doc');
+    ok((await txt(page, '#cbr-2b > td >> nth=0')).trim() === '2' && (await txt(page, '#cbr-2d > td >> nth=0')).trim() === '1' && (await txt(page, '#cbr-3b > td >> nth=0')).trim() === 'N/A' && (await txt(page, '#cbr-1a > td >> nth=0')).trim() === '3', "Claude's column shows its marks per row");
+    ok((await txt(page, '#tkClaude')).replace(/\s+/g, ' ').includes(`Claude's score ${fmt(cgPct)}%`) && (await txt(page, '#cvClaude')) === fmt(cgPct) + '%' && (await txt(page, '#cbGradeBtn')) === 'Re-grade', "Claude's score in the ticket header and board (live rubric calc); Re-grade");
+    ok(await page.locator('#cbDraftTag').isVisible() && (await txt(page, '#cs-coach .qans')).includes("Claude's draft") && await page.locator('#cbDWell li').count() === 2 && await page.locator('#cbDFixes .fixcard').count() === 2
+      && (await page.locator('#cbDFixes .fixcard').first().getAttribute('data-fix')) === '2b' && (await txt(page, '#cbDFixes .fixcard >> nth=0')).includes('Check the printer log'), "Coaching before the lock: Claude's draft (went well, fixes)");
+    await page.click('#cbGrid [data-cb="panel"][data-crit="2b"]'); await page.waitForTimeout(150);
+    const pc = (await txt(page, '#cbPClaude')).replace(/\s+/g, ' ');
+    ok(pc.includes('Claude: 2 · Named the store as the fault without checking the printer. · F2') && await page.locator('#cbPClaude .cbcited li').count() === 1 && pc.includes('the ticket never printed'), 'facts panel: "Claude: 2 · reason · F2" with the cited fact from its F list');
+    ok(await page.locator('#cbPanel .cbfacts:not(.cbcited) li.cited').count() === 1, 'the cited fact is marked in the full list');
+    await page.evaluate(() => document.getElementById('cs-score').scrollIntoView({ block: 'start' })); await shot(page, 'audit-call-claude.png');
+    await page.click('#cbPanel [data-cb="pclose"]');
+    // score, compare: Claude's reason and cites in the Settle card; settle 2d (kept) with a note; lock
+    const pm = Object.assign(callMarks(3), { '2b': 1, '2d': 1, '3b': 'na' });
+    for (const [k, v] of Object.entries(pm)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
+    await page.click('#cbGrid [data-cb="note"][data-crit="2b"]'); await page.fill('[data-cbnote="2b"]', 'Blamed the store before checking the printer.');
+    await page.click('#cbGrid button[data-cb="note"][data-crit="2b"]:not(.cbnotebtn)');
+    await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/call_${QG}`, 'd.submittedAt'); await page.waitForTimeout(120);
+    await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(120);
+    await page.click('#cbr-2b > td >> nth=0'); await page.waitForTimeout(100);
+    const card = (await page.locator('#cbGrid .cbdet .cbnt').first().innerText()).replace(/\s+/g, ' ');
+    ok(/Claude · 2/.test(card) && card.includes('without checking the printer') && card.includes('F2'), "Settle card: Claude's mark, reason and cited facts");
+    await page.click('#cbr-2b > td >> nth=0');
+    await page.click('#cbr-2d > td >> nth=0'); await page.waitForTimeout(80);
+    await page.click('#cbGrid [data-cb="apick"][data-crit="2d"][data-v="1"]'); await page.fill('[data-cbag="2d"]', 'No callback time promised.'); await page.click('#cbGrid [data-cb="asave"][data-crit="2d"]');
+    await waitDoc(page, `calibItems/call_${QG}/rows/2d`, 'd.note==="No callback time promised."'); await page.waitForTimeout(120);
+    await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/call_' + QG, 'd.locked');
+    await page.waitForFunction(q => !!window.__data[`callLessons/${q}_2d`], QG, { timeout: 4000 });
+    const cl = await page.evaluate(q => Object.fromEntries(Object.entries(window.__data).filter(([p]) => p.startsWith(`callLessons/${q}_`)).map(([p, d]) => [p.split('_').pop(), d])), QG);
+    ok(Object.keys(cl).sort().join() === '2b,2d' && cl['2b'].kind === 'contest' && cl['2b'].from === '2/3' && cl['2b'].to === '1/3' && cl['2b'].reason === 'Blamed the store before checking the printer.' && cl['2b'].by === 'panel' && cl['2b'].queueId === QG && cl['2b'].label === 'Root cause and fault'
+      && cl['2d'].kind === 'reinforce' && cl['2d'].from === '1/3' && cl['2d'].to === '1/3' && cl['2d'].reason === 'No callback time promised.', 'lock writes callLessons: a contest where agreed ≠ Claude, a reinforce where equal with a note');
+    await page.waitForTimeout(200);
+    ok(await page.locator('#cbDraftTag').count() === 0 && await page.locator('#cbFixes .fixcard').count() === 2 && (await txt(page, '#cbSent')).includes('Root cause and fault: Claude 2, agreed 1'), 'after the lock, coaching comes from the agreed marks; sent to the coach');
+    // Grade with Claude on an ungraded call: transcripts through Lightdash, sample with cache off, the newest 20 lessons, one doc written
+    await page.evaluate(() => openCall('qana3')); await page.waitForTimeout(400);
+    ok((await txt(page, '#tkClaude')).includes('Not graded yet') && (await txt(page, '#cvClaude')) === 'Not graded yet' && (await txt(page, '#cbGradeBtn')) === 'Grade with Claude' && (await txt(page, '#cbr-1a > td >> nth=0')).trim() === '–', '"Not graded yet" and Grade with Claude on an ungraded call');
+    await page.evaluate(() => { window.__opts.sampleMs = 250 });
+    await page.click('#cbGradeBtn');
+    await page.waitForFunction(() => /Grading/.test((document.getElementById('cbGrRun') || {}).innerText || ''), null, { timeout: 3000 });
+    ok(await page.locator('#cbGrStop').isVisible(), 'a progress line with Stop while it runs');
+    await waitDoc(page, 'callGrades/qana3', '', 6000); await page.waitForTimeout(200);
+    const g3 = await D(page, 'callGrades/qana3'), gc3 = await page.evaluate(() => window.__gradeCalls[0]), pr = await page.evaluate(() => window.__prompts.filter(p => /^MOCK CALL/.test(p.input)));
+    ok(g3.by === PAT && g3.items.length === 12 && JSON.stringify(g3.scores) === JSON.stringify(G3.scores) && g3.F.timeline.length === 3 && g3.summary === G3.summary && g3.at, 'Grade writes callGrades/<queueId> {v, at, by, items, scores, reasons, cites, wentWell, fixes, summary, F, A}');
+    ok(gc3.id === 'qana3' && gc3.tx === 1 && gc3.items.length === 12 && gc3.lessons.length === 20 && gc3.lessons.slice(0, 2).sort().join() === `${QG}_2b,${QG}_2d` && pr.length === 2 && pr.every(p => p.cache === false && p.tier === 'default'), 'gradeCall gets the transcript, the rubric, the newest 20 call lessons; sample with cache off');
+    ok((await txt(page, '#cbGradeBtn')) === 'Re-grade' && (await txt(page, '#tkClaude')).includes(fmt(callPct(G3.scores)) + '%'), 'then Re-grade and Claude\'s score');
+    // Reopen withdraws the call lessons
+    await page.evaluate(q => openCall(q), QG); await page.waitForTimeout(400);
+    await page.click('#cbGrid [data-cb="reopen"]'); await page.waitForFunction(q => !window.__data[`calibItems/call_${q}`].locked, QG, { timeout: 4000 }); await page.waitForTimeout(200);
+    ok(!(await page.evaluate(q => Object.keys(window.__data).some(p => p.startsWith(`callLessons/${q}_`)), QG)) && await page.locator('#cbDraftTag').isVisible(), 'Reopen withdraws the call lessons; the draft coaching is back');
+    // lock again for the Round KPIs
+    await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/call_' + QG, 'd.locked'); await page.waitForTimeout(200);
+    // the Round tab: KPIs and each grader vs agreed now include Claude on calls; the batch with Stop
+    await page.click('[data-tab="calib"]'); await page.waitForTimeout(300);
+    ok((await txt(page, '#cbkClaude b')) === Math.round(11 / 12 * 100) + '%' && (await txt(page, '#cbkClaude .hint')).includes('calls 92%') && await page.locator('#cbEach .cbbar[data-g="claude"]').count() === 1, 'Claude vs agreed counts calls (11 of 12 rows); Claude in each grader vs agreed');
+    ok((await txt(page, '#cbItems .cbirow[data-ik="call_qana3"]')).includes(`Claude ${fmt(callPct(G3.scores))}%`) && (await txt(page, '#cbGradeAll')).includes('(7)'), 'the new grade shows in the round; 7 left');
+    await shot(page, 'round-tab-calls.png', true);
+    const before = await nCG();
+    await page.evaluate(() => { window.__opts.sampleMs = 500 });
+    await page.click('#cbGradeAll');
+    await page.waitForFunction(() => /Grading 1 of 7/.test((document.getElementById('cbRoundRun') || {}).innerText || ''), null, { timeout: 3000 });
+    ok(await page.locator('#cbRoundStop').isVisible() && await page.locator('#cbGradeAll').count() === 0, 'the batch shows "Grading 1 of 7 · …" and Stop');
+    await page.waitForFunction(n => Object.keys(window.__data).filter(p => p.startsWith('callGrades/')).length > n, before, { timeout: 6000 });
+    await page.waitForFunction(() => /Grading 2 of 7/.test((document.getElementById('cbRoundRun') || {}).innerText || ''), null, { timeout: 3000 });
+    await page.click('#cbRoundStop');
+    await page.waitForFunction(() => /Stopped · 1 graded/.test((document.getElementById('cbRoundNote') || {}).innerText || ''), null, { timeout: 3000 }); await page.waitForTimeout(700);
+    ok(await nCG() === before + 1 && (await txt(page, '#cbGradeAll')).includes('(6)'), 'Stop cancels the call in hand: one graded, 6 left');
+    ok(await page.evaluate(() => window.__gradeCalls.length) === 3, 'one call at a time, never retried');
+    // 390px and dark
+    await page.evaluate(q => openCall(q), QG); await page.waitForTimeout(400);
+    await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+    ok(await width(page) <= 390 && await page.evaluate(() => ['tkClaude', 'cbGradeBox', 'cs-coach'].every(id => document.getElementById(id).getBoundingClientRect().right <= 391)), '390px: Claude\'s score, the grade box and coaching fit');
+    await page.click('#cbGrid [data-cb="panel"][data-crit="2b"]'); await page.waitForTimeout(150);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbPClaude').getBoundingClientRect().right <= 391), '390px: the panel\'s Claude line fits');
+    await page.click('#cbPanel [data-cb="pclose"]');
+    await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+    ok(await page.evaluate(() => getComputedStyle(document.getElementById('cTicket')).backgroundColor) !== 'rgb(255, 255, 255)' && await width(page) <= 390, 'dark at 390px');
+    await shot(page, 'audit-call-claude-390-dark.png', true);
+    await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 });
+    ok(!errors.length, 'no console errors (Claude on calls) ' + JSON.stringify(errors));
+    await ctx.close();
+  }
   await b.close();
   console.log(`\nui calib: ${n} checks passed`);
 })().catch(e => { console.error('TEST FAILED', e); process.exit(1) });
