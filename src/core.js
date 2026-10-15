@@ -399,6 +399,120 @@ function followUpLine(doc,list,hours=24){
   const item=f=>{const to=f.name||f.phone||"an unknown number",c=f.code?` (${f.code}${f.sameRestaurant?", same restaurant":""})`:"";return `${clock12u(ldTs(f.at))} to ${to}${c}`};
   const shown=list.slice(0,8).map(item).join(", "),more=n>8?`, and ${n-8} more`:"";
   return `${who} made ${n} outbound call${n===1?"":"s"} in the ${hours} hours after the last call: ${shown}${more}.`}
+
+/* ---- Pass 3 (grade): the call or case scored on the live call rubric, from the pass-1 facts and pass-2 analysis.
+   Every score cites fact ids. A call is one SA; a case (another SA, a pool seat or CRT talked) is graded once as a team.
+   items: the live form's flat items for the type, [{id, label, w, lv:[0..3] or {0..3:text}, na (the N/A condition; absent = no N/A)}] ---- */
+const CALL_GRADE_V = "call-grade-1";
+/* the QA lead's standing decisions (from the chat brain's leadRules, worded for calls) */
+const CALL_RULES = (sa,team) => [
+  team?`- This is a CASE: several agents worked it (${team.join(", ")}). Grade it once, as a team, on how the case was run end to end. ${sa} is the audited agent; credit a clean handoff (the next agent had what was needed and the caller wasn't left waiting) and mark down the gaps where they happened.`
+    :`- Grade only what ${sa} said or did on the GRADED calls. Other agents' calls are context. If another agent picked the caller up, credit ${sa} for a clean handoff (the other agent had what was needed and the caller wasn't left waiting) and mark down only ${sa}'s own gaps.`,
+  `- Fault: a customer or restaurant acting on a Tarro agent's instruction (told to order online, told to call back, given a wrong total) is not their fault: the instruction is Tarro's. A caller's claim is not proof; what the calls and tasks show is. When nothing went wrong (a plain request), there is no fault to attribute.`,
+  `- Money exact to the cent: a refund, credit, remake or compensation amount must be exactly right for what the facts show (the item, the ticket, the order). An amount given or promised that doesn't match, or that is recorded nowhere (not said on the call and not in a WIRA task), is a wrong action.`,
+  `- Check the decision AND the handling: whether ${sa} chose the right action (including keeping or reasonably declining an earlier agent's promise: the restaurant's decision, the policy or a lead's call) counts under the action or resolution criterion; how ${sa} explained it, owned it and closed it with the caller counts under the communication or close criterion.`,
+  `- The close: a read-back of the outcome that the caller agreed to, or the outcome stated and the caller saying it's all they need, is a confirmed understanding. A close where who does what next is left muddled or contradicts itself leaves the caller unsure of the outcome.`,
+  `- Score each flaw once, in the one criterion it belongs to. A wrong account of fault given to the caller is the fault criterion; the wrong next step is the action criterion; an unclear or missing close is the close criterion.`];
+function callLessonLines(ls){return (ls||[]).slice(0,20).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.crit&&l.label?` (${l.crit})`:""}`,why=l.note||l.reason;
+  if(l.kind==="reinforce")return `- ${c}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
+  if(l.kind==="contest")return `- ${c}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
+  return `- ${c}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${why?`: ${capText(why,200)}`:"."}`}).join("\n")}
+/* the item's levels as {0..3: text}, from the live form's array or the v1 object */
+function itemLevels(it){const lv=it&&it.lv,out={};if(Array.isArray(lv))lv.forEach((t,i)=>{if(t)out[i]=String(t)});else if(lv&&typeof lv==="object")Object.entries(lv).forEach(([k,t])=>{if(t&&/^[0-3]$/.test(k))out[k]=String(t)});return out}
+function itemScale(it){const k=Object.keys(itemLevels(it)).map(Number);return k.length?{lo:Math.min(...k),hi:Math.max(...k)}:{lo:0,hi:3}}
+/* a queue doc (or audit) and its transcripts as the passes read them: talked legs only, voicemail and silent legs set aside.
+   transcripts: legs [{id, text}] (the facts pass's shape) or a map {id: text} */
+function callInput(q,transcripts){q=q||{};
+  const txOf=new Map();(Array.isArray(transcripts)?transcripts:[]).forEach(l=>{if(l&&l.id)txOf.set(String(l.id),String(l.text||""))});
+  if(transcripts&&!Array.isArray(transcripts)&&typeof transcripts==="object")Object.entries(transcripts).forEach(([k,v])=>txOf.set(String(k),typeof v==="string"?v:String((v&&v.text)||"")));
+  const src=Array.isArray(q.legs)&&q.legs.length?q.legs:((q.chain&&q.chain.legs)||[]);
+  const all=src.filter(l=>l&&l.id).map(l=>{const text=txOf.get(String(l.id))||String(l.text||"");
+    return {id:String(l.id),at:l.at,sec:l.sec,who:l.who,login:l.login,group:l.group,graded:!!(l.graded??l.own),dir:l.dir,party:l.party,text,talk:text?legTalk(text):(l.talk||"silent")}});
+  const legs=all.filter(l=>l.talk==="talk"),team=q.type==="case"?(Array.isArray(q.team)&&q.team.length?q.team:caseTeam(legs)):[];
+  return {agent:q.agent,type:q.type||"call",kind:q.kind||(q.type==="mgr"?"MGR":"CL"),restaurant:q.restaurantName||q.restaurant||"",code:q.restaurantId||q.code||"",date:q.callDate||q.date||"",
+    legs,setAside:all.length-legs.length,tasks:Array.isArray(q.tasks)?q.tasks:[],slack:Array.isArray(q.slack)?q.slack:[],followUp:q.followUp||"",
+    team:team.length?[q.agent].concat(team.filter(n=>n!==q.agent)):[]};
+}
+function callGradePrompt(c,F,A,items,lessons){
+  if(c&&!Array.isArray(c.legs)&&c.chain)c=callInput(c);
+  const sa=c.agent||"the agent",first=String(sa).split(" ")[0],team=c.team&&c.team.length>1?c.team:null,legs=c.legs||[];
+  const what=team?"case":c.type==="mgr"?`${c.kind||"MGR"} call`:"call";
+  const rows=(items||[]).map(it=>{const lv=itemLevels(it),na=it.na?String(it.na):"";
+    return `- ${it.id} · ${it.label}${it.w!=null?` (weight ${Math.round(Number(it.w)*1000)/10}%)`:""}\n`+Object.keys(lv).sort().map(k=>`    ${k}: ${lv[k]}`).join("\n")+(na?`\n    N/A only when: ${na}`:`\n    No N/A: always score it.`)});
+  const aLines=A?[`Summary: ${A.summary||""}`,`Root cause: ${A.rootCause||""}${A.cites&&A.cites.rootCause?` [${A.cites.rootCause.join(", ")}]`:""}`,
+    `Fault ${first} told the caller: ${A.faultAgent||"unclear"} · actual fault: ${A.faultCorrect||"unclear"}${A.faultWhy?` · ${A.faultWhy}`:""}`,
+    `Error type: ${A.errorType||"none"} · single touch: ${A.singleTouch||"unclear"} · action: ${A.actionTaken||""} · promised: ${A.promised||"nothing"} · follow-up owner: ${A.followUpOwner||"none"}`]
+    .concat(((A.facts&&A.facts.promises)||[]).filter(p=>p.status).map(p=>`${p.id}: ${p.status}${p.why?` (${p.why})`:""}`)):["No analysis: draw the conclusions from the facts yourself."];
+  const tk=(items||[]).find(it=>/ticket/i.test(it.label||"")),noTask=tk&&!(c.tasks||[]).length;
+  const head=[`You are Swift Coach, the QA lead's coaching assistant at Tarro. ${CTX}`,
+    `Grade how ${sa} handled this ${what} on the QA lead's call scorecard and coach ${first}. You have the facts (F#, promises P#), the analysis drawn from them, and the transcripts. The facts come first: do not re-decide them; grade against them.`,
+    ``,`SCORECARD (0-3; 0 = not done or made it worse, 1 = poor, 2 = acceptable, 3 = excellent). Pick the level whose words fit best.`,
+    ...rows,
+    ``,`Rules:`,
+    `- For each criterion write the reason first, then the score that follows from it. Every reason names what ${first} did or didn't do in one sentence and cites the fact ids it rests on (F#, P#) in "cites". A score you can't tie to a fact is a guess: cite the closest facts and say what is missing.`,
+    `- "na" only where the criterion has an N/A condition and that condition is true; then always "na". Never score a criterion that doesn't apply, and never mark one N/A because the evidence is thin.`,
+    `- Read the N/A conditions literally. A one-off (one late or wrong order, a driver who couldn't find the address, a no-show, a customer who wants a refund) with no sign of a repeating product or process gap needs no long-term fix: "na". Self-serve applies only when the caller asked Tarro for something the client can do in CMA themselves; a call from a customer, or a request only Tarro can action, has no self-serve angle: "na". Don't invent an opportunity to score it 0.`,
+    `- Use the transcripts only to judge how things were said (opening, tone, empathy, clarity, the close) and to check a fact. Transcripts are machine speech-to-text with no speaker labels; the agent answers under an alias and often as the restaurant ("Pete's Pizza, how can I help?"). A fact whose speaker is "unclear" can't count for or against ${first}.`,
+    `- Voicemail and no-answer calls were set aside and are not shown. A call with no transcript tells you nothing.`,
+    ...CALL_RULES(sa,team),
+    `- ${first} works in GreenDot (tickets, payments, menu, settings) and can play recordings that aren't here. Don't mark ${first} down for a check this record can't show; only for what the facts show went wrong. An action ${first} said on the call was done or would be done now ("I'll process the refund", "I updated the ticket") counts as done unless a later fact shows it wasn't; never lower a score only because the record can't confirm it was carried out.`,
+    `- WIRA tasks are matched by restaurant and time. A task on this restaurant created during or just after the call and about this request is ${first}'s ticket even when its creator isn't recorded; score 2e on what it says. One about another issue is not this call's ticket.`,
+    ...(noTask?[`- No WIRA task was linked to this ${what}. Tasks are matched by restaurant and time and can be missed, so this record can't show whether ${first} made a ticket: score ${tk.id} "unknown" and say no ticket was found in the linked window, unless the ${what} needed no ticket (then "na"${tk.na?"":", if allowed"}).`]:[]),
+    `- WIRA categories: "live-support-cos-self-resolved" is the right category for a request Support resolved on the call; an escalation goes to the owning team's project. A ticket whose title names the ticket or order and the request, and whose notes say what the caller asked and what was done, is complete: don't ask for amounts, phone numbers or addresses the order already holds.`,
+    `- Use the QA lead's corrections below where they apply: they are how the QA lead grades.`,
+    `- Refer to people by name or role, never as he or she. Plain, direct, specific; no praise padding.`,
+    ``,`Reply with only a JSON object:`,
+    `{"criteria": {${(items||[]).map(it=>`"${it.id}": {"why": "one sentence", "cites": ["F1"], "score": ${it.na?'"0-3 or na':'"0-3'}${noTask&&it===tk?' or unknown"':'"'}}`).join(", ")}},`,
+    ` "wentWell": ["up to 3 things ${first} did well, each under 20 words, each tied to a fact"],`,
+    ` "fixes": [{"id": "criterion id scored below 3", "what": "what ${first} did, under 25 words", "should": "what ${first} should do next time, under 30 words, with the words to say when it helps"}],`,
+    ` "summary": "1-2 sentences on the overall handling"}`,
+    `"fixes" has one entry per criterion scored 0-2 that matters most, at most 4, most costly first.`,
+    ``,`QA LEAD'S CORRECTIONS (marks the lead contested, findings marked "not a mistake", right marks with the reasoning corrected)`,callLessonLines(lessons)||"None yet.",
+    ``,`${team?"CASE":"CALL"}`,`Audited agent: ${sa}`,`${c.kind?`${c.kind} (${KIND_TEXT[c.kind]||c.kind}) · `:""}${caseLine(c)}`,
+    `Linked calls with talk: ${legs.length} (${legs.filter(l=>l.graded).length} graded)${c.setAside?` · ${c.setAside} voicemail or silent set aside`:""}`].concat(team?[`Agents who worked it: ${team.join(", ")}`]:[]);
+  return head.join("\n")+`\n\nANALYSIS\n${aLines.join("\n")}\n\nFACTS\n${factLines(F)}\n\n`+caseEvidence(c);
+}
+/* scores clamped to each item's scale; "na" only where the item has an N/A condition (otherwise the item is left unscored for the reviewer);
+   cites only to facts that exist, from "cites" and from ids named in the reason */
+function cleanCallGrade(x,items,F){if(!x||typeof x!=="object"||Array.isArray(x))return null;
+  let cr=x.criteria&&typeof x.criteria==="object"&&!Array.isArray(x.criteria)?x.criteria:null;
+  if(cr)["wentWell","fixes","summary"].forEach(k=>{if(x[k]==null&&cr[k]!=null)x=Object.assign({},x,{[k]:cr[k]})});
+  const flat=k=>x[k]&&typeof x[k]==="object"&&!Array.isArray(x[k])?x[k]:{};
+  const get=(id,k,fk)=>{const v=cr&&cr[id]&&typeof cr[id]==="object"?cr[id][k]:undefined;return v!==undefined?v:flat(fk)[id]};
+  const ids=new Set(((F&&F.timeline)||[]).map(t=>t.id).concat(((F&&F.promises)||[]).map(p=>p.id)));
+  const okCites=(a,why)=>[...new Set((Array.isArray(a)?a:typeof a==="string"?a.split(/[\s,;]+/):[]).concat(String(why||"").match(/\b[FP]\d+\b/g)||[])
+    .map(v=>String(v).trim().toUpperCase()))].filter(v=>ids.has(v)).slice(0,8);
+  const scores={},reasons={},cites={};
+  (items||[]).forEach(it=>{if(!it||!it.id)return;const id=String(it.id),{lo,hi}=itemScale(it),v=get(id,"score","scores"),why=get(id,"why","reasons");
+    const isNa=typeof v==="string"&&/^\s*(n\/?a|not applicable)\s*$/i.test(v),num=v===null||v===""||typeof v==="boolean"?NaN:Number(v);
+    if(isNa){if(it.na)scores[id]="na"}else if(!isNaN(num))scores[id]=Math.max(lo,Math.min(hi,Math.round(num)));
+    const r=capText(typeof why==="string"?why:"",300);if(r)reasons[id]=r;
+    const c=okCites(get(id,"cites","cites"),r);if(c.length)cites[id]=c});
+  if(!Object.keys(scores).length)return null;
+  const known=new Set((items||[]).map(it=>String(it.id))),sv=v=>capText(typeof v==="string"?v:v==null?"":String(v),300);
+  const fixes=(Array.isArray(x.fixes)?x.fixes:[]).filter(f=>f&&typeof f==="object"&&known.has(String(f.id||f.criterion||"").trim())).slice(0,6)
+    .map(f=>({id:String(f.id||f.criterion).trim(),what:sv(f.what),should:sv(f.should)})).filter(f=>f.what||f.should);
+  return {scores,reasons,cites,wentWell:(Array.isArray(x.wentWell)?x.wentWell:[]).map(t=>capText(typeof t==="string"?t:"",200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,3),
+    fixes,summary:capText(typeof x.summary==="string"?x.summary:"",400)}}
+/* the live form's total: score ÷ 3 of the weight, N/A left out (v2) */
+function callScore(scores,items){let got=0,den=0;(items||[]).forEach(it=>{const v=scores&&scores[it.id];if(v==null||v===""||v==="na")return;const {hi}=itemScale(it),w=Number(it.w)||0;den+=w;got+=w*Math.min(hi,Number(v))/hi});
+  return den?Math.round(got/den*1000)/10:null}
+/* one Claude pass; a reply that isn't valid JSON is repaired from its text when the chat brain's repairJson (or deps.repair) is there */
+async function callAsk(deps,prompt,pass){try{return await deps.ask(prompt,pass)}
+  catch(e){const fix=deps.repair||(typeof repairJson==="function"?repairJson:null);if(e&&e.code==="invalid_json"&&e.text&&fix){const v=fix(e.text);if(v&&typeof v==="object")return v}throw e}}
+/* facts (reused from c.aiFacts when there), analysis (reused likewise), then the grade.
+   deps: {ask(prompt, pass) -> parsed JSON, transcripts (legs [{id,text}] or {id: text}), items, lessons, step(id, state, note)} */
+async function gradeCall(c,deps){deps=deps||{};const step=deps.step||(()=>{}),items=deps.items||[];if(!items.length)throw {code:"no_items"};
+  const input=callInput(c,deps.transcripts);if(!input.legs.length)throw {code:"no_text"};
+  const ai=c&&c.aiFacts&&typeof c.aiFacts==="object"?c.aiFacts:null,af=ai&&ai.facts;
+  let F=af&&Array.isArray(af.timeline)&&af.timeline.length?{calls:af.calls||{},timeline:af.timeline,promises:(af.promises||[]).map(p=>({id:p.id,src:p.src,who:p.who,to:p.to,what:p.what,by:p.by||""}))}:null;
+  if(F)step("facts","done","reused");else{step("facts","run");F=cleanFacts(await callAsk(deps,factsPrompt(input),"facts"),input.legs);if(!F)throw {code:"ai_shape",pass:"facts"};step("facts","done",`${F.timeline.length} facts`)}
+  let A=ai&&(ai.rootCause||ai.summary)&&af?ai:null;
+  if(A)step("analysis","done","reused");else{step("analysis","run");A=cleanAnalysis(await callAsk(deps,analysisPrompt(input,F),"analysis"),F);if(!A)throw {code:"ai_shape",pass:"analysis"};step("analysis","done")}
+  step("grade","run");const G=cleanCallGrade(await callAsk(deps,callGradePrompt(input,F,A,items,deps.lessons||[]),"grade"),items,F);if(!G)throw {code:"ai_shape",pass:"grade"};
+  step("grade","done",`${callScore(G.scores,items)}%`);
+  return {F,A,G}}
 /* PULL-CORE END */
 if(typeof module!=="undefined")module.exports={capText,dur,clock12u,CTX,PULL,GD,ROSTER_DEFAULT,SCOPE_DEFAULT,LD_DIMS,ldTs,etDay,etClock,addDaysU,isPhone,cleanName,cleanAgent,ldVal,fnv,kindOf,normRows,makeRoster,groupOf,scopeRows,whoOf,buildChain,eligibleFor,linkedNumbers,candidatesFor,choosePicks,partyOf,queueDoc,populationOf,ldConfig,
-  legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask,FOLLOW_DIMS,followUpConfig,followUps,followUpLine};
+  legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask,FOLLOW_DIMS,followUpConfig,followUps,followUpLine,
+  CALL_GRADE_V,CALL_RULES,callLessonLines,itemLevels,itemScale,callInput,callGradePrompt,cleanCallGrade,callScore,callAsk,gradeCall};
