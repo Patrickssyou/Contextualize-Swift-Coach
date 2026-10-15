@@ -93,6 +93,7 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .status{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 16px;background:var(--soft);border-bottom:1px solid var(--line);font-size:14px}
 .status .r{margin-left:auto;display:flex;gap:8px}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;font-weight:600;font-size:14px}
+.btn.small{padding:2px 8px;font-size:12px;margin-left:4px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-fill)}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .scroll{overflow-x:auto}
@@ -223,10 +224,10 @@ const DATA={
 // call agreed: majority by default
 Object.values(DATA).forEach(d=>d.rubric.forEach(([id])=>{if(d.agreed[id])return;const v=RATERS.map(k=>d.r[k].m[id]).sort();d.agreed[id]=[v[1],v[0]===v[2]?"All matched":"Settled on the call."]}));
 
-const S={who:"pat",stage:"scoring",kind:"chat",tab:"audit",ttab:"ticket",open:new Set(),noteOpen:null,evMore:false};
+const S={who:"pat",stage:"scoring",kind:"chat",tab:"audit",ttab:"ticket",open:new Set(),peek:new Set(),noteOpen:null,evMore:false};
 // what the viewer has done in the scoring stage (Pat mid-way; Howard submitted; Li Qi not started)
-const DRAFT={chat:{pat:{fr:3,ev:1,rs:2,fa:1},liqi:{}},call:{pat:{},liqi:{}}};
-const SUBMITTED={pat:false,howard:true,liqi:false};
+const DRAFT={chat:{pat:{fr:3,ev:1,rs:2,fa:1}},call:{pat:{}}};
+const SUBMITTED={pat:false,howard:true,liqi:true};
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -235,7 +236,7 @@ const mk=(v,max)=>v==null?`<span class="mk mna">–</span>`:`<span class="mk ${m
 const av=k=>`<span class="av ${k}" title="${k==="claude"?"Claude":PEOPLE[k].name}">${k==="claude"?"C":PEOPLE[k].ini}</span>`;
 const D=()=>DATA[S.kind];
 function pct(marks){const d=D();let a=0,b=0;d.rubric.forEach(([id,,max])=>{const v=marks[id];if(v!=null){a+=v;b+=max}});return b?Math.round(a/b*100):null}
-function myMarks(){const d=D();if(S.stage!=="scoring")return d.r[S.who].m;if(S.who==="howard")return d.r.howard.m;return DRAFT[S.kind][S.who]}
+function myMarks(){const d=D();if(S.stage!=="scoring")return d.r[S.who].m;if(SUBMITTED[S.who])return d.r[S.who].m;return DRAFT[S.kind][S.who]}
 function scoredCount(){return RATERS.filter(k=>S.stage!=="scoring"||SUBMITTED[k]).length}
 
 function seg(el,opts,key){el.innerHTML=opts.map(([v,l])=>`<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${S[key]===v}">${l}</button>`).join("")}
@@ -253,7 +254,7 @@ function render(){
 /* ---------- AUDIT ---------- */
 function audit(){const d=D();return ticket(d)+evidence(d)+scorecard(d)+coaching(d)}
 function ticket(d){
-  const showC=S.stage!=="scoring",fin=S.stage==="agreed";
+  const showC=true,fin=S.stage==="agreed";
   const p=fin?pct(Object.fromEntries(Object.entries(d.agreed).map(([k,v])=>[k,v[0]]))):showC?d.claudePct:null;
   return `<section class="sec" aria-label="Ticket">
   <div class="secbd"><div class="tk"><div>
@@ -273,14 +274,16 @@ function evidence(d){
 function scorecard(d){
   const st=S.stage,me=S.who,mine=myMarks(),done=scoredCount(),iSub=st!=="scoring"||SUBMITTED[me];
   const cols=[...RATERS];
-  const head=`<tr><th>Criterion</th><th><span class="colh">${av("claude")}Claude</span></th>${cols.map(k=>`<th class="${k===me?"me":""}"><span class="colh">${av(k)}${k===me?"You":PEOPLE[k].name}</span></th>`).join("")}${st!=="scoring"?`<th>Spread</th><th>Agreed</th>`:""}</tr>`;
+  const rv=k=>st==="scoring"&&k!==me&&SUBMITTED[k]&&iSub?`<button type="button" class="btn small" data-peek="${k}">${S.peek.has(k)?"Hide":"Reveal"}</button>`:"";
+  const head=`<tr><th>Criterion</th><th><span class="colh">${av("claude")}Claude</span></th>${cols.map(k=>`<th class="${k===me?"me":""}"><span class="colh">${av(k)}${k===me?"You":PEOPLE[k].name}${rv(k)}</span></th>`).join("")}${st!=="scoring"?`<th>Spread</th><th>Agreed</th>`:""}</tr>`;
   const rows=d.rubric.map(([id,label,max,sub])=>{
-    const claudeCell=st==="scoring"?`<span class="hid">🔒 Hidden</span>`:mk(d.claude[id],max);
+    const claudeCell=mk(d.claude[id],max);
     const cells=cols.map(k=>{
       if(k===me&&st==="scoring"&&!iSub){const v=mine[id];const hasN=!!(d.r[me].n[id]&&S.kind==="chat"&&me==="pat"&&v!=null);
         return `<td class="me"><span class="picks" role="group" aria-label="${esc(label)}">${[...Array(max+1).keys()].map(x=>`<button type="button" data-pick="${id}" data-v="${x}" aria-pressed="${v===x}">${x}</button>`).join("")}</span><button type="button" class="note ${hasN?"has":""}" data-note="${id}" aria-label="Add a note">${hasN?"Note ✓":"+ Note"}</button></td>`}
       if(st==="scoring"){const sub=k===me?true:SUBMITTED[k];
         if(k===me)return `<td class="me">${mk(mine[id],max)}</td>`;
+        if(sub&&iSub&&S.peek.has(k)){const n=d.r[k].n[id];return `<td>${mk(d.r[k].m[id],max)}${n?`<span class="note has" title="${esc(n)}">✎</span>`:""}</td>`}
         return `<td><span class="hid">${sub?"✓ Scored":"Not yet"}</span></td>`}
       const v=d.r[k].m[id],n=d.r[k].n[id];return `<td class="${k===me?"me":""}">${mk(v,max)}${n?`<span class="note has" aria-hidden="true">✎</span>`:""}</td>`});
     let extra="";
@@ -300,12 +303,12 @@ function scorecard(d){
   const filled=Object.keys(mine).length,need=d.rubric.length;
   const unsettled=st==="revealed"?d.rubric.filter(([id])=>{const vs=RATERS.map(k=>d.r[k].m[id]);return Math.max(...vs)!==Math.min(...vs)}).length:0;
   const status=st==="scoring"?
-    `<div class="status"><span><b>${done} of 3</b> scored. Everyone's marks and Claude's open when all 3 are in.</span><span class="dots">${RATERS.map(k=>`<span class="dot ${SUBMITTED[k]?"done":""} ${k}" title="${PEOPLE[k].name}">${PEOPLE[k].ini}</span>`).join("")}</span>
-      <span class="r">${iSub?`<button type="button" class="btn">Edit my marks</button>`:`<span class="hint num">${filled}/${need}</span><button type="button" class="btn primary"${filled<need?" disabled":""}>Submit my marks</button>`}</span></div>`:
+    `<div class="status"><span><b>${RATERS.filter(k=>SUBMITTED[k]).length} of 3</b> submitted. ${iSub?"Reveal anyone who has submitted.":"Submit yours to reveal the others."}</span><span class="dots">${RATERS.map(k=>`<span class="dot ${SUBMITTED[k]?"done":""} ${k}" title="${PEOPLE[k].name}">${PEOPLE[k].ini}</span>`).join("")}</span>
+      <span class="r">${iSub?`<button type="button" class="btn">Edit my marks</button><button type="button" class="btn primary">Compare all</button>`:`<span class="hint num">${filled}/${need}</span><button type="button" class="btn primary"${filled<need?" disabled":""}>Submit my marks</button>`}</span></div>`:
     st==="revealed"?`<div class="status"><span><b>Revealed.</b> ${unsettled} of ${d.rubric.length} rows to settle. Click a row to see everyone's notes.</span><span class="r"><button type="button" class="btn primary" disabled>Lock agreed score</button></span></div>`:
     `<div class="status"><span><b>Agreed</b> by Pat, Howard and Li Qi on Oct 14. This is the score the SA sees.</span><span class="r"><button type="button" class="btn">Reopen</button></span></div>`;
   const out=st==="agreed"?outcome(d):"";
-  return `<section class="sec" aria-label="Scorecard"><div class="sechd"><h2>Scorecard</h2><div class="r"><span class="hint">Round 1 · item 4 of 15</span></div></div>${status}
+  return `<section class="sec" aria-label="Scorecard"><div class="sechd"><h2>Scorecard</h2><div class="r"><span class="hint">Round 1 · chat 4 of 10</span></div></div>${status}
    <div class="scroll"><table class="sc"><thead>${head}</thead><tbody>${rows}</tbody>${tot}</table></div>${out}</section>`}
 function outcome(d){
   const off=d.rubric.filter(([id])=>d.claude[id]!==d.agreed[id][0]);
@@ -326,10 +329,10 @@ function coaching(d){
 function calib(){
   const items=[["chat","Wrong pizza, client wants comp","Ivo","revealed",[1,1,1]],["chat","Late delivery, refund ask","Sam","agreed",[1,1,1]],["chat","Coupon not applied","Rhea","scoring",[0,1,0]],["call","Order not ready at pickup","Mara","agreed",[1,1,1]],["chat","Double charge","Ivo","scoring",[1,1,0]],["call","Wrong address","Jon","scoring",[0,0,1]],["chat","Missing item","Ana","agreed",[1,1,1]],["call","Menu price wrong","Rhea","scoring",[0,0,0]]];
   const bars=[["Fault attribution",62],["Resolution path",48],["Evidence before action",40],["Reply quality",22],["First response",4]];
-  return `<section class="sec"><div class="sechd"><h2>Round 1</h2><div class="r"><span class="hint">10 chats and 5 calls · Oct 13 to Oct 17</span><button type="button" class="btn primary">New round</button></div></div>
+  return `<section class="sec"><div class="sechd"><h2>Round 1</h2><div class="r"><span class="hint">10 drawn at random, spread across the SAs</span><button type="button" class="btn primary">Draw next 10</button></div></div>
    <div class="secbd">
     <div class="kpis">
-     <div class="kpi"><span class="lbl">Agreed</span><span class="v num">6 / 15</span><span class="hint">3 waiting to settle</span></div>
+     <div class="kpi"><span class="lbl">Agreed</span><span class="v num">4 / 10</span><span class="hint">3 waiting to settle</span></div>
      <div class="kpi"><span class="lbl">Same mark, all 3</span><span class="v num">71%</span><span class="hint">of criteria, on agreed items</span></div>
      <div class="kpi"><span class="lbl">Claude vs agreed</span><span class="v num">78%</span><span class="hint">criteria matched</span></div>
      <div class="kpi"><span class="lbl">Your turn</span><span class="v num">4</span><span class="hint">items you haven't scored</span></div>
@@ -344,8 +347,9 @@ function calib(){
    </div></section>`}
 
 document.addEventListener("click",e=>{
-  const t=e.target.closest("[data-k]");if(t){e.preventDefault();if(t.disabled)return;S[t.dataset.k]=t.dataset.v;if(t.dataset.k==="kind"||t.dataset.k==="stage")S.open.clear();render();return}
+  const t=e.target.closest("[data-k]");if(t){e.preventDefault();if(t.disabled)return;S[t.dataset.k]=t.dataset.v;if(t.dataset.k!=="tab"){S.open.clear();S.peek.clear()}render();return}
   const p=e.target.closest("[data-pick]");if(p){DRAFT[S.kind][S.who][p.dataset.pick]=+p.dataset.v;render();return}
+  const pk=e.target.closest("[data-peek]");if(pk){const k=pk.dataset.peek;S.peek.has(k)?S.peek.delete(k):S.peek.add(k);render();return}
   const n=e.target.closest("[data-note]");if(n){S.noteOpen=S.noteOpen===n.dataset.note?null:n.dataset.note;render();return}
   const r=e.target.closest("[data-open]")||e.target.closest("tr.row");if(r){const id=r.dataset.open||r.dataset.row;S.open.has(id)?S.open.delete(id):S.open.add(id);render()}
 });
