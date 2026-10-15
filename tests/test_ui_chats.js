@@ -80,14 +80,14 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
 
   // ----- 1b. storage by week: one week's collections live, other weeks' reviews read once for the game layer
   await page.waitForFunction(() => gameStats().xp === 15, null, { timeout: 5000 });
-  ok((await txt(page, '#xpNum')) === '15 XP' && await page.evaluate(w => window.__gets.includes(`chatWeeks/${w}/reviews`) && window.__gets.includes('chatWeeks'), PW), "XP counts last week's review (+10, +5 calibration), read once with get()");
+  ok(await page.evaluate(() => gameStats().xp) === 15 && await page.locator('#hud').isHidden() && await page.evaluate(w => window.__gets.includes(`chatWeeks/${w}/reviews`) && window.__gets.includes('chatWeeks'), PW), "XP counts last week's review (+10, +5 calibration), read once with get()");
   ok(await weekSubs(page) === wantSubs(WEEK), 'live: only the selected week, chats + audits + reviews');
   const n0 = await weekSubN(page);
   await page.click('#wkPrev');
   await page.waitForFunction(() => document.querySelectorAll('.crow').length === 2, null, { timeout: 5000 });
   ok(await weekSubs(page) === wantSubs(PW) && await weekSubN(page) - n0 === 3, 'week change: the old week unsubscribed, the new week subscribed once');
   ok((await txt(page, '#chatGroups')).includes('Birch Lane Pizza') && await page.locator('.crow', { hasText: 'Fern Street Slice' }).locator('.pill', { hasText: 'No SA reply' }).count() === 1 && await page.locator('.crow[data-open="9900902"] .cpick:disabled').count() === 1, "the other week's chats show; gradable:false gets No SA reply");
-  ok(await page.locator('#chatBtns button').count() === 3 && await page.locator('#chatQuest').isVisible() && await page.evaluate(() => gameStats().xp) === 15, 'a pulled week shows its buttons and quest; XP unchanged');
+  ok(await page.locator('#chatBtns button').count() === 3 && await page.locator('#chatQuest').isHidden() && await page.evaluate(() => gameStats().xp) === 15, 'a pulled week shows its buttons, no week quest; XP unchanged underneath');
   await page.click('.crow[data-open="9900901"] .clink'); await page.waitForTimeout(300);
   ok(await sel(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${PW}/9900901`, 'the chat link carries its week');
   ok((await txt(page, '#cvWord')) === 'Great' && (await txt(page, '#cvCase')).includes('MENU SETUP') && (await txt(page, '#cvCase')).includes('Correct two menu prices shown online'), 'verdict card: case type label and request');
@@ -600,7 +600,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.evaluate(s => (document.querySelector(`.crow[data-open="${s}"] .conchip`) || {}).textContent, SID) === 'Contested 2', 'the queue row shows Contested 2');
   const xp1 = await page.evaluate(() => gameStats().xp);
   ok(xp1 - xp0 === 10, `review adds 10 XP (${xp0} → ${xp1})`);
-  ok(/Saved .* · \+10 XP · 1 of 9 · 3 lessons/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9 · 3 lessons, offers Next chat');
+  ok(/Saved .*% · 1 of 9 · 3 lessons/.test(await txt(page, '#toast')) && !/XP|Level/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1 && await page.locator('.confetti').count() === 0 && await page.locator('#chatXp').count() === 0, 'toast: 1 of 9 · 3 lessons, no XP or level, no confetti, no XP hint by Save; offers Next chat');
   ok(await fmark(page, NF.id) === 'not' && await page.evaluate(id => chatDraft(String(chatSel)).findings[id].note, NF.id) === NOTE, 'after saving, the draft keeps the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }

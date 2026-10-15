@@ -343,13 +343,13 @@ function chMetricsHtml(S){const v=chatVerdict(S.avg),slowL=CHAT.slowReplyMin||15
     cell("dmComp","Comp accuracy",S.comp.n?`${S.comp.right} of ${S.comp.n}`:"–",S.comp.n?`${fmt(S.comp.right/S.comp.n*100)}% right`:"No checks",S.comp.n?"t-"+(S.comp.right===S.comp.n?"good":S.comp.right/S.comp.n>=.8?"ok":"bad"):"")+
     cell("dmRev","Reviewed by you",`${S.mine} of ${S.n}`,`${S.graded} graded`)}
 function renderChatQueue(){const v=$("#view-chats");if(!v)return;
-  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="chatMetrics" aria-label="This week"></div><div class="panel quest" id="chatQuest"></div>
+  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="chatMetrics" aria-label="This week"></div><div class="panel quest" id="chatQuest" hidden></div>
     <div class="panel pullbar chatbar"><div class="cbinfo"><div class="h2" style="margin:0">WIRA chats</div><div class="hint cstatus" id="chatStatus" role="status"></div></div><div class="cbtns" id="chatBtns"></div></div>
     <div class="sastrip" id="chatStrip"></div><div class="sagroups" id="chatGroups"></div>`}
   const wk=chatsOfWeek(),ready=chatsReady&&chW.week===week,can=!!(db&&mcp),canAi=can&&!!sampleFn,busy=!!(chatRun||chatPullRun),pk=chGradeList("picks").length,all=chGradeList("all").length;
   const graded=wk.filter(c=>chatAud[c.sid]).length,reviewed=wk.filter(c=>chatRev[c.sid]).length,picked=wk.filter(c=>c.picked).length;
   /* a week with no pull shows the Pull button only */
-  $("#chatQuest").hidden=!wk.length;$("#chatMetrics").hidden=!wk.length;if(wk.length)$("#chatMetrics").innerHTML=chMetricsHtml(chStats(wk));
+  $("#chatQuest").hidden=true;$("#chatMetrics").hidden=!wk.length;if(wk.length)$("#chatMetrics").innerHTML=chMetricsHtml(chStats(wk));
   $("#chatBtns").innerHTML=`<button type="button" class="btn${wk.length?"":" primary"}" id="chatPull"${can&&!busy&&ready?"":" disabled"}>${chatPullRun?"Pulling…":wk.length?"Pull again":"Pull chats"}</button>`+
     (wk.length?`<button type="button" class="btn${pk?" primary":""}" id="chatGradePicks"${canAi&&!busy&&pk?"":" disabled"}>Grade picks<span class="bc num">${pk||""}</span></button>
     <button type="button" class="btn" id="chatGradeAll"${canAi&&!busy&&all?"":" disabled"}>Grade all<span class="bc num">${all||""}</span></button>`:"")+
@@ -627,7 +627,6 @@ function chCoachBody(c,a,rv,d){const cal=chCalItem(c);if(!cal)return chCoach(c,a
   return cbLockedChat(cal.key)?chCoach(c,a,rv,d,true):`<p class="tkmut nofix">Coaching appears once the score is agreed.</p>`}
 function chCalSig(c){const it=chCalItem(c);if(!it)return "";const lk=cbLockedChat(it.key);return it.ik+"|"+(lk?lk.sig:"")}
 function chCoach(c,a,rv,d,panel){const G=a.grade||{},F=chFixes(a,d.scores,d.findings,d.contests),gen=coachText(c,a,d.scores,d.findings,d.contests),edit=chNoteOpen===String(c.sid),first=chFirst(a.sa||c.sa)||"the SA";
-  const xp=chatXpFor({sid:c.sid})-(rv?chatXpFor(rv):0);
   const well=(G.wentWell||[]).length?`<div class="cwell" id="coachWell"><h4 class="evh">What went well</h4><ul class="wchips">${G.wentWell.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:"";
   const cards=F.length?`<div class="fixes" id="coachFixes">${F.map((f,i)=>`<article class="fixcard ${esc(String(f.priority).toLowerCase())}" data-fix="${esc(f.id)}"><header class="fixhd">${chPrio(f.priority)}<h4>${esc([f.label,f.type].filter(Boolean).join(" · ")||"Next time")}</h4></header>
       ${f.what?`<div class="fixb"><h5>What happened</h5><p>${esc(f.what)}</p></div>`:""}${f.should?`<div class="fixb fixdo"><h5>Do this instead</h5><p>${esc(f.should)}</p></div>`:""}
@@ -637,7 +636,7 @@ function chCoach(c,a,rv,d,panel){const G=a.grade||{},F=chFixes(a,d.scores,d.find
     <div class="row coachbar"><button type="button" class="btn" id="coachCopy">Copy all</button><button type="button" class="btn small" id="coachEdit" aria-expanded="${edit}">${edit?"Close note":"Edit note"}</button>${d.coach!=null&&d.coach!==gen?`<span class="hint">Note edited</span><button type="button" class="btn small" id="coachRebuild">Rebuild</button>`:""}</div>
     ${edit?`<div class="field"><label for="coachText" class="sr-only">Coaching note</label><textarea id="coachText" class="coach" rows="14">${esc(chNote(c,a,d))}</textarea></div>`:""}
     ${panel?"":`<div class="savebar"><div class="field"><label for="chatReviewer">Reviewer</label><input id="chatReviewer" autocomplete="name" value="${esc(d.reviewer)}"></div>
-      <div class="row"><button type="button" class="btn primary" id="chatSave"${db?"":" disabled"}>Save review</button><span class="hint num" id="chatXp">+${Math.max(0,xp)} XP</span></div></div>`}`}
+      <div class="row"><button type="button" class="btn primary" id="chatSave"${db?"":" disabled"}>Save review</button></div></div>`}`}
 /* ---------- the QA ticket: top of the audit. Fields, what happened, the compensation check, then one card per finding (P1 first) ---------- */
 const chInit=c=>c.initiator==="ae"?"AE"+(c.createdBy?" · "+c.createdBy:""):c.initiator==="client"?"Client":(c.createdBy||"–");
 const chFaultCls=w=>w==="tarro"||w==="shared_tarro"?"bad":w==="unclear"||w==="none"?"none":"ok";
@@ -869,15 +868,15 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
     reinforce[id]={mark:chMk(G[id],r.max),reason:why}});
   const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:chNote(c,a,d),findings,contests,reinforce,
     reviewer:String(d.reviewer||"").trim(),by:myId||null,at:new Date().toISOString()};
-  const before=gameStats(),gained=chatXpFor(rec)-(prev?chatXpFor(prev):0),btn=$("#chatSave");if(btn)btn.disabled=true;
+  const btn=$("#chatSave");if(btn)btn.disabled=true;
   try{await db.doc(chPath("reviews",rec.week,sid)).set(rec)}
   catch(e){if(btn)btn.disabled=false;toast(e&&e.code==="invalid_argument"?"You don't have edit access to this QA Desk.":e&&e.code==="quota_exceeded"?"The QA Desk storage is full.":"Couldn't save. Try again.");return}
   chatRev[sid]=rec;
   const L=await chSaveLessons(c,a,rec,prev);
   let RD=null;try{RD=await lrnRecord(rec)}catch(e){}
-  const q=chatQuest(rec.week),lv=Math.floor((before.xp+gained)/100),nx=chNextChat(sid);
-  const msg=`Saved ${v?v.label:""} ${fmt(pct)}% · +${Math.max(0,gained)} XP`+(q.total?` · ${q.done} of ${q.total}`:"")+(L.n?` · ${L.n} lesson${L.n===1?"":"s"}`:"")+(L.err?" · Lessons not saved":"")+(RD?` · Round ${RD.round}: ${(RD.results||[]).length} of ${(RD.sample||[]).length}`:"")+(lv>before.lv?` · Level up: ${levelName(lv)}`:"");
-  toast(msg,nx?{label:"Next chat →",fn:()=>openChat(nx.sid)}:null);celebrate($("#chatSave"));renderChats();renderGame()}
+  const q=chatQuest(rec.week),nx=chNextChat(sid);
+  const msg=`Saved ${v?v.label:""} ${fmt(pct)}%`+(q.total?` · ${q.done} of ${q.total}`:"")+(L.n?` · ${L.n} lesson${L.n===1?"":"s"}`:"")+(L.err?" · Lessons not saved":"")+(RD?` · Round ${RD.round}: ${(RD.results||[]).length} of ${(RD.sample||[]).length}`:"")+"";
+  toast(msg,nx?{label:"Next chat →",fn:()=>openChat(nx.sid)}:null);renderChats();renderGame()}
 /* every contest and every finding marked "not a mistake" is a lesson the brain learns from (chatLessons/<sid>_<crit>); withdrawing or un-marking deletes it.
    An unchanged lesson keeps its date, so re-saving a review doesn't push older lessons out of the newest 20 */
 function chLessonBase(c,a){const sid=String(c.sid);return Object.assign({sid,week:chWk(c),sa:c.sa||"",caseType:(a.analysis||{}).caseType||"",by:myId||null},lrnTag(c,a))}
