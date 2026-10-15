@@ -169,15 +169,22 @@ function chatTiming(c,rows){
   const sum=on=>states.length?rnd1(states.filter(s=>s.on===on).reduce((t,s)=>t+(s.min||0),0)):null;
   const closedAt=c.closedAt||((states.find(s=>s.on==="closed")||{}).at)||"";
   /* the two times, which the status change confirms; WIRA's first_response_time_minutes (c.frt) is kept beside it because it disagrees on about 1 chat in 80 (chat 1814251: 2.1 min against 23.2 between the times and the status change) */
-  const fromTimes=minBetween(c.firstClientAt,c.firstReplyAt),wira=c.frt!=null&&!isNaN(c.frt)?rnd1(c.frt):null,firstReplyMin=fromTimes!=null?fromTimes:wira;
-  return {perMessage:false,opened:c.at||"",firstClientAt:c.firstClientAt||"",firstReplyAt:c.firstReplyAt||"",firstReplyMin,wiraFirstReplyMin:wira,slowFirstReply:firstReplyMin!=null&&firstReplyMin>CHAT.slowReplyMin,
+  const fromTimes=minBetween(c.firstClientAt,c.firstReplyAt),wira=c.frt!=null&&!isNaN(c.frt)?rnd1(c.frt):null;
+  const ae=c.initiator==="ae"?aeFirstReply(c.at,states):null;
+  const firstReplyMin=c.initiator==="ae"?(ae?ae.min:null):fromTimes!=null?fromTimes:wira;
+  return {perMessage:false,opened:c.at||"",firstClientAt:c.firstClientAt||"",firstReplyAt:c.initiator==="ae"?(ae?ae.at:""):c.firstReplyAt||"",firstReplyMin,firstReplyFrom:c.initiator==="ae"?"ae":"client",wiraFirstReplyMin:wira,slowFirstReply:firstReplyMin!=null&&firstReplyMin>CHAT.slowReplyMin,
     closedAt,handleMin:closedAt?minBetween(c.at,closedAt):null,states,
     waitingOnSupportMin:sum("support"),waitingOnClientMin:sum("client"),waitingOnHandoffMin:sum("handoff")}}
+/* an AE-started chat has no client message to time from: its first reply is the SA's first reply after the AE opened it,
+   which WIRA shows as the first status change after the chat was created (status changes on the first reply, a handoff or the close) */
+function aeFirstReply(opened,states){const o=ldTs(opened);if(isNaN(o))return null;
+  const s=(states||[]).find(x=>{const t=ldTs(x.at);return !isNaN(t)&&t>=o-60e3});
+  return s?{at:s.at,min:Math.max(0,rnd1((ldTs(s.at)-o)/60e3))}:null}
 const STATE_ON_L = {support:"Support's turn",client:"waiting on the client",handoff:"waiting on an internal handoff",closed:"closed","":""};
 /* the timing lines the facts pass and the grader read */
 function chatTimingLines(t,c){if(!t)return [];const day=String(t.opened||"").slice(0,10),at=v=>!v?"–":(String(v).slice(0,10)===day?"":String(v).slice(5,10)+" ")+String(v).slice(11,16),mn=v=>v==null?"–":v+" min";
   const L=[`TIMING (WIRA status times, Eastern, 24-hour clock)`,
-    `Opened ${at(t.opened)} · first client message ${at(t.firstClientAt)} · first Support reply ${at(t.firstReplyAt)}${t.firstReplyMin!=null?` (${mn(t.firstReplyMin)} after the first client message${t.wiraFirstReplyMin!=null&&Math.abs(t.wiraFirstReplyMin-t.firstReplyMin)>=1?`; WIRA's own first-response figure says ${mn(t.wiraFirstReplyMin)}, which the times do not support`:""})`:""} · closed ${at(t.closedAt)}${t.handleMin!=null?` (open ${mn(t.handleMin)})`:""}`];
+    `Opened ${at(t.opened)} · first client message ${at(t.firstClientAt)} · first Support reply ${at(t.firstReplyAt)}${t.firstReplyMin!=null?` (${mn(t.firstReplyMin)} after ${t.firstReplyFrom==="ae"?"the AE opened the chat; WIRA has no time for each message, so this is the first status change after the AE's message":"the first client message"}${t.wiraFirstReplyMin!=null&&Math.abs(t.wiraFirstReplyMin-t.firstReplyMin)>=1?`; WIRA's own first-response figure says ${mn(t.wiraFirstReplyMin)}, which the times do not support`:""})`:""} · closed ${at(t.closedAt)}${t.handleMin!=null?` (open ${mn(t.handleMin)})`:""}`];
   if(t.states.length)L.push(`Status changes: `+t.states.map(s=>`${s.status}${s.sub?"/"+s.sub:""} at ${at(s.at)}${s.ongoing?" (still the status when this data was pulled)":s.min!=null?` (${mn(s.min)})`:""}${STATE_ON_L[s.on]?`, ${STATE_ON_L[s.on]}`:""}`).join(" → "));
   L.push(`WIRA does not time each message and its status does not change with every client message: do not work out how long any reply after the first took, and do not fault the SA on reply speed beyond the first reply and these status times.`);
   return L}
@@ -780,4 +787,4 @@ if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(gl
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
-    chatStatesConfig,stateRow,stateOn,chatTiming,chatTimingLines,minBetween,rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}
+    chatStatesConfig,stateRow,stateOn,chatTiming,aeFirstReply,chatTimingLines,minBetween,rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}

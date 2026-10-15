@@ -102,10 +102,11 @@ function part2() {
     if (t.states[t.states.length - 1].on === 'closed') { closed++; if (inbound) ok(t.handleMin != null && Math.abs(t.handleMin - fin) < 0.15 * t.states.length + 0.01, c.sid + ': statuses add up to the open time: ' + fin + ' vs ' + t.handleMin); else ok(t.handleMin != null && t.handleMin >= fin, c.sid + ': open time covers the statuses'); }
     else ok(t.handleMin == null || c.closedAt, c.sid + ': an open chat has no handle time');
     if (c.firstReplyAt) { firstTotal++; if (t.states.some(s => s.at === c.firstReplyAt)) firstMatch++; }
-    if (c.firstClientAt && c.firstReplyAt) { ok(t.firstReplyMin === minBetween(c.firstClientAt, c.firstReplyAt), c.sid + ': first reply minutes come from the two times');
+    if (c.initiator === 'ae') { const r = B.aeFirstReply(c.at, t.states); ok(t.firstReplyFrom === 'ae' && t.firstReplyMin === (r ? r.min : null) && (!r || t.firstReplyAt === r.at), c.sid + ': an AE-started chat times the first reply from the AE opening to the first status change'); }
+    else if (c.firstClientAt && c.firstReplyAt) { ok(t.firstReplyMin === minBetween(c.firstClientAt, c.firstReplyAt), c.sid + ': first reply minutes come from the two times');
       if (c.frt != null) { frtTotal++; if (Math.abs(t.wiraFirstReplyMin - t.firstReplyMin) >= 0.2) frtOff.push(c.sid); } }
   });
-  ok(frtOff.length <= 2 && frtTotal > 70, 'WIRA\'s own first-response minutes disagree with the times on ' + frtOff.join(',') + ' of ' + frtTotal);
+  ok(frtOff.length <= 2 && frtTotal >= 70, 'WIRA\'s own first-response minutes disagree with the times on ' + frtOff.join(',') + ' of ' + frtTotal);
   if (frtOff.includes('1814251')) { const c = week.find(x => x.sid === '1814251'), t = B.chatTiming(c, states.filter(s => s.wira_tasks_state_task_id === c.wid));
     eq([t.firstReplyMin, t.wiraFirstReplyMin], [23.2, 2.1], '1814251: the times (and the status change at the reply) say 23.2 min, WIRA\'s figure 2.1');
     ok(/WIRA's own first-response figure says 2\.1 min/.test(B.chatEvidence({ chat: c, timing: t, tasks: [], orders: [], calls: [], slack: [], notFound: [], orderNote: '' })), 'the evidence flags the disagreement'); }

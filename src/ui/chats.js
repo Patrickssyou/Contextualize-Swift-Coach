@@ -41,7 +41,9 @@ function chFrt(m){if(m==null||isNaN(m))return "–";m=Number(m);return m<60?(Mat
 const chTim=(c,a)=>(a&&a.timing)||(c&&c.timing)||null;
 const chNum=v=>v==null||v===""||isNaN(v)?null:Number(v);
 /* first reply = WIRA's own first response time (the Lightdash metric); the timestamps only fill in when WIRA has none */
-function chFirstMin(c,a){const f=chNum(c&&c.frt)!=null?chNum(c.frt):chNum(a&&a.frt);if(f!=null)return f;const t=chTim(c,a);return t?chNum(t.firstReplyMin):null}
+/* AE-started chats: the SA's first reply after the AE opened it (first WIRA status change), not WIRA's client-message figure */
+function chFirstMin(c,a){const t=chTim(c,a);if(((c&&c.initiator)||(a&&a.initiator))==="ae"){const r=t?aeFirstReply(t.opened||(c&&c.at)||(a&&a.at),t.states):null;return r?r.min:null}
+  const f=chNum(c&&c.frt)!=null?chNum(c.frt):chNum(a&&a.frt);if(f!=null)return f;return t?chNum(t.firstReplyMin):null}
 function chSlow(c,a){const m=chFirstMin(c,a);return m!=null&&m>(CHAT.slowReplyMin||15)}
 /* WIRA's own first-response figure, when it is 1 min or more off the times */
 function chWiraSays(){return null}
@@ -672,11 +674,14 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
   return `<dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`}
 /* the Timing block: the chat's times, a strip of its status changes sized by minutes, the totals per side, and why there is no time per reply */
 const CH_TM_NOTE="WIRA doesn't record a time for each message, so only the first reply can be timed.";
+const chIsAe=(c,a)=>((c&&c.initiator)||(a&&a.initiator))==="ae";
+/* the first reply's clock time: for an AE-started chat, the first status change after the AE opened it */
+function chFirstAt(c,a,t){if(chIsAe(c,a)){const r=aeFirstReply(t.opened||c.at,t.states);return r?r.at:""}return t.firstReplyAt}
 function chTimingHtml(c,a){const t=chTim(c,a);if(!t)return "";
-  const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a);
+  const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a),ae=chIsAe(c,a),fAt=chFirstAt(c,a,t);
   const cell=(k,v,cls)=>`<div class="tmc${cls?" "+cls:""}"><dt>${k}</dt><dd>${v}</dd></div>`;
-  const fr=t.firstReplyAt||m!=null?`<span class="num">${esc(chClock(t.firstReplyAt,day))}</span>${m!=null?chFrHtml(c,a):""}`:`<span class="tkmut">No reply</span>`;
-  const stats=`<dl class="tmstats">${cell("Opened",`<span class="num">${esc(chClock(t.opened||c.at,""))}</span>`)}${cell("First client message",`<span class="num">${esc(chClock(t.firstClientAt,day))}</span>`)}
+  const fr=fAt||m!=null?`<span class="num">${esc(chClock(fAt,day))}</span>${m!=null?chFrHtml(c,a):""}`:`<span class="tkmut">No reply</span>`;
+  const stats=`<dl class="tmstats">${cell("Opened",`<span class="num">${esc(chClock(t.opened||c.at,""))}</span>`)}${ae?cell("AE opened",`<span class="num">${esc(chClock(t.opened||c.at,day))}</span>`):cell("First client message",`<span class="num">${esc(chClock(t.firstClientAt,day))}</span>`)}
     ${cell("First reply",fr,"tmfr")}${cell("Closed",t.closedAt?`<span class="num">${esc(chClock(t.closedAt,day))}</span>`:`<span class="tkopen">Open</span>`)}
     ${cell("Handle time",t.handleMin!=null?`<span class="num">${esc(chHm(t.handleMin))}</span>`:`<span class="tkmut">Still open</span>`)}</dl>`;
   let strip="";
@@ -687,10 +692,10 @@ function chTimingHtml(c,a){const t=chTim(c,a);if(!t)return "";
     strip=`<div class="tmstrip" role="img" aria-label="${esc(S.map(s=>[lab(s),mins(s)].filter(Boolean).join(" ")).join(", then "))}">${S.map(s=>`<span class="tmseg on-${esc(s.on||"x")}${s.ongoing?" now":""}" style="flex-grow:${grow(s)}" title="${esc(lab(s)+" · "+chClock(s.at,day)+(mins(s)?" · "+mins(s):""))}"></span>`).join("")}</div>
       <ol class="tmlegend">${S.map(s=>`<li class="tmst on-${esc(s.on||"x")}${s.ongoing?" now":""}"><i aria-hidden="true"></i><b>${esc(lab(s))}</b><span class="num tmmin">${esc(mins(s))}</span><span class="num tmat">${esc(chClock(s.at,day))}</span></li>`).join("")}</ol>
       <dl class="tmtot">${[["On Support's side",t.waitingOnSupportMin,"support"],["On the client's side",t.waitingOnClientMin,"client"],["In handoff",t.waitingOnHandoffMin,"handoff"]].map(([k,v,on])=>`<div class="tmtc on-${on}"><dt>${k}</dt><dd class="num">${chNum(v)?esc(chHm(v)):"–"}</dd></div>`).join("")}</dl>`}
-  return `<section class="tksec tktiming" id="tkTiming"><div class="tkch"><h3 class="tkh">Timing</h3>${chSlow(c,a)?`<span class="slowb">Slow first reply</span>`:""}</div>${stats}${strip}<p class="tmnote">${CH_TM_NOTE}</p></section>`}
+  return `<section class="tksec tktiming" id="tkTiming"><div class="tkch"><h3 class="tkh">Timing</h3>${chSlow(c,a)?`<span class="slowb">Slow first reply</span>`:""}</div>${stats}${strip}<p class="tmnote">${ae?"AE started this chat. First reply is the SA's first reply after the AE's message, timed by WIRA's first status change.":CH_TM_NOTE}</p></section>`}
 function chTimingText(c,a){const t=chTim(c,a);if(!t)return [];const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a),w=chWiraSays(c,a);
-  const L=["","Timing",`Opened: ${chClock(t.opened||c.at,"")}`,`First client message: ${chClock(t.firstClientAt,day)}`,
-    `First reply: ${chClock(t.firstReplyAt,day)}${m!=null?` · ${chFrt(m)}`:""}${chSlow(c,a)?" (slow)":""}${w!=null?` · WIRA says ${chFrt(w)}`:""}`,
+  const L=["","Timing",`Opened: ${chClock(t.opened||c.at,"")}`,chIsAe(c,a)?`AE opened: ${chClock(t.opened||c.at,day)}`:`First client message: ${chClock(t.firstClientAt,day)}`,
+    `First reply: ${chClock(chFirstAt(c,a,t),day)}${m!=null?` · ${chFrt(m)}`:""}${chSlow(c,a)?" (slow)":""}${w!=null?` · WIRA says ${chFrt(w)}`:""}`,
     `Closed: ${t.closedAt?chClock(t.closedAt,day):"Open"}`,`Handle time: ${t.handleMin!=null?chHm(t.handleMin):"Still open"}`];
   if(S.length){L.push("Status: "+S.map(s=>`${CH_ON[s.on]||s.sub||s.status||"Status"} ${s.ongoing?"(now)":chNum(s.min)!=null?chHm(s.min):""}`.trim()).join(" → "));
     L.push(`Support's side ${chNum(t.waitingOnSupportMin)?chHm(t.waitingOnSupportMin):"–"} · Client's side ${chNum(t.waitingOnClientMin)?chHm(t.waitingOnClientMin):"–"} · Handoff ${chNum(t.waitingOnHandoffMin)?chHm(t.waitingOnHandoffMin):"–"}`)}
