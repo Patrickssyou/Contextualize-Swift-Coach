@@ -12,7 +12,20 @@ const AI = JSON.parse(fs.readFileSync(path.join(DIR, 'data/fixtures/ai_facts.jso
 
 const MOCK = ([seed, ld, opts, extra]) => {
   const data = {}; const listeners = []; const leases = {};
-  seed.forEach(([p, d]) => data[p] = d);
+  // several people on one QA Desk: window.__switch(uid) keeps the store and reloads as that person (sessionStorage), window.__as(uid, fn) writes as them in place
+  let saved = null; try { saved = JSON.parse(sessionStorage.getItem('__mock_data') || 'null') } catch (e) {}
+  if (saved) Object.assign(data, saved); else seed.forEach(([p, d]) => data[p] = d);
+  const ME = (() => { try { return sessionStorage.getItem('__mock_me') } catch (e) { return null } })() || opts.me || 'u_test', OWNER = opts.owner || 'u_test';
+  let actor = ME;
+  window.__me = ME; window.__switch = uid => { sessionStorage.setItem('__mock_data', JSON.stringify(data)); sessionStorage.setItem('__mock_me', uid); location.reload() };
+  window.__as = async (uid, fn) => { const was = actor; actor = uid; try { return await fn(db) } finally { actor = was } };
+  // the access rules the page declares: data/users/<id>/ only for that person; calibMarks/<uid>/… written by <uid> only ({self}), or the owner
+  const deny = (p, w) => { const s = p.split('/');
+    if (s[0] === 'data' && s[1] === 'users' && s[2] && s[2] !== actor) return true;
+    if (w && s[0] === 'calibMarks' && s[1] && s[1] !== actor && actor !== OWNER) return true;
+    if (w && window.__opts.viewer === 'strict') return true;
+    return false };
+  const guard = (p, w) => { if (deny(p, w)) { window.__denied = (window.__denied || []).concat([[w ? 'write' : 'read', p, actor]]); throw { code: 'permission_denied', message: 'not allowed' } } };
   const clone = x => JSON.parse(JSON.stringify(x));
   const snap = p => ({ id: p.split('/').pop(), exists: !!data[p], data: () => data[p] ? clone(data[p]) : undefined, metadata: { fromCache: false, hasPendingWrites: false } });
   const collDocs = c => Object.keys(data).filter(p => p.startsWith(c + '/') && p.split('/').length === c.split('/').length + 1).sort().map(snap);
@@ -24,16 +37,16 @@ const MOCK = ([seed, ld, opts, extra]) => {
     return () => { if (!s.on) return; s.on = false; const i = listeners.indexOf(fire); if (i >= 0) listeners.splice(i, 1) } };
   const qsnap = c => { const docs = collDocs(c); return { docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: { fromCache: false, hasPendingWrites: false } } };
   const docRef = p => ({ id: p.split('/').pop(), path: p,
-    async get() { return snap(p) },
-    async set(d) { if (JSON.stringify(d).length > 256 * 1024) throw { code: 'invalid_argument', message: 'too big' }; data[p] = clone(d); notify(p) },
-    async update(d) { if (!data[p]) throw { code: 'invalid_argument', message: 'missing' }; Object.assign(data[p], clone(d)); notify(p) },
-    async delete() { delete data[p]; notify(p) },
+    async get() { guard(p, false); return snap(p) },
+    async set(d) { guard(p, true); if (JSON.stringify(d).length > 256 * 1024) throw { code: 'invalid_argument', message: 'too big' }; data[p] = clone(d); notify(p) },
+    async update(d) { guard(p, true); if (!data[p]) throw { code: 'invalid_argument', message: 'missing' }; Object.assign(data[p], clone(d)); notify(p) },
+    async delete() { guard(p, true); delete data[p]; notify(p) },
     async acquire({ holder, ttlMs }) { const now = Date.now(), l = leases[p]; if (l && l.until > now && l.holder !== holder) return { acquired: false, expiresAt: new Date(l.until).toISOString() };
       leases[p] = { holder, until: now + (ttlMs || 30000) }; window.__leases.push([p, holder]); return { acquired: true, version: 1, holder, expiresAt: new Date(leases[p].until).toISOString() } },
-    onSnapshot(next) { return listen(p, 'doc', () => next(snap(p))) } });
+    onSnapshot(next, err) { if (deny(p, false)) { setTimeout(() => err && err({ code: 'permission_denied' }), 0); return () => {} } return listen(p, 'doc', () => next(snap(p))) } });
   const db = { doc: docRef, collection(c) { return { path: c, doc: id => docRef(c + '/' + (id || Math.random().toString(36).slice(2))),
-    async get() { window.__gets.push(c); return qsnap(c) },
-    onSnapshot(next) { return listen(c, 'coll', () => next(qsnap(c))) } } } };
+    async get() { window.__gets.push(c); guard(c + '/x', false); return qsnap(c) },
+    onSnapshot(next, err) { if (deny(c + '/x', false)) { setTimeout(() => err && err({ code: 'permission_denied' }), 0); return () => {} } return listen(c, 'coll', () => next(qsnap(c))) } } } };
   window.__data = data; window.__saved = []; window.__ld = []; window.__leases = []; window.__opts = opts; window.__prompts = []; window.__slack = []; window.__subs = subs; window.__gets = [];
   const TX = new Map(extra.tx);
   // Lightdash: apply "day inBetween=a,b AND field equals=v1,v2" to the fixture rows, cap at __opts.cap
@@ -60,7 +73,14 @@ const MOCK = ([seed, ld, opts, extra]) => {
     const [a, b] = f.calls_call_started_at_est_day; const field = Object.keys(f).find(k => k !== 'calls_call_started_at_est_day'), vals = new Set(f[field]);
     const rows = ld.filter(r => { const d = r.calls_call_started_at_est.slice(0, 10); return d >= a && d <= b && vals.has(String(r[field])) });
     return rows.slice(0, cap(cfg)) };
-  const user = { id: async () => 'u_test', isOwner: async () => true, canEdit: async () => !window.__opts.viewer, can: async () => true };
+  const PEOPLE = opts.people || {};
+  const user = { id: async () => ME, isOwner: async () => ME === OWNER, canEdit: async () => !window.__opts.viewer, can: async () => true,
+    profiles: async ids => { window.__profiles = (window.__profiles || 0) + 1; return Object.fromEntries([].concat(ids).map(id => [id, { id, name: PEOPLE[id] || '' }])) } };
+  // room presence: what this page sets (window.__presence), and window.__peers([{by, presence}]) to say who else is here
+  let peerFns = [];
+  const room = opts.room ? { presence: async patch => { (window.__presence = window.__presence || []).push(JSON.parse(JSON.stringify(patch))) },
+    onPeers: fn => { peerFns.push(fn); return () => { peerFns = peerFns.filter(f => f !== fn) } }, peers: () => [], emit: async () => {}, on: () => () => {} } : null;
+  window.__peers = list => { const peers = list.map(p => Object.assign({ peer: 'p_' + p.by, isMe: p.by === ME, sameTab: false, kind: 'viewer', guest: false, updatedAt: Date.now() }, p)); peerFns.forEach(f => f({ peers, joined: [], left: [], updated: [] })) };
   const downloads = { save: async ({ filename, data }) => { window.__saved.push({ filename, bytes: Array.from(data instanceof Uint8Array ? data : new Uint8Array(data)) }); return { status: 'saved' } } };
   const mcp = { listTools: async () => ({ servers: [], fileArgs: true }),
     callTool: async (server, tool, input) => {
@@ -101,7 +121,7 @@ const MOCK = ([seed, ld, opts, extra]) => {
         const ch = chatReply(input); if (ch) { resolve(clone(ch)); return }
         resolve(clone(/note-taker/.test(input) ? (window.__opts.factsReply || extra.factsReply || {calls:[{n:1,bullets:['Store calls about an order','Agent checks and fixes it']}],timeline:[{src:'Call 1',when:'11:37 AM',who:'Store',kind:'said',what:'Says orders are not reaching the store'},{src:'Call 1',when:'11:38 AM',who:'Agent',kind:'did',what:'Escalated to the product team'}],promises:[{src:'Call 1',who:'Agent',to:'Store',what:'Call back once fixed',by:''}]}) : (window.__opts.aiReply || extra.aiReply))) }, window.__opts.sampleMs || 150) }),
     limits: async () => ({ maxPromptBytes: 262144 }) });
-  window.claude = { use: async n => (window.__opts.noSample && n === 'sample') ? null : ({ db, user, downloads, mcp, sample })[n] ?? null };
+  window.claude = { use: async n => (window.__opts.noSample && n === 'sample') ? null : ({ db, user, downloads, mcp, sample, room })[n] ?? null };
 };
 
 async function openPage(browser, seed, opts, viewport, more) {
