@@ -117,7 +117,7 @@ function chatHistory(){if(!db||chHistRun)return chHistRun;
       try{const s=await db.collection(CHAT_PATHS.reviews(w)).get();if(w!==chW.week&&!chRevHist.has(w))chRevHist.set(w,Object.fromEntries(s.docs.map(x=>[x.id,x.data()])))}catch(e){}}));
     renderGame()})();
   return chHistRun}
-function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain()}
+function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain();if(tab==="calib"&&typeof renderCalib==="function")renderCalib()}
 function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="chat"]');if(!tb)return;
   const c=chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid];tb.classList.toggle("done",!!c);
   const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=d?chatScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
@@ -349,8 +349,9 @@ $("#view-chats").addEventListener("click",e=>{
 
 /* ---------- AUDIT ---------- */
 /* the reviewer's working copy: starts from the saved review, else Claude's marks; resets when a new grade or review lands */
-function chatDraft(sid){const a=chatAud[sid],rv=chatRev[sid],base=chHash(a),rvAt=chHash(rv);let d=chatDrafts.get(sid);
-  if(!d||d.base!==base||d.rvAt!==rvAt){d={base,rvAt,scores:clone((rv&&rv.scores)||(a&&a.grade&&a.grade.scores)||{}),coach:rv&&typeof rv.coaching==="string"?rv.coaching:null,
+/* a chat the panel locked starts from the agreed marks (calib.js), so the ticket, the score and the coaching show the agreed score */
+function chatDraft(sid){const a=chatAud[sid],rv=chatRev[sid],lk=typeof cbLockedChat==="function"?cbLockedChat(sid):null,base=chHash(a),rvAt=chHash(rv)+(lk?"|"+lk.sig:"");let d=chatDrafts.get(sid);
+  if(!d||d.base!==base||d.rvAt!==rvAt){d={base,rvAt,scores:clone((lk&&lk.marks)||(rv&&rv.scores)||(a&&a.grade&&a.grade.scores)||{}),coach:rv&&typeof rv.coaching==="string"?rv.coaching:null,
     reviewer:(rv&&rv.reviewer)||(d&&d.reviewer)||store.get("qa.reviewer")||"",findings:clone((rv&&rv.findings&&typeof rv.findings==="object")?rv.findings:{}),
     contests:Object.fromEntries(Object.entries((rv&&rv.contests)||{}).filter(([id])=>rv.scores&&rv.scores[id]!=null).map(([id,x])=>[id,{to:rv.scores[id],reason:String((x&&x.reason)||"")}])),
     reinforce:Object.fromEntries(Object.entries((rv&&rv.reinforce)||{}).filter(([id,x])=>x&&String(x.reason||"").trim()).map(([id,x])=>[id,{reason:String(x.reason)}]))};
@@ -500,8 +501,18 @@ function chStrip(c,a){const A=a.analysis||{},f=A.fault||{},b=A.bucket||{},ae=A.a
   /* short items first, the wide ones (fault and its why) after, so the grid has no gaps */
   it.sort((x,y)=>(x[2]?1:0)-(y[2]?1:0));
   return it.length?`<dl class="evstrip" id="evStrip">${it.map(([k,v,w])=>`<div class="evi${w?" wide":""}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join("")}</dl>`:""}
+/* the 3–5 sources that matter, one line each: the order (status and GreenDot), the call (recording), the WIRA ticket, the Slack thread */
+function chEvRows(c,a){const R=[],code=a.code||c.code||"";
+  (a.orders||[]).slice(0,2).forEach(o=>R.push({k:"order",ic:"O",t:`Order ${o.ticket||"?"}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total)].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",l:"GreenDot ↗"}));
+  (a.calls||[]).slice(0,2).forEach((l,i)=>R.push({k:"call",ic:"C",t:`Call ${i+1}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
+  const t=(a.tasks||[])[0];
+  if(t)R.push({k:"wira",ic:"W",t:"WIRA ticket",s:[t.intent||t.project,capFirst(String(t.status||""))].filter(Boolean).join(" · ")||t.title||"",u:safeUrl(t.url)||wiraUrl(t.sid),l:"Open ↗"});
+  else R.push({k:"wira",ic:"W",t:"WIRA chat",s:[String(c.sid),chStatusL(c)].filter(Boolean).join(" · "),u:safeUrl(c.url||a.url)||wiraUrl(c.sid),l:"Open ↗"});
+  const sl=(a.slack||[])[0];if(sl)R.push({k:"slack",ic:"S",t:"Slack thread",s:[`#${sl.channel}`,(sl.replies||[]).length?chPl(sl.replies.length,"reply","replies"):""].filter(Boolean).join(" · "),u:safeUrl(sl.url),l:"Open ↗"});
+  return R.slice(0,5)}
+/* which chats have "Timeline and full sources" open (per chat, kept across repaints) */
+const chEvMore=new Set();
 function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).length,out=[],src=[];
-  if(a){const br=chBrief(a);if(br.length)out.push(`<div class="evglance"><h3 class="evh">The case at a glance</h3><ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div>`);out.push(chStrip(c,a))}
   src.push(chFold(c,"chat","Chat",`${chPl(msgs.length,"message")}${nInt?` · ${nInt} internal`:""}`,`<ol class="bubbles" id="cs-chat">${msgs.map(m=>chBubble(m,"cm")).join("")||`<li class="hint">No messages.</li>`}</ol>`,!a));
   const fl=chFieldList(c&&c.fields);if(fl.length)src.push(chFold(c,"fields","WIRA form",fl.map(([k])=>k||"Field").join(", "),chFieldsHtml(c)));
   if(a){const canPick=!!(db&&mcp&&sampleFn)&&!chatRun,pickOpen=chatPickOpen===String(c.sid),os=a.orders||[];
@@ -523,7 +534,13 @@ function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).l
     const F=a.facts||{},cl=F.claims||[],nc=cl.filter(x=>x.check==="contradicted").length;
     src.push(chFold(c,"facts","Timeline and SA claims",`${chPl((F.timeline||[]).length,"fact")} · ${chPl(cl.length,"claim")} · ${nc} wrong`,chFacts(a)));
     if((a.notFound||[]).length)src.push(chFold(c,"nf","Not found in the data",chPl(a.notFound.length,"item"),`<ul class="nf">${a.notFound.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`))}
-  out.push(`<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`);
+  if(!a)return `<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`;
+  /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
+  const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
+  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
+    <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow" data-ek="${r.k}"><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span></span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
+      <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">Timeline and full sources</button></div></div>
+    <div class="evfull" id="evFull"${more?"":" hidden"}>${chStrip(c,a)}<div class="evsrc">${src.join("")}</div></div>`);
   return out.join("")}
 function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},RF=d.reinforce||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
   return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0,con=C[r.id],rei=!con&&RF[r.id],box=!!(B&&B.crit===r.id&&B.where==="row"),bm=box?B.mode:"",canR=!con&&!chIsNot(d.findings,r.id);
@@ -569,7 +586,13 @@ function chWithdrawReinforce(crit){const sid=String(chatSel||""),a=chatAud[sid];
   if(B&&B.crit===crit){const x=$(`[data-reinforce="${crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}}
 /* 4 COACHING: what went well, one card per fix, Copy all; the note is editable only on request */
 function chNote(c,a,d){return d.coach!=null?d.coach:coachText(c,a,d.scores,d.findings,d.contests)}
-function chCoach(c,a,rv,d){const G=a.grade||{},F=chFixes(a,d.scores,d.findings,d.contests),gen=coachText(c,a,d.scores,d.findings,d.contests),edit=chNoteOpen===String(c.sid),first=chFirst(a.sa||c.sa)||"the SA";
+/* the chat's calibration item (calib.js), when it is under calibration */
+const chCalItem=c=>typeof cbItemFor==="function"?cbItemFor(c):null;
+/* coaching on a chat under calibration comes from the agreed score, with no solo Save */
+function chCoachBody(c,a,rv,d){const cal=chCalItem(c);if(!cal)return chCoach(c,a,rv,d);
+  return cbLockedChat(cal.key)?chCoach(c,a,rv,d,true):`<p class="tkmut nofix">Coaching appears once the score is agreed.</p>`}
+function chCalSig(c){const it=chCalItem(c);if(!it)return "";const lk=cbLockedChat(it.key);return it.ik+"|"+(lk?lk.sig:"")}
+function chCoach(c,a,rv,d,panel){const G=a.grade||{},F=chFixes(a,d.scores,d.findings,d.contests),gen=coachText(c,a,d.scores,d.findings,d.contests),edit=chNoteOpen===String(c.sid),first=chFirst(a.sa||c.sa)||"the SA";
   const xp=chatXpFor({sid:c.sid})-(rv?chatXpFor(rv):0);
   const well=(G.wentWell||[]).length?`<div class="cwell" id="coachWell"><h4 class="evh">What went well</h4><ul class="wchips">${G.wentWell.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:"";
   const cards=F.length?`<div class="fixes" id="coachFixes">${F.map((f,i)=>`<article class="fixcard ${esc(String(f.priority).toLowerCase())}" data-fix="${esc(f.id)}"><header class="fixhd">${chPrio(f.priority)}<h4>${esc([f.label,f.type].filter(Boolean).join(" · ")||"Next time")}</h4></header>
@@ -579,8 +602,8 @@ function chCoach(c,a,rv,d){const G=a.grade||{},F=chFixes(a,d.scores,d.findings,d
   return `${well}<h4 class="evh">${F.length?`Next time for ${esc(first)}`:"Next time"}</h4>${cards}
     <div class="row coachbar"><button type="button" class="btn" id="coachCopy">Copy all</button><button type="button" class="btn small" id="coachEdit" aria-expanded="${edit}">${edit?"Close note":"Edit note"}</button>${d.coach!=null&&d.coach!==gen?`<span class="hint">Note edited</span><button type="button" class="btn small" id="coachRebuild">Rebuild</button>`:""}</div>
     ${edit?`<div class="field"><label for="coachText" class="sr-only">Coaching note</label><textarea id="coachText" class="coach" rows="14">${esc(chNote(c,a,d))}</textarea></div>`:""}
-    <div class="savebar"><div class="field"><label for="chatReviewer">Reviewer</label><input id="chatReviewer" autocomplete="name" value="${esc(d.reviewer)}"></div>
-      <div class="row"><button type="button" class="btn primary" id="chatSave"${db?"":" disabled"}>Save review</button><span class="hint num" id="chatXp">+${Math.max(0,xp)} XP</span></div></div>`}
+    ${panel?"":`<div class="savebar"><div class="field"><label for="chatReviewer">Reviewer</label><input id="chatReviewer" autocomplete="name" value="${esc(d.reviewer)}"></div>
+      <div class="row"><button type="button" class="btn primary" id="chatSave"${db?"":" disabled"}>Save review</button><span class="hint num" id="chatXp">+${Math.max(0,xp)} XP</span></div></div>`}`}
 /* ---------- the QA ticket: top of the audit. Fields, what happened, the compensation check, then one card per finding (P1 first) ---------- */
 const chInit=c=>c.initiator==="ae"?"AE"+(c.createdBy?" · "+c.createdBy:""):c.initiator==="client"?"Client":(c.createdBy||"–");
 const chFaultCls=w=>w==="tarro"||w==="shared_tarro"?"bad":w==="unclear"||w==="none"?"none":"ok";
@@ -691,8 +714,7 @@ function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(
     <div class="tkbody" id="tkPan-ticket" role="tabpanel" aria-labelledby="tkTab-ticket"${chTkTab==="ticket"?"":" hidden"}>${chTkFields(c,a)}
       ${chWhatHtml(a)}
       ${chTimingHtml(c,a)}
-      ${chCompHtml(c,a)}
-      <section class="tksec" id="tkFinds"><div class="tkch"><h3 class="tkh">Findings</h3><span class="tkn num">${F.length}</span></div>${F.length?`<div class="tkfinds">${F.map(f=>chFindHtml(c,a,d,f)).join("")}</div>`:`<p class="tkp tkmut">No findings.</p>`}</section></div>
+      ${chCompHtml(c,a)}</div>
     ${chTkChat(c)}
     <footer class="tkfoot"><p>Filed by Swift Coach. Disagree with a mark? Contest it. Every contest teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
 /* live: a finding mark or a scorecard mark repaints the ticket in place (focus and open model messages kept) */
@@ -753,7 +775,7 @@ const chSec=(id,n,title,ans,body,cls)=>`<div class="qsec ${cls||""}" id="${id}">
 function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   const sid=chatSel?String(chatSel):"",c=sid?chatBy(sid):null,a=c?chatAud[sid]:null,rv=c?chatRev[sid]:null;
   const sig=JSON.stringify([sid,week,!!c,c&&c.picked,c&&c.gradeError,c&&chHash(c),chHash(a),chHash(rv),chatPickOpen===sid,chNoteOpen===sid,
-    !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at]);
+    !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at,chCalSig(c)]);
   if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);return}
   chatAuditSig=sig;
   if(!sid){chPanelClose();v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
@@ -762,8 +784,11 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   /* four sections: 1 the ticket (on top), 2 Evidence, 3 Scorecard, 4 Coaching */
   const evAns=a?[a.analysis&&a.analysis.caseType?chCaseL(a.analysis.caseType):"",o?`Ticket ${o.ticket||"?"}`:"No order",chPl((a.calls||[]).length,"call")].filter(Boolean).join(" · "):chPl((c.msgs||[]).length,"message");
   const secs=[chSec("cs-ev",2,"Evidence",evAns,chEvidence(c,a),"ref")];
-  if(a){secs.push(chSec("cs-score",3,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
-    chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
+  if(a){const cal=chCalItem(c),lk=cal&&typeof cbLockedChat==="function"?cbLockedChat(sid):null;
+    if(cal)secs.push(chSec("cs-score",3,"Scorecard",lk&&vd?`Agreed · ${vd.label} · ${fmt(pct)}%`:`Claude ${vd?vd.label+" · ":""}${fmt(pct)}%`,cbGridHtml(cal),lk?"done cbsc-sec":"cbsc-sec"),
+      chSec("cs-coach",4,"Coaching",lk?"From the agreed score":"After the agreed score",chCoachBody(c,a,rv,d),lk?"done":""));
+    else secs.push(chSec("cs-score",3,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
+      chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
   const pn=$("#tkPan-chat"),top=pn&&pn.closest("[data-sid]")&&pn.closest("[data-sid]").dataset.sid===sid?pn.scrollTop:0;
   v.innerHTML=`<div class="cdesk${a?" has-tk":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside><div class="ccol">${secs.join("")}</div></div>`;
   if(chatPickOpen===sid)chOrdFilter();
@@ -781,11 +806,14 @@ function paintMarks(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid]
   const sa=$("#csScoreAns");if(sa)sa.textContent=v?`${v.label} · ${fmt(pct)}%`:"";
   paintCoach();paintTicket();renderChatTabs();chPanelSync()}
 function paintCoach(){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid],el=$("#cs-coach .qbody");if(!c||!a||!el)return;
-  const key=chFocusSel(el);el.innerHTML=chCoach(c,a,chatRev[sid],chatDraft(sid));chRefocus(el,key)}
+  const key=chFocusSel(el);el.innerHTML=chCoachBody(c,a,chatRev[sid],chatDraft(sid));chRefocus(el,key)}
 /* a jump opens every fold around its target (an M# on a finding opens the ticket's Chat tab) (a source, a call's transcript) and keeps them open */
 function chJump(id){if(/^tm-/.test(id))chTkSet("chat");const el=document.getElementById(id);if(!el)return;
+  const ef=el.closest("#evFull");if(ef&&ef.hidden)chEvToggle(true);
   for(let f=el.closest("details");f;f=f.parentElement&&f.parentElement.closest("details")){f.open=true;if(f.dataset.src)chSrcOpen.add(String(chatSel)+":"+f.dataset.src)}
   el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
+function chEvToggle(on){const sid=String(chatSel||""),f=$("#evFull"),b=$("#evMore");if(!f)return;on=on==null?f.hidden:!!on;
+  if(on)chEvMore.add(sid);else chEvMore.delete(sid);f.hidden=!on;if(b)b.setAttribute("aria-expanded",String(on))}
 function chGradeOpen(orderIds){const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!c)return;
   if(orderIds===undefined&&a&&a.orderPick==="reviewer")orderIds=(a.orders||[]).map(o=>o.id);
   chatPickOpen=null;runChatGrades([c],{mode:"one",orderIds,fresh:!!a||Array.isArray(orderIds)})}
@@ -985,13 +1013,14 @@ $("#view-chat").addEventListener("click",e=>{
   const cc=e.target.closest("[data-ccopy]");if(cc){const c=chatBy(chatSel),a=c&&chatAud[c.sid],f=a&&chFixes(a,chatDraft(c.sid).scores,chatDraft(c.sid).findings,chatDraft(c.sid).contests)[Number(cc.dataset.ccopy)];if(f&&f.model)chClip(f.model,"Model message copied");return}
   const b=e.target.closest("button");if(!b)return;
   switch(b.id){
+    case "evMore":chEvToggle();break;
     case "cbSave":chSubmitContest();break;
     case "cbCancel":{const B=chContest;chContest=null;paintMarks();if(B){const x=$(`[data-${B.mode==="reinforce"?"reinforce":"contest"}="${B.crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}break}
     case "cbWithdraw":if(chContest){if(chContest.mode==="reinforce")chWithdrawReinforce(chContest.crit);else chWithdraw(chContest.crit)}break;
     case "cvGrade":chGradeOpen();break;
     case "cvStop":if(chatRun)chatRun.ctl.abort();break;
     case "cvNext":{const nx=chNextChat(chatSel);if(nx)openChat(nx.sid);break}
-    case "ordChange":chatPickOpen=String(chatSel);chSrcOpen.add(String(chatSel)+":order");chOrdQ="";renderChatAudit(true);break;
+    case "ordChange":chEvMore.add(String(chatSel));chatPickOpen=String(chatSel);chSrcOpen.add(String(chatSel)+":order");chOrdQ="";renderChatAudit(true);break;
     case "ordCancel":chatPickOpen=null;renderChatAudit(true);break;
     case "coachCopy":chCopy();break;
     case "tkCopy":{const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(a)chClip(chTicketText(c,a,chatDraft(String(c.sid))),"Ticket copied");break}

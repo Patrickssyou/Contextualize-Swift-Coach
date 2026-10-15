@@ -729,3 +729,18 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .ostat{display:inline-block;font-size:11.5px;font-weight:600;line-height:1.5;padding:0 7px;border-radius:4px;background:var(--s1-soft);color:var(--s1);white-space:nowrap}
 .tkord .ostat{margin-left:2px}
 .otype .ostat{margin-left:6px}
+
+/* ---------- 2 EVIDENCE: What happened beside the key sources; the timeline and every fold behind one toggle ---------- */
+.ev2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px}
+.evsrcs{display:flex;flex-direction:column;gap:8px;min-width:0}
+.evrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+.evic{width:28px;height:28px;border-radius:8px;background:var(--soft);display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--muted);flex:none}
+.evt{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px}
+.evt b{font-size:14px}
+.evt .evs,.evt>span:not(.ostat){font-size:12px;color:var(--muted);flex-basis:100%;overflow-wrap:anywhere}
+.evlink{font-size:13px;font-weight:600;white-space:nowrap}
+.evmore{align-self:flex-start;font-size:13px;color:var(--accent);font-weight:600;border:0;background:none;padding:2px 0}
+.evmore::after{content:" ▸";display:inline-block;transition:transform .15s}
+.evmore[aria-expanded="true"]::after{transform:rotate(90deg)}
+.evfull{display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line);padding-top:14px}
+@media (max-width:760px){.ev2{grid-template-columns:minmax(0,1fr)}}
