@@ -228,6 +228,135 @@ const asUser = (page, uid, op) => page.evaluate(([uid, op]) => window.__as(uid, 
   ok(/you/i.test(await txt(page, `#cbGrid th[data-col="${HOW}"]`)) && await page.locator('#cbr-fr [data-cb="pick"]').count() > 0 && (await cell(page, 'fr', 1).innerText()).includes('Not yet'), "Howard scores in his own column; Pat's draft shows as Not yet");
   ok(!(await page.evaluate(() => (window.__denied || []).length)), 'the page never reads someone else\'s draft');
   ok(!errors.length, 'no console errors (Howard) ' + JSON.stringify(errors));
-  await ctx.close(); await b.close();
+  await ctx.close();
+
+  {
+  // ===== 10. the round checklist, Back and Prev / Next (a fresh desk: Pat submitted S2, all three S3, S4 agreed; a call round of 10)
+  const S = i => sample[i].sid, ikOf = i => 'chat_' + S(i), sub = (u, i, m) => [`calibMarks/${u}/items/${ikOf(i)}`, { kind: 'chat', key: S(i), marks: m || base, notes: {}, submittedAt: '2026-10-13T11:00:00.000Z', updatedAt: '2026-10-13T11:00:00.000Z' }];
+  const aPct = B.chatScore(base);
+  const seed2 = seed.concat([sub(PAT, 2), sub(PAT, 3), sub(HOW, 3), sub(LIQ, 3), sub(PAT, 4), sub(HOW, 4), sub(LIQ, 4),
+    ['calibItems/' + ikOf(4), { kind: 'chat', key: S(4), round: 1, locked: { by: PAT, at: '2026-10-14T09:00:00.000Z', pct: aPct, verdict: B.chatVerdict(aPct).id, marks: base } }],
+    ['calibRounds/r1', { kind: 'call', week: LW, items: calls.slice(0, 10).map(([p, q]) => ({ key: p.split('/')[1], sa: q.agent })), drawnAt: '2026-10-14T08:00:00.000Z', by: PAT }]]);
+  ({ page, ctx, errors } = await openPage(b, seed2, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
+  await page.goto('http://qa.test/#calib'); await page.waitForTimeout(600);
+  await page.click(`[data-cb="open"][data-ik="${ikOf(0)}"]`); await page.waitForTimeout(400);
+  const rows = () => page.evaluate(() => [...document.querySelectorAll('#cbRail .cbrrow')].map(r => ({ ik: r.dataset.ik, st: r.dataset.st, cur: r.classList.contains('cur'), t: r.innerText.replace(/\s+/g, ' ').trim() })));
+  let R = await rows();
+  ok(await page.locator('#cbRail').isVisible() && R.length === 10 && R[0].cur && R.filter(r => r.cur).length === 1, 'Audit: the round checklist lists the 10 round chats, the open one highlighted');
+  ok(R[0].t.startsWith(sample[0].restaurant) && R[0].t.includes(sample[0].sa.split(' ')[0]) && !R[0].t.includes(sample[0].sa.split(' ')[1]), 'a row: restaurant and the SA first name');
+  ok(R[0].st === 'mine' && /Yours to do/.test(R[0].t) && R[2].st === 'wait' && /Waiting on others/.test(R[2].t) && R[3].st === 'done' && /All in/.test(R[3].t) && R[4].st === 'agreed' && R[4].t.includes('Agreed ' + fmt(aPct) + '%'), 'statuses: yours to do, waiting on others, all in, agreed with the score');
+  ok((await txt(page, '#cbRailDone')) === '3 of 10 done (you)', '"3 of 10 done (you)" at the top');
+  ok(await page.evaluate(() => { const s = document.querySelector('#view-chat .cside'), r = document.getElementById('cbRail').getBoundingClientRect(), b = document.getElementById('chatBoard').getBoundingClientRect(), c = document.querySelector('#view-chat .ccol').getBoundingClientRect();
+    return getComputedStyle(s).position === 'sticky' && r.left >= c.right && Math.abs(r.left - b.left) < 1 && r.top >= b.bottom }), '1280px: the checklist sits under the board in the sticky right column, clear of the sections');
+  await page.evaluate(() => window.scrollTo(0, 500)); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => { const r = document.querySelector('#view-chat .cside').getBoundingClientRect(); return Math.abs(r.top - 12) < 2 && window.scrollY >= 450 }), 'the right column stays on screen when the audit scrolls');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, 'calib-audit-rail.png');
+  // Back: open A (from Calibration), open B from the checklist, Back → A, Back → Calibration
+  ok((await txt(page, '#navBack')).includes('Calibration'), 'Back names where it goes: Calibration');
+  await page.click(`#cbRail [data-ik="${ikOf(5)}"]`); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => chatSel) === S(5) && (await page.locator('#cbRail .cbrrow.cur').getAttribute('data-ik')) === ikOf(5) && (await txt(page, '#navBack')).includes(sample[0].restaurant), 'a checklist row opens that chat; Back now names the chat we came from');
+  await page.click('#navBack'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => tab) === 'chat' && await page.evaluate(() => chatSel) === S(0), 'Back returns to chat A');
+  await page.click('#navBack'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => tab) === 'calib' && await page.locator('#cbItems').isVisible(), 'Back again returns to the Calibration tab');
+  // Prev / Next through the round
+  await page.click(`[data-cb="open"][data-ik="${ikOf(0)}"]`); await page.waitForTimeout(350);
+  ok(await page.locator('#navPrev').isDisabled() && await page.locator('#navNext').isEnabled() && (await txt(page, '#navPos')) === 'Round 1 · 1 of 10', 'first round chat: Prev off, "Round 1 · 1 of 10"');
+  await page.click('#navNext'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => chatSel) === S(1) && (await txt(page, '#navPos')) === 'Round 1 · 2 of 10' && await page.locator('#navPrev').isEnabled(), 'Next steps to the second round chat');
+  await page.click('#navPrev'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => chatSel) === S(0), 'Prev steps back');
+  await page.click(`#cbRail [data-ik="${ikOf(9)}"]`); await page.waitForTimeout(350);
+  ok(await page.locator('#navNext').isDisabled() && (await txt(page, '#navPos')) === 'Round 1 · 10 of 10', 'last round chat: Next off');
+  await page.click('#navBack'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => chatSel) === S(0), 'Back after Prev/Next and a checklist jump returns to the previous chat');
+  // a chat outside the round: Prev / Next follow the queue order, no checklist
+  const outSid = L.list.find(x => !sample.some(y => y.sid === x.sid)).sid;
+  await page.evaluate(([s, w]) => openChat(s, w), [outSid, LW]); await page.waitForTimeout(350);
+  const qOrder = await page.evaluate(() => chSort(chatsOfWeek()).map(c => String(c.sid)));
+  ok(await page.locator('#cbRail').count() === 0 && (await txt(page, '#navPos')) === `${qOrder.indexOf(String(outSid)) + 1} of ${qOrder.length}`, 'outside the round: no checklist, Prev / Next through the queue order');
+  await page.click('#navBack'); await page.waitForTimeout(300);
+  // rail vs the facts panel at 1280: the checklist folds above the ticket, clear of the panel
+  await page.click('#cbGrid [data-psrc="ev"]'); await page.waitForTimeout(250);
+  const ov = () => page.evaluate(() => { const p = document.getElementById('chPanel').getBoundingClientRect(), r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect();
+    return { hit: r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom, above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display, tog: getComputedStyle(document.querySelector('#cbRail .cbrtog')).display } });
+  let o = await ov();
+  ok(await page.locator('#chPanel').isVisible() && !o.hit && o.above && o.body === 'none' && o.tog !== 'none', '1280px with the facts panel open: the checklist folds to a toggle above the ticket, no overlap');
+  await page.click('#cbRail .cbrtog'); await page.waitForTimeout(120); o = await ov();
+  ok(!o.hit && o.body !== 'none' && (await page.locator('#cbRail .cbrtog').getAttribute('aria-expanded')) === 'true', 'the toggle opens the list, still clear of the panel');
+  await shot(page, 'calib-audit-rail-panel.png');
+  await page.click('#cbRail .cbrtog'); await page.click('#chpClose'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbRailBody')).display) !== 'none' && await page.evaluate(() => getComputedStyle(document.querySelector('#cbRail .cbrtog')).display) === 'none', 'panel closed: the checklist is back on the right');
+  // 390px: a "Round checklist" toggle above the ticket
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+  o = await page.evaluate(() => { const r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect(); return { above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display, w: r.right } });
+  ok(o.above && o.body === 'none' && o.w <= 390 && (await txt(page, '#cbRail .cbrtog')).includes('Round checklist') && await width(page) <= 390, '390px: a Round checklist toggle above the ticket, folded, no overflow');
+  await page.click('#cbRail .cbrtog'); await page.waitForTimeout(120);
+  ok(await page.locator('#cbRail .cbrrow').first().isVisible() && await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cbRail .cbrrow, #chNav button')].every(e => e.getBoundingClientRect().right <= 390)), '390px: the list opens, rows and the nav fit');
+  await shot(page, 'calib-audit-rail-390.png');
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbRail')).backgroundColor) !== 'rgb(255, 255, 255)' && await width(page) <= 390, 'dark: the checklist takes the dark tokens');
+  await shot(page, 'calib-audit-rail-390-dark.png');
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(150);
+  await shot(page, 'calib-audit-rail-dark.png');
+  await page.emulateMedia({ colorScheme: 'light' });
+  // calls: the same checklist in the inline call view; a row is a navigation
+  await page.click('[data-tab="calib"]'); await page.click('[data-cb="kind"][data-v="call"]'); await page.waitForTimeout(200);
+  const C0 = 'call_' + calls[0][0].split('/')[1], C3 = 'call_' + calls[3][0].split('/')[1];
+  await page.click(`[data-cb="open"][data-ik="${C0}"]`); await page.waitForTimeout(250);
+  ok(await page.locator('#cbRail .cbrrow').count() === 10 && (await page.locator('#cbRail .cbrrow.cur').getAttribute('data-ik')) === C0 && (await txt(page, '#cbRailDone')) === '0 of 10 done (you)' && await page.evaluate(() => { const r = document.getElementById('cbRail').getBoundingClientRect(), c = document.getElementById('cbCall').getBoundingClientRect(); return r.left >= c.right }), 'call view: the round checklist on the right');
+  await page.click(`#cbRail [data-ik="${C3}"]`); await page.waitForTimeout(250);
+  ok((await page.locator('#cbGrid').getAttribute('data-ik')) === C3 && (await txt(page, '#view-calib .cnavback')).includes('Sample Oven 1'), 'a call row opens that call; Back names the previous call');
+  await page.click('#view-calib [data-cb="back"]'); await page.waitForTimeout(250);
+  ok((await page.locator('#cbGrid').getAttribute('data-ik')) === C0, 'Back returns to the previous call');
+  await page.click('#view-calib [data-cb="back"]'); await page.waitForTimeout(250);
+  ok(await page.locator('#cbItems').isVisible(), 'Back again returns to the call list');
+  ok(!errors.length, 'no console errors (checklist, Back) ' + JSON.stringify(errors));
+  await ctx.close();
+
+  // ===== 11. expected graders: only Pat has opened the desk (and his name doesn't resolve: the owner counts as Pat)
+  const seed3 = seed.filter(([p]) => !/^calibMarks\/(u_howard|u_liqi)/.test(p));
+  ({ page, ctx, errors } = await openPage(b, seed3, { people: { [HOW]: 'Howard', [LIQ]: 'Li Qi' }, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
+  await page.goto('http://qa.test/#calib'); await page.waitForTimeout(600);
+  ok(await page.locator(`#cbItems tr[data-ik="${IK}"] .cbdot`).count() === 3 && await page.locator(`#cbItems tr[data-ik="${IK}"] .cbdot.pend`).count() === 2, 'the list: three dots per item, two pending');
+  ok(await page.locator('#cbGrBtn').isVisible(), 'owner: a Graders control in the header');
+  await page.click(`[data-cb="open"][data-ik="${IK}"]`); await page.waitForTimeout(400);
+  const ph = await page.locator('#cbGrid thead th.pend').allInnerTexts();
+  ok(ph.length === 2 && /Howard/i.test(ph[0]) && /Li Qi/i.test(ph[1]) && await page.locator('#cbGrid thead th.pend .cbav.pend').count() === 2 && (await page.locator('#cbGrid thead th.pend .cbav').first().innerText()) === 'H' && (await page.locator('#cbGrid thead th.pend .cbav').nth(1).innerText()) === 'LQ', 'one joined grader: two pending columns, Howard and Li Qi, with dashed initials');
+  ok((await cell(page, 'ev', 2).innerText()).includes("Hasn't opened it") && (await cell(page, 'ev', 3).innerText()).includes("Hasn't opened it") && /0 of 3/.test(await txt(page, '#cbGrid .cbstatus')), '"Hasn\'t opened it" cells; the status counts to 3');
+  ok(await page.locator('#cbGrid .cbstatus .cbdot.pend').count() === 2, 'the status dots show the two pending');
+  await gridShot(page, 'calib-pending.png');
+  // Pat submits and locks alone: "Each grader vs agreed" lists Howard and Li Qi as empty
+  for (const [k, v] of Object.entries(base)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
+  await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/${IK}`, 'd.submittedAt'); await page.waitForTimeout(150);
+  ok(/1 of 3/.test(await txt(page, '#cbGrid .cbstatus')), 'after submit: 1 of 3 submitted');
+  await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(120); await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + IK, 'd.locked');
+  await page.click('[data-tab="calib"]'); await page.waitForTimeout(250);
+  const each = await page.locator('#cbEach .cbbar').allInnerTexts();
+  ok(each.length === 4 && /Howard/.test(each[1]) && /–/.test(each[1]) && /Li Qi/.test(each[2]) && /–/.test(each[2]) && await page.locator('#cbEach .cbav.pend').count() === 2, 'Each grader vs agreed: Howard and Li Qi listed, empty');
+  // the owner edits the expected list
+  await page.click('#cbGrBtn'); await page.waitForTimeout(100);
+  ok((await page.inputValue('#cbGrIn')) === 'Pat, Howard, Li Qi', 'the editor starts from the expected names (default: Pat, Howard, Li Qi)');
+  await page.fill('#cbGrIn', 'Pat, Howard, Li Qi, Mara'); await page.click('#cbGrEd [data-cb="grsave"]');
+  await waitDoc(page, 'settings/calibGraders', 'd.expected.length===4'); await page.waitForTimeout(200);
+  const gd = await D(page, 'settings/calibGraders');
+  ok(JSON.stringify(gd.expected) === JSON.stringify(['Pat', 'Howard', 'Li Qi', 'Mara']) && gd.by === PAT && await page.locator('#cbGrEd').count() === 0 && await page.locator(`#cbItems tr[data-ik="chat_${S1}"] .cbdot.pend`).count() === 3, 'Save writes settings/calibGraders; a fourth pending dot appears');
+  await shot(page, 'calib-pending-tab.png', true);
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+  await page.click('#cbGrBtn'); await page.waitForTimeout(100);
+  ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbGrEd').getBoundingClientRect().right <= 390), '390px: the graders editor fits');
+  await page.click('#cbGrEd [data-cb="graders"]');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Howard opens it: his column becomes real, he can't edit the list
+  await page.evaluate(h => window.__switch(h), HOW).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(800);
+  await page.evaluate(() => setTab('calib')); await page.waitForTimeout(250);
+  ok(await page.locator('#cbGrBtn').count() === 0, 'not the owner: no Graders control');
+  await page.click(`[data-cb="open"][data-ik="chat_${S1}"]`); await page.waitForTimeout(400);
+  const ph2 = await page.locator('#cbGrid thead th.pend').allInnerTexts(), cols = await page.locator('#cbGrid thead th[data-col]').count();
+  ok(cols === 4 && ph2.length === 2 && /Li Qi/i.test(ph2[0]) && /Mara/i.test(ph2[1]) && /Pat/i.test(await txt(page, `#cbGrid th[data-col="${PAT}"]`)), "Howard's view: Pat (owner, by join order), Howard, then Li Qi and Mara pending");
+  ok(!errors.length, 'no console errors (pending graders) ' + JSON.stringify(errors));
+  await ctx.close(); }
+  await b.close();
   console.log(`\nui calib: ${n} checks passed`);
 })().catch(e => { console.error('TEST FAILED', e); process.exit(1) });

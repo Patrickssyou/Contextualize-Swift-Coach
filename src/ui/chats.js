@@ -68,8 +68,42 @@ function chSort(list){const sas=chSaOrder(list.map(c=>c.sa));return list.slice()
 function chFirstLine(c){const m=(c.msgs||[]).find(x=>x.role==="client")||(c.msgs||[])[0];const t=String((m&&m.text)||c.title||"").replace(/\s+/g," ").trim();return t.length>120?t.slice(0,118)+"…":t}
 /* a chat link carries its week (#chat/<week>/<sid>), so a reload opens on the right week */
 function chatHash(){if(!chatSel)return "chat";const c=chatBy(chatSel);return "chat/"+((c&&c.week)||week)+"/"+encodeURIComponent(chatSel)}
-function openChat(sid,wk){wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
+function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&String(chatSel)===String(sid)))navPush();
+  wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
+
+/* ---------- in-page history: the artifact frame may not pass browser Back, so Back pops this stack (a chat, a call or a tab) ---------- */
+const navStack=[];
+const NAV_TAB_L={chats:"Dashboard",calib:"Calibration",learn:"Learning",brain:"Brain",queue:"Calls",calls:"Calls",facts:"Calls",results:"Results",data:"Database"};
+function navHere(){const c=tab==="chat"&&chatSel?chatBy(chatSel):null,call=typeof cbCall!=="undefined"?cbCall:null,kind=typeof cbKind!=="undefined"?cbKind:"chat";
+  let label=NAV_TAB_L[tab]||"Back";
+  if(tab==="chat")label=chatSel?(c&&c.restaurant)||"Chat "+chatSel:"Audit";
+  else if(tab==="calib"&&call){const it=typeof cbItemByIk==="function"?cbItemByIk("call_"+call):null;label=it?it.title:"Call"}
+  return {tab,sid:tab==="chat"&&chatSel?String(chatSel):"",week,call:tab==="calib"?call:null,kind,label}}
+const navSame=(x,y)=>!!x&&!!y&&x.tab===y.tab&&x.sid===y.sid&&(x.call||null)===(y.call||null)&&(x.tab!=="calib"||x.kind===y.kind);
+function navPush(){const h=navHere();if(!navSame(navStack[navStack.length-1],h)){navStack.push(h);if(navStack.length>40)navStack.shift()}}
+/* nothing to go back to: a round chat goes to Calibration, any other chat to the Dashboard, a call to its round */
+function navFallback(){if(tab==="calib")return {tab:"calib",kind:typeof cbKind!=="undefined"?cbKind:"chat",call:null,sid:"",label:"All items"};
+  const c=chatSel&&chatBy(chatSel);if(tab==="chat"&&c&&typeof cbRoundItem==="function"&&cbRoundItem(c))return {tab:"calib",kind:"chat",call:null,sid:"",label:"Calibration"};
+  return {tab:"chats",sid:"",label:"Dashboard"}}
+function navTarget(){const h=navHere();while(navStack.length&&navSame(navStack[navStack.length-1],h))navStack.pop();return navStack[navStack.length-1]||navFallback()}
+const navBackLabel=()=>navTarget().label;
+function navBack(){const to=navTarget();if(navStack[navStack.length-1]===to)navStack.pop();
+  if(to.tab==="chat"&&to.sid){openChat(to.sid,to.week,true);return}
+  if(to.tab==="calib"&&typeof cbCall!=="undefined"){cbKind=to.kind==="call"?"call":"chat";cbCall=to.call||null;if(typeof cbPanelClose==="function")cbPanelClose()}
+  setTab(to.tab);window.scrollTo({top:0})}
+/* Prev / Next: through the current round when the chat is in it, else through the queue order */
+function navList(c){const it=typeof cbRoundItem==="function"?cbRoundItem(c):null;
+  if(it)return {round:it.round,L:cbChatItems().map(x=>({sid:x.key,week:x.week}))};
+  return {round:null,L:chSort(chatsOfWeek()).map(x=>({sid:String(x.sid),week:chWk(x)}))}}
+function chNavHtml(c){const back=`<button type="button" class="btn small cnavback" id="navBack" data-nav="back">← ${esc(navBackLabel())}</button>`;if(!c)return back;
+  const N=navList(c),i=N.L.findIndex(x=>x.sid===String(c.sid)),p=i>0,n=i>=0&&i<N.L.length-1;
+  return back+`<span class="cnavstep"><button type="button" class="btn small" id="navPrev" data-nav="prev"${p?"":" disabled"}>‹ Prev</button>
+    <span class="num hint" id="navPos">${i<0?"":(N.round!=null?`Round ${esc(N.round)} · `:"")+`${i+1} of ${N.L.length}`}</span>
+    <button type="button" class="btn small" id="navNext" data-nav="next"${n?"":" disabled"}>Next ›</button></span>`}
+function chNavPaint(){const el=$("#chNav");if(!el)return;const c=chatSel?chatBy(chatSel):null,h=chNavHtml(c);if(el._h===h)return;
+  const f=document.activeElement,k=f&&el.contains(f)?f.id:"";el.innerHTML=h;el._h=h;if(k){const g=document.getElementById(k);if(g&&!g.disabled)g.focus({preventScroll:true})}}
+function navStep(d){const c=chatSel?chatBy(chatSel):null;if(!c)return;const N=navList(c),i=N.L.findIndex(x=>x.sid===String(c.sid)),to=N.L[i+d];if(i<0||!to)return;openChat(to.sid,to.week)}
 
 /* ---------- game layer hooks (read by gameStats in the page) ---------- */
 /* every review: the loaded week's live ones plus the other weeks read once at load */
@@ -775,11 +809,12 @@ const chSec=(id,n,title,ans,body,cls)=>`<div class="qsec ${cls||""}" id="${id}">
 function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   const sid=chatSel?String(chatSel):"",c=sid?chatBy(sid):null,a=c?chatAud[sid]:null,rv=c?chatRev[sid]:null;
   const sig=JSON.stringify([sid,week,!!c,c&&c.picked,c&&c.gradeError,c&&chHash(c),chHash(a),chHash(rv),chatPickOpen===sid,chNoteOpen===sid,
-    !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at,chCalSig(c)]);
-  if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);return}
+    !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at,chCalSig(c),!!(c&&typeof cbRoundItem==="function"&&cbRoundItem(c))]);
+  if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);chNavPaint();if(typeof cbRailPaint==="function")cbRailPaint();return}
   chatAuditSig=sig;
+  const nav=`<nav class="cnav" id="chNav" aria-label="Chats">${chNavHtml(c)}</nav>`;
   if(!sid){chPanelClose();v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
-  if(!c){chPanelClose();v.innerHTML=`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
+  if(!c){chPanelClose();v.innerHTML=nav+`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
   const d=chatDraft(sid),pct=a?chatScore(d.scores):null,vd=chatVerdict(pct),o=a&&(a.orders||[])[0];
   /* four sections: 1 the ticket (on top), 2 Evidence, 3 Scorecard, 4 Coaching */
   const evAns=a?[a.analysis&&a.analysis.caseType?chCaseL(a.analysis.caseType):"",o?`Ticket ${o.ticket||"?"}`:"No order",chPl((a.calls||[]).length,"call")].filter(Boolean).join(" · "):chPl((c.msgs||[]).length,"message");
@@ -790,7 +825,9 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
     else secs.push(chSec("cs-score",3,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
       chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
   const pn=$("#tkPan-chat"),top=pn&&pn.closest("[data-sid]")&&pn.closest("[data-sid]").dataset.sid===sid?pn.scrollTop:0;
-  v.innerHTML=`<div class="cdesk${a?" has-tk":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside><div class="ccol">${secs.join("")}</div></div>`;
+  const rit=typeof cbRoundItem==="function"?cbRoundItem(c):null,board=`<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside>`;
+  v.innerHTML=nav+`<div class="cdesk${a?" has-tk":""}${rit?" has-rail":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}${rit?`<div class="cside">${board}${cbRailBox("chat",rit.ik)}</div>`:board}<div class="ccol">${secs.join("")}</div></div>`;
+  {const n=$("#chNav");if(n)n._h=chNavHtml(c);const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.kind,rb.dataset.ik)}
   if(chatPickOpen===sid)chOrdFilter();
   const p2=$("#tkPan-chat");if(p2&&top)p2.scrollTop=top;
   /* the evidence panel lives in the view, so a re-render puts it back (and redraws it: the grade may have changed) */
@@ -991,6 +1028,7 @@ function chPanelSync(){if(!chPanel)return;const sid=String(chatSel||"");
   if((chPanel.via==="contest"||chPanel.via==="reinforce")&&!(chContest&&chContest.sid===sid&&chContest.crit===chPanel.crit))chPanelClose()}
 document.addEventListener("keydown",e=>{if(e.key!=="Escape"||!chPanel||e.defaultPrevented)return;e.preventDefault();chPanelClose(!!(chPanelEl&&chPanelEl.contains(document.activeElement)))});
 $("#view-chat").addEventListener("click",e=>{
+  const nv=e.target.closest("[data-nav]");if(nv){if(nv.disabled)return;const A=nv.dataset.nav;if(A==="back")navBack();else navStep(A==="prev"?-1:1);return}
   /* the evidence panel */
   if(e.target.closest("#chpClose")){chPanelClose(true);return}
   const ps=e.target.closest("[data-psrc]");if(ps){const k=ps.dataset.psrc;if(chPanel&&chPanel.crit===k)chPanelClose(true);else{chPanelOpen(k,chContest&&chContest.sid===String(chatSel)&&chContest.crit===k?chContest.mode||"contest":"sources");const h=$("#chpTitle");if(h)h.focus({preventScroll:true})}return}

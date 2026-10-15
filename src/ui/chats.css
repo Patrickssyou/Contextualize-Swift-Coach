@@ -744,3 +744,33 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evmore[aria-expanded="true"]::after{transform:rotate(90deg)}
 .evfull{display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line);padding-top:14px}
 @media (max-width:760px){.ev2{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- Audit nav: Back (in-page stack), Prev / Next through the round or the queue ---------- */
+.cnav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;min-width:0}
+.cnavback{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cnavstep{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+#navPos{white-space:nowrap}
+@media (max-width:560px){.cnavstep{margin-left:0;width:100%;justify-content:space-between}}
+/* a round chat: the board and the round checklist share the sticky right column */
+@media (min-width:1001px){
+  .cdesk.has-rail .cside{grid-area:board;display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);
+    max-height:calc(100vh - 24px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  .cdesk.has-rail .cside>.board{position:static}
+}
+/* narrow, or the evidence panel open: the checklist folds into a toggle above the ticket */
+@media (max-width:1000px){
+  .cdesk.has-rail .cside{display:contents}
+  .cdesk.has-rail .cbrailbox{grid-area:rail}
+  .cdesk.has-rail{grid-template-areas:"rail rail" "main board"}
+  .cdesk.has-rail.has-tk{grid-template-areas:"rail rail" "ticket board" "main board"}
+}
+@media (max-width:900px){
+  .cdesk.has-rail{grid-template-areas:"rail" "board" "main"}
+  .cdesk.has-rail.has-tk{grid-template-areas:"rail" "ticket" "board" "main"}
+}
+@media (max-width:1700px){
+  body.chp-on .cdesk.has-rail .cside{display:contents}
+  body.chp-on .cdesk.has-rail .cbrailbox{grid-area:rail}
+  body.chp-on .cdesk.has-rail{grid-template-areas:"rail" "board" "main"}
+  body.chp-on .cdesk.has-rail.has-tk{grid-template-areas:"rail" "ticket" "board" "main"}
+}
