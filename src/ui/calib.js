@@ -21,6 +21,10 @@ const CB_PER=3;
 /* who should grade: settings/calibGraders {expected:[names]} (owner edits); missing doc → these three */
 const CB_EXPECT=["Pat","Howard","Li Qi"];
 let cbExpectDoc=null,cbGrEdit=false,cbGrDraft="",cbRailOpen=false;
+/* Claude on calls: callGrades/<queueId> {v, at, by, items, scores, reasons, cites, wentWell, fixes, summary, F, A} (up to ~20KB each).
+   The open call's doc is watched; the round's call docs are read once per draw. queueId → doc, null when there is none; no key = not read yet */
+const CG_ROOT="callGrades",CL_ROOT="callLessons",cbCG=new Map(),cbGRErr=new Map();
+let cbCGSub={qid:"",off:null},cbCGRound="",cbGR=null,cbGRNote=null;
 
 /* ---------- listeners (once, after db is ready) ---------- */
 function calibListen(){if(!db)return;
@@ -112,8 +116,9 @@ const cbChatOn=c=>!!cbItemFor(c);
 function cbCallItem(id){id=String(id||"");const hit=cbCallItems().find(x=>x.key===id);if(hit)return hit;const q=(queueAll||[]).find(d=>String(d.id)===id);
   return q?{kind:"call",key:id,ik:"call_"+id,week:q.week||week,round:(cbItems["call_"+id]||{}).round??null,sa:q.agent||"",title:q.restaurantName||"Call "+id,q,at:""}:null}
 function cbItemOnScreen(){if(tab!=="chat")return null;if(callSel)return "call_"+callSel;const c=chatSel&&chatBy(chatSel),it=cbItemFor(c);return it?it.ik:null}
-/* Claude's marks and reasons: the chat's audit when it is loaded, else the marks at draw; calls aren't graded by Claude yet */
-function cbClaude(it){if(it.kind!=="chat")return null;const a=chatAud[it.key],G=(a&&a.grade)||{};
+/* Claude's marks and reasons: a call's callGrades doc; the chat's audit when it is loaded, else the marks at draw */
+function cbClaude(it){if(it.kind==="call"){const g=cbCG.get(String(it.key));return g&&g.scores&&typeof g.scores==="object"?{marks:g.scores,why:g.reasons||{},cites:g.cites||{},g}:null}
+  if(it.kind!=="chat")return null;const a=chatAud[it.key],G=(a&&a.grade)||{};
   if(G.scores)return {marks:G.scores,why:G.reasons||{}};return it.s&&it.s.aiScores?{marks:it.s.aiScores,why:{}}:null}
 const cbSub=(u,ik)=>{const m=cbMarks.get(u),d=m&&m.get(ik);return d&&d.submittedAt?d:null};
 /* my private draft: read once per item, written on change (debounced, one write at a time) */
@@ -169,7 +174,7 @@ function cbGridHtml(it){
       extra=`<td class="cbsp">${cbSpreadHtml(sp)}</td><td class="cbag">${a?cbMk(a.mark,r)+(off?`<span class="cboff">Claude off</span>`:""):lk?"–":`<button type="button" class="btn small" data-cb="row" data-crit="${r.id}">Settle</button>`}</td>`}
     const open=cmp&&cbOpen.has(k);let det="";
     if(open){const a=ag[r.id],S=cbSettle&&cbSettle.ik===ik&&cbSettle.crit===r.id?cbSettle:null;
-      const cards=(C?[`<div class="cbnt"><header>${cbAv("claude")}Claude · ${cbMk(cv,r)}</header><p>${esc((C.why||{})[r.id]||"No reason given.")}</p></div>`]:[])
+      const cards=(C?[`<div class="cbnt"><header>${cbAv("claude")}Claude · ${cbMk(cv,r)}</header><p>${esc((C.why||{})[r.id]||"No reason given.")}</p>${cbCites(C,r.id).length?`<p class="cbcites num">${esc(cbCites(C,r.id).join(", "))}</p>`:""}</div>`]:[])
         .concat(subd.map(u=>{const d=cbSub(u,ik),n=String((d.notes||{})[r.id]||"").trim();return `<div class="cbnt${n?"":" empty"}"><header>${cbAv(u)}${u===me?"You":esc(cbName(u))} · ${cbMk((d.marks||{})[r.id],r)}</header><p>${esc(n||"No note.")}</p></div>`}));
       const pickV=S?S.mark:a?a.mark:null,noteV=S?S.note:a&&!a.auto?a.note:"";
       det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbnotes">${cards.join("")}</div>${lk?(a&&a.note?`<p class="cbagwhy"><span class="lbl-sm">Agreed</span> ${esc(a.note)}</p>`:""):
@@ -231,6 +236,7 @@ async function cbLock(it){const ik=it.ik,R=cbRubric(it.kind,it),subd=cbGraderIds
     await db.doc("calibItems/"+ik).set(doc);cbItems[ik]=doc;
     let msg=`Locked ${v?v.label+" ":""}${fmt(pct)}%`;
     if(it.kind==="chat"){const x=await cbChatLocked(it,R,marks,A,subd,pct,v,at);msg+=x}
+    else if(it.kind==="call")msg+=await cbCallLocked(it,R,marks,A,subd,at);
     toast(msg)}
   catch(e){toast(e&&e.code==="invalid_argument"?"You can't save to this QA Desk.":"Couldn't lock. Try again.")}
   finally{cbLockRun=false;cbRender(true)}}
@@ -251,6 +257,7 @@ async function cbReopen(it){const ik=it.ik;if(!db)return;
     if(it.kind==="chat"){const sid=it.key,c=chatBy(sid);
       for(const l of chLessons.filter(x=>String(x.sid)===sid&&x.by==="panel")){try{await db.doc(CH_LESSONS+"/"+l.id).delete()}catch(e){}}
       const rv=chatRev[sid];if(rv&&rv.panel&&c){try{await db.doc(chPath("reviews",chWk(c),sid)).delete();delete chatRev[sid]}catch(e){}}}
+    else if(it.kind==="call")await cbCallUnlock(it);
     toast("Reopened")}
   catch(e){toast("Couldn't reopen. Try again.")}
   cbRender(true)}
@@ -317,7 +324,8 @@ const cbTalk=q=>{const c=(q||{}).chain;return c&&c.talkSec!=null?c.talkSec:cbLeg
 function cbTeam(q){return [...new Set(cbLegs(q).filter(l=>!isGraded(l)&&l.group&&GROUP_TAG[l.group]).map(l=>shortWho(l.who||"")).filter(Boolean))]}
 /* what an item row says beside its title: Claude's score for a chat, the call type and length for a call */
 function cbItemMeta(it){if(it.kind==="chat"){const a=chatAud[it.key],p=a&&a.pct!=null?a.pct:it.aiPct;return p==null?`<span class="tkmut">Claude –</span>`:`<span>Claude <b class="num">${esc(fmt(p))}%</b></span>`}
-  const q=it.q||{};return `<span>${esc(cbKindL(q))} · <span class="num">${esc(dur(cbTalk(q)))}</span></span>`}
+  const q=it.q||{},p=cbCGPct(it);
+  return `<span>${esc(cbKindL(q))} · <span class="num">${esc(dur(cbTalk(q)))}</span> · ${p==null?`<span class="tkmut">Claude –</span>`:`Claude <b class="num">${esc(fmt(p))}%</b>`}</span>`}
 
 /* ---------- the round checklist: the week's items by SA, my status on each, click to open (a navigation, so it goes on the Back stack) ---------- */
 const CB_RST={agreed:"Agreed",done:"All in",wait:"Waiting on others",mine:"Yours to do"};
@@ -361,12 +369,13 @@ function cbIRow(it,G){const st=cbStage(it);
   return `<li class="cbirow" data-ik="${esc(it.ik)}" data-kind="${it.kind}">${cbKic(it.kind)}<button type="button" class="cblink" data-cb="open" data-ik="${esc(it.ik)}">${esc(it.title)}</button>
     <span class="cbidate num">${esc(cbDay(it.at)||"–")}</span><span class="cbimeta">${cbItemMeta(it)}</span>
     <span class="cbdots">${G.map(u=>`<span class="cbdot ${cbColor(u)}${cbSub(u,it.ik)?" done":""}" title="${esc(cbName(u))}${cbSub(u,it.ik)?" · submitted":cbPend(u)?" · hasn't opened it":""}">${esc(cbIni(u))}</span>`).join("")}</span>${cbStageHtml(st)}</li>`}
-function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),started=cbRoundStarted(items);
+function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),started=cbRoundStarted(items);cbCGLoadRound();
   const mine=items.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,nx=cbNextItem(items);
   const ctl=[];
   if(amOwner)ctl.push(`<button type="button" class="btn" data-cb="graders" id="cbGrBtn" aria-expanded="${cbGrEdit}">Graders</button>`);
   if(amOwner&&db){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy?" disabled":""}>${cbBusy?"Drawing…":"Draw"}</button>`);
     else if(!started)ctl.push(`<button type="button" class="btn" data-cb="redraw" id="cbRedraw" aria-expanded="${cbRedraw}"${cbBusy?" disabled":""}>${cbBusy?"Drawing…":"Redraw"}</button>`)}
+  if(amOwner&&r&&cbCanGrade()&&!cbGR){const ug=cbUngraded().length;if(ug)ctl.push(`<button type="button" class="btn" data-cb="gradeall" id="cbGradeAll"${typeof chatRun!=="undefined"&&chatRun?" disabled":""}>Grade the round's calls <span class="num">(${ug})</span></button>`)}
   if(nx)ctl.push(`<button type="button" class="btn primary" data-cb="continue" id="cbGo">${mine?"Continue":"Start"} →</button>`);
   const head=`<div class="cbhd"><div class="cbttl"><h2>Week ${esc(weekLabel(week))}</h2>${r?`<span class="num" id="cbSum">${items.length} items · you: ${mine} of ${items.length} done</span>`:""}</div><span class="cbhdr"><span data-cbhere="">${cbHereHtml("")}</span>${ctl.join("")}</span></div>${cbGrEditHtml()}`;
   const conf=cbRedraw&&r&&!started&&amOwner?`<div class="cbconfirm" id="cbRdConfirm" role="group" aria-label="Redraw"><span>Replace this week's ${items.length} items with a new draw?</span><button type="button" class="btn danger" data-cb="redrawgo" id="cbRdGo">Redraw</button><button type="button" class="btn" data-cb="redraw">Cancel</button></div>`:"";
@@ -385,14 +394,14 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const S=cbStats(items),SC=cbStats(items.filter(x=>x.kind==="chat")),SK=cbStats(items.filter(x=>x.kind==="call"));
   const kpi=(id,k,v,sub)=>`<div class="cbkpi" id="${id}"><span class="lbl-sm">${k}</span><b class="num">${v}</b>${sub?`<span class="hint">${sub}</span>`:""}</div>`;
   const kpis=`<div class="cbkpis">${kpi("cbkAgreed","Agreed",`${S.locked} / ${S.n}`,`${chPl(SC.locked,"chat")} · ${chPl(SK.locked,"call")}${S.toSettle?` · ${S.toSettle} to settle`:""}`)}${kpi("cbkSame","Same mark, all graders",cbP(S.same),`chats ${cbP(SC.same)} · calls ${cbP(SK.same)}`)}
-    ${kpi("cbkClaude","Claude vs agreed",cbP(SC.claude),"chats")}${kpi("cbkTurn","Your turn",String(S.turn),"not submitted")}</div>`;
+    ${kpi("cbkClaude","Claude vs agreed",cbP(S.claude),`chats ${cbP(SC.claude)} · calls ${cbP(SK.claude)}`)}${kpi("cbkTurn","Your turn",String(S.turn),"not submitted")}</div>`;
   const disL=(id,X)=>X.dis.length?`<div class="cbbars" id="${id}">${X.dis.map(x=>cbBar(`<span>${esc(x.label)}</span>`,x.p,x.p>=50?"hi":x.p<15?"lo":"")).join("")}</div>`:`<p class="hint" id="${id}">${X.split?"No splits yet.":"Needs two graders' marks."}</p>`;
   const dis=`<div><h3 class="evh">Where we disagree most</h3><h4 class="cbsub">Chats</h4>${disL("cbDisChat",SC)}<h4 class="cbsub">Calls</h4>${disL("cbDisCall",SK)}</div>`;
   const any=S.G.some(u=>S.per.get(u))||S.claude!=null;
   const gl=any?S.G.filter(u=>S.per.get(u)||cbPend(u)).map(u=>{const p=S.per.get(u);return cbBar(`<span class="cbcolh">${cbAv(u)}${u===myId?"You":esc(cbName(u))}</span>`,p?p.m/p.n*100:null,"lo",u)}):[];
-  if(SC.claude!=null)gl.push(cbBar(`<span class="cbcolh">${cbAv("claude")}Claude</span>`,SC.claude,"lo","claude"));
+  if(S.claude!=null)gl.push(cbBar(`<span class="cbcolh">${cbAv("claude")}Claude</span>`,S.claude,"lo","claude"));
   const each=`<div><h3 class="evh">Each grader vs the agreed mark</h3>${gl.length?`<div class="cbbars" id="cbEach">${gl.join("")}</div>`:`<p class="hint">Nothing agreed yet.</p>`}</div>`;
-  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}
+  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}
     <div class="cbgroups" id="cbItems">${groups||`<p class="hint">Nothing to do here.</p>`}</div>${kpis}<div class="cbtwo">${dis}${each}</div></div></section>`}
 
 /* ---------- a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching, like a chat ---------- */
@@ -413,10 +422,13 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=lk?c
     ["Recordings",legs.filter(l=>l.id).length?`<span class="tkrecs">${legs.filter(l=>l.id).map((l,i)=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec">▶ Call ${i+1}${l.sec?` <span class="num tkmut">(${esc(dur(l.sec))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
   const band=cbInRound(it.ik)?`<div class="lrband" id="tkRound"><b>Week ${esc(weekLabel(it.week))}</b><span>Round call · ${esc(chFirst(it.sa))}</span></div>`:"";
   return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span></div>
-    <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span></div></header>
+    <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
     <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></div>
     <div class="tkchat cbtxpan" id="cbTkPan-tx" role="tabpanel" aria-labelledby="cbTkTab-tx" tabindex="0"${cbTkTab==="tx"?"":" hidden"}>${cbTxHtml(q)}</div>`}
+/* "Claude's score 82.5%", or "Not graded yet" */
+function cbClScoreHtml(it,id,cls){const p=cbCGPct(it),C=cbClaude(it);
+  return `<span class="${cls}" id="${id}">${cbAv("claude")}<span>Claude's score</span>${C?`<b class="num">${p==null?"–":esc(fmt(p))+"%"}</b>`:`<span class="tkmut">${cbCG.has(String(it.key))||!db?"Not graded yet":"…"}</span>`}</span>`}
 function cbBrief(q){const A=validAi(q.aiFacts),F=(A&&A.facts)||{},B=[];if(A&&A.summary)B.push(A.summary);
   Object.values(F.calls||{}).forEach(L=>(Array.isArray(L)?L:[]).forEach(x=>B.push(String(x))));
   if(B.length<2)(F.timeline||[]).forEach(t=>B.push([t.who,t.what].filter(Boolean).join(" ")));
@@ -443,36 +455,42 @@ function cbCoach(it){const lk=(cbItems[it.ik]||{}).locked;if(!lk)return null;con
 function cbCoachText(it){const C=cbCoach(it);if(!C)return "";const q=it.q||{},v=chatVerdict(C.lk.pct),L=[`${it.sa||q.agent||"SA"} · ${it.title} · ${[shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" ")}`,`Agreed ${fmt(C.lk.pct)}%${v?" "+v.label:""}`];
   if(C.well.length)L.push("","What went well",...C.well.map(x=>"- "+x.label));
   if(C.fix.length)L.push("","Next time",...C.fix.map(x=>`- ${x.r.label} (${x.m}/${x.r.max}): ${x.why}`));return L.join("\n")}
-function cbCoachHtml(it){const C=cbCoach(it);if(!C)return `<p class="tkmut">Coaching comes from the agreed score.</p>`;const first=chFirst(it.sa)||"the SA";
+function cbCoachHtml(it){const C=cbCoach(it);if(!C)return cbClaude(it)?cbDraftHtml(it):`<p class="tkmut">Coaching comes from the agreed score.</p>`;const first=chFirst(it.sa)||"the SA";
   return `<h4 class="evh">What went well</h4>${C.well.length?`<div class="cbwell" id="cbWell">${C.well.map(r=>`<span class="cbwchip">${esc(r.label)}</span>`).join("")}</div>`:`<p class="tkmut">No row at full marks.</p>`}
     <h4 class="evh">Next time for ${esc(first)}</h4>${C.fix.length?`<div class="fixes" id="cbFixes">${C.fix.map(x=>`<article class="fixcard" data-fix="${esc(x.r.id)}"><header class="fixhd"><h4>${esc(x.r.label)}</h4><span class="cbmk ${chMarkCls(x.m,x.r.max)}">${esc(x.m)}/${x.r.max}</span></header><p>${esc(x.why||"No note.")}</p></article>`).join("")}</div>`:`<p class="tkmut">Nothing below full marks.</p>`}
     <div class="row coachbar"><button type="button" class="btn" data-cb="ccopy" id="cbCoachCopy">Copy all</button></div>`}
 function cbBoardHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=lk?chatVerdict(lk.pct):null;
   return `<aside class="panel board cverdict" id="chatBoard" aria-live="polite"><div class="vhead"><span class="lbl-sm">Call · ${esc(cbKindL(q))}</span>${lk?`<span class="pill solid ${chVB(lk.pct)}">Agreed</span>`:""}</div>
     ${lk?`<div class="vword v-${esc(v?v.id:"")}" id="cvWord">${esc(v?v.label:"–")}</div><div class="vpct"><span class="num" id="cvPct">${fmt(lk.pct)}%</span></div>`:`<div class="vword v-none" id="cvWord">Not agreed yet</div>`}
-    <dl class="vmeta"><dt>SA</dt><dd>${esc(q.agent||it.sa||"–")}</dd><dt>Restaurant</dt><dd>${esc(q.restaurantName||"–")}</dd><dt>Called</dt><dd class="num">${esc([shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" · ")||"–")}</dd><dt>Claude</dt><dd class="tkmut">Not graded</dd></dl>
+    <dl class="vmeta"><dt>SA</dt><dd>${esc(q.agent||it.sa||"–")}</dd><dt>Restaurant</dt><dd>${esc(q.restaurantName||"–")}</dd><dt>Called</dt><dd class="num">${esc([shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" · ")||"–")}</dd><dt>Claude</dt><dd id="cvClaude">${(()=>{const C=cbClaude(it),p=cbCGPct(it);return C?`<span class="num">${p==null?"–":esc(fmt(p))+"%"}</span>`:`<span class="tkmut">Not graded yet</span>`})()}</dd></dl>
+    <div class="cbgbox" id="cbGradeBox">${cbGradeBoxHtml(it)}</div>
     ${safeUrl(q.link)?`<div class="row"><a class="btn" href="${esc(safeUrl(q.link))}" target="_blank" rel="noopener">GreenDot ↗</a></div>`:""}</aside>`}
 function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="undefined"&&chPanel)chPanelClose();
   const lk=(cbItems[it?it.ik:""]||{}).locked,inR=it&&cbInRound(it.ik);
-  const sig=JSON.stringify([callSel,week,!!it,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner]);
-  if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();return}
+  if(it)cbCGWatch(it.key);const ck=String(callSel||"");
+  const sig=JSON.stringify([callSel,week,!!it,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
+    cbCG.has(ck),cbCGSig(cbCG.get(ck)),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun)]);
+  if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();cbGRPaint();return}
   cbAuditSig=sig;const nav=`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
   if(!it){if(cbPanel)cbPanelClose();v.innerHTML=nav+`<div class="panel empty">${queueReady||!db?`Call ${esc(callSel)} isn't in the queue.`:"Loading…"} <button type="button" class="btn small" data-go="calib">Open the round</button></div>`;return}
   if(cbPanel&&cbPanel.ik!==it.ik)cbPanelClose();
   const pct=lk?lk.pct:null,vd=lk?chatVerdict(pct):null;
   const secs=[chSec("cs-ev",2,"Evidence",[cbKindL(it.q),cbLegs(it.q).length>1?cbLegs(it.q).length+" calls":"Single call"].join(" · "),cbEvidenceHtml(it),"ref"),
     chSec("cs-score",3,"Scorecard",lk?`Agreed · ${vd?vd.label+" · ":""}${fmt(pct)}%`:"Not agreed yet",cbGridHtml(it),lk?"done cbsc-sec":"cbsc-sec"),
-    chSec("cs-coach",4,"Coaching",lk?"From the agreed score":"After the agreed score",cbCoachHtml(it),lk?"done":"")];
+    chSec("cs-coach",4,"Coaching",lk?"From the agreed score":cbClaude(it)?"Claude's draft":"After the agreed score",cbCoachHtml(it),lk?"done":"")];
   v.innerHTML=nav+`<div class="cdesk has-tk${inR?" has-rail":""}"><article class="panel qticket" id="cTicket" data-call="${esc(it.key)}" aria-label="QA ticket">${cbTicketHtml(it)}</article>${inR?`<div class="cside">${cbBoardHtml(it)}${cbRailBox(it.ik)}</div>`:cbBoardHtml(it)}<div class="ccol">${secs.join("")}</div></div>`;
   {const n=$("#chNav");if(n)n._h=chNavHtml();const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.ik)}
   if(cbTkTab==="tx")cbLoadTx(it);
   if(cbPanel&&cbPanelEl){v.append(cbPanelEl);const r=cbRubric("call",it).find(x=>x.id===cbPanel.crit);if(r)cbPanelEl.innerHTML=cbPanelHtml(it,r)}}
 
 /* the call panel: the rubric item's levels, then the call's facts (or its transcript) */
-function cbPanelHtml(it,r){const q=it.q||{},A=validAi(q.aiFacts),T=(A&&A.facts&&Array.isArray(A.facts.timeline))?A.facts.timeline:[],legs=cbLegs(q).filter(l=>l.id);
+function cbPanelHtml(it,r){const q=it.q||{},A=validAi(q.aiFacts),CL=cbClaude(it),GF=CL?cbFactList(CL.g.F):[],legs=cbLegs(q).filter(l=>l.id);
+  const T=(A&&A.facts&&Array.isArray(A.facts.timeline)&&A.facts.timeline.length)?A.facts.timeline:GF.filter(f=>/^F/i.test(String(f.id)));
   const lv=[0,1,2,3].map(n=>`<li><b class="cbmk ${chMarkCls(n,3)}">${n}</b><span>${esc((r.lv||[])[n]||"")}</span></li>`).join("")+(r.na?`<li><b class="cbmk na">N/A</b><span>${esc(r.naText||"Doesn't apply")}</span></li>`:"");
-  const facts=T.length?`<ol class="cbfacts">${T.map(t=>`<li><span class="num fid">${esc(t.id||"")}</span><span>${t.when?`<span class="num hint">${esc(t.when)}</span> `:""}<b>${esc(t.who||"")}</b> ${esc(t.what||"")}</span></li>`).join("")}</ol>`
-    :legs.length?`<div id="cbPTx">${legs.map(l=>`<div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div>`).join("")}</div>`:`<p class="tkmut">No facts or transcript.</p>`;
+  const cs=CL?cbCites(CL,r.id):[],cited=cs.map(id=>GF.find(f=>String(f.id)===id)||{id,what:"Not in Claude's facts"});
+  const cl=`<div class="cbpcl" id="cbPClaude">${CL?`<p class="cbclline">${cbAv("claude")}<span>${cbClLine(CL,r.id)}</span></p>${cited.length?`<ol class="cbfacts cbcited">${cited.map(cbFactLi).join("")}</ol>`:""}`:`<p class="cbclline">${cbAv("claude")}<span class="tkmut">Claude: not graded yet</span></p>`}</div>`;
+  const facts=cl+(T.length?`<ol class="cbfacts">${T.map(t=>cs.includes(String(t.id))?cbFactLi(t).replace("<li ",'<li class="cited" '):cbFactLi(t)).join("")}</ol>`
+    :legs.length?`<div id="cbPTx">${legs.map(l=>`<div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div>`).join("")}</div>`:`<p class="tkmut">No facts or transcript.</p>`);
   return `<header class="chphd"><div class="chpttl"><span class="lbl-sm">Levels</span><h2 id="cbpTitle" tabindex="-1">${esc(r.label)}</h2></div><button type="button" class="chpx" data-cb="pclose" aria-label="Close">×</button></header>
     <section class="chpused"><p class="chpwhy">${esc(r.title)}</p><ol class="cblevels">${lv}</ol></section>
     <section class="chpview" aria-label="Facts"><div class="chpvh"><h3 class="chph">${T.length?"Facts":"Transcript"}</h3></div>${facts}</section>`}
@@ -493,6 +511,105 @@ function renderCalib(){cbPresence();renderCalibTab();if(cbPanel&&(tab!=="chat"||
   const og=$("#view-chat #cbGrid"),orb=$("#view-chat #cbRailBox");if(og)og.remove();if(orb)orb.remove();if(og||orb){chatAuditSig="";cbAuditSig=""}
   cbSeen();const k=cbFocusKey(v);
   v.innerHTML=`<div class="cbtab">${cbTabHtml()}</div>`;cbRefocus(v,k)}
+
+/* ---------- Claude on calls: grade docs, the grader run, lessons, the draft coaching ---------- */
+const cbGradeFn=()=>typeof gradeCall==="function"?gradeCall:null;
+const cbCGSig=d=>d?String(d.at||"")+"|"+String(d.by||""):"";
+/* the open call's grade, live: switched only when the call changes */
+function cbCGWatch(qid){qid=String(qid||"");if(!db||cbCGSub.qid===qid)return;if(cbCGSub.off)try{cbCGSub.off()}catch(e){}
+  const S={qid,off:null};cbCGSub=S;if(!qid)return;
+  S.off=db.doc(CG_ROOT+"/"+qid).onSnapshot(s=>{if(cbCGSub!==S)return;const d=s&&s.exists?(s.data()||null):null,was=cbCG.has(qid)?cbCGSig(cbCG.get(qid)):null;
+    cbCG.set(qid,d);if(was!==cbCGSig(d))cbRender()},()=>{if(!cbCG.has(qid))cbCG.set(qid,null)})}
+/* the round's call grades: one get() per call, once per draw (the Round tab's scores and KPIs) */
+function cbCGLoadRound(){const r=cbWeekRound();if(!db||!r)return;const id=r.id+"|"+(r.drawnAt||"");if(cbCGRound===id)return;cbCGRound=id;
+  const ids=cbCallItems().map(x=>String(x.key)).filter(k=>!cbCG.has(k));if(!ids.length)return;
+  Promise.all(ids.map(k=>db.doc(CG_ROOT+"/"+k).get().then(s=>{if(!cbCG.has(k))cbCG.set(k,s&&s.exists?(s.data()||null):null)}).catch(()=>{}))).then(()=>cbRender())}
+/* Claude's score on the live call rubric, like the graders' */
+function cbCGPct(it){const C=cbClaude(it);return C?cbPct("call",C.marks,it):null}
+const cbCites=(C,id)=>(C&&C.cites&&Array.isArray(C.cites[id])?C.cites[id]:[]).map(x=>String(x||"").trim()).filter(Boolean);
+/* the facts in a grade's F: the timeline, claims and promises, each with its id */
+function cbFactList(F){if(!F||typeof F!=="object")return [];const f=F.facts&&typeof F.facts==="object"?F.facts:F,A=k=>Array.isArray(f[k])?f[k]:[];
+  return [].concat(Array.isArray(F)?F:[],A("timeline"),A("claims").map(c=>({id:c.id,when:"",who:"",what:c.claim||c.what||""})),A("promises").map(p=>({id:p.id,when:"",who:p.who||"",what:p.what||""})))
+    .filter(x=>x&&x.id)}
+const cbFactLi=t=>`<li data-fid="${esc(t.id||"")}"><span class="num fid">${esc(t.id||"")}</span><span>${t.when?`<span class="num hint">${esc(t.when)}</span> `:""}<b>${esc(t.who||"")}</b> ${esc(t.what||"")}</span></li>`;
+const cbMarkL=v=>v==="na"?"N/A":v==null||v===""?"–":String(chMarkL(v));
+/* "Claude: 2 · reason · F3, F7" */
+function cbClLine(C,id){const why=String((C.why||{})[id]||"").trim(),cs=cbCites(C,id);
+  return `<b>Claude: ${esc(cbMarkL(C.marks[id]))}</b>${why?` · ${esc(why)}`:""}${cs.length?` · <span class="num">${esc(cs.join(", "))}</span>`:""}`}
+/* the run: one call at a time, a progress line, Stop. Claude is asked fresh (cache off) and never retried from code */
+const CB_PASS={facts:"Writing down the facts",analysis:"Drawing conclusions",grade:"Grading",conclusions:"Drawing conclusions"};
+function cbGRLine(){const r=cbGR;if(!r)return "";return [r.n>1?`Grading ${r.i} of ${r.n}`:"Grading",r.n>1?r.sa:"",r.n>1?r.title:"",r.step].filter(Boolean).join(" · ")}
+function cbGRPaint(){if(!cbGR)return;document.querySelectorAll("[data-grline]").forEach(el=>{el.textContent=cbGRLine()})}
+function cbGRMsg(e){const c=e&&e.code;if(c==="no_text")return "No transcript for this call yet.";if(e&&e.src==="ld")return pullErr(e,"Try again");
+  if(e&&e.src==="db")return c==="invalid_argument"?"You can't save to this QA Desk.":c==="quota_exceeded"?"The QA Desk storage is full.":"Couldn't save. Try again.";
+  if(c==="error")return "Something went wrong with this call"+(e.message?": "+String(e.message).slice(0,80):".");
+  return aiErr(e)}
+const cbCanGrade=()=>!!(cbGradeFn()&&db&&mcp&&sampleFn);
+async function cbCallLessons(){if(!db)return [];try{const s=await db.collection(CL_ROOT).get();
+  return s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))).slice(0,20)}catch(e){return []}}
+async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {code:"error",src:"run"};
+  const q=it.q||{},guard=()=>{if(ctl.signal.aborted)throw {code:"cancelled",src:"run"}},step=s=>{if(cbGR){cbGR.step=s;cbGRPaint()}};
+  const all=cbLegs(q),legs=all.filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));
+  step("Getting transcripts");
+  try{await fetchTx(legs)}catch(e){throw chTag(e,"ld")}guard();
+  const transcripts=Object.fromEntries(legs.map(l=>[l.id,String(txCache.get(l.id)||"")]));
+  if(!Object.values(transcripts).some(t=>t.trim()))throw {code:"no_text",src:"run"};
+  const items=itemsOf(CUR,cbCallType(it)),c=Object.assign(clone(q),{id:it.key,queueId:it.key,legs:all.map(l=>Object.assign({},l,{text:transcripts[String(l.id||"")]||""}))});
+  const deps={transcripts,items,lessons,signal:ctl.signal,
+    ask:async(prompt,pass)=>{guard();step(CB_PASS[pass]||"Asking Claude");try{return await sampleFn.json(prompt,{signal:ctl.signal,modelTier:"default",cache:false})}catch(e){throw chTag(e,"ai")}}};
+  const R=await fn(c,deps);guard();
+  const G=(R&&R.G)||{};if(!G.scores||typeof G.scores!=="object")throw {code:"ai_shape",src:"ai"};
+  const ids=items.map(x=>x.id),pick=o=>Object.fromEntries(ids.filter(id=>o&&o[id]!==undefined).map(id=>[id,o[id]]));
+  const doc=clone({v:G.v||(R&&R.v)||1,at:new Date().toISOString(),by:myId||null,items:ids,scores:pick(G.scores),reasons:pick(G.reasons),cites:pick(G.cites),
+    wentWell:Array.isArray(G.wentWell)?G.wentWell:[],fixes:Array.isArray(G.fixes)?G.fixes:[],summary:String(G.summary||""),F:(R&&R.F)??null,A:(R&&R.A)??null});
+  try{await db.doc(CG_ROOT+"/"+it.key).set(doc)}catch(e){throw chTag(e,"db")}
+  cbCG.set(String(it.key),doc);cbGRErr.delete(String(it.key))}
+async function cbGradeRun(list,one){if(cbGR||(typeof chatRun!=="undefined"&&chatRun)||!cbCanGrade()||!list.length)return;
+  const ctl=new AbortController();cbGR={ctl,n:list.length,i:0,qid:"",sa:"",title:"",step:"",done:0,errs:0,one:!!one};cbGRNote=null;cbGRRefresh();
+  let stop=null;
+  try{const lessons=await cbCallLessons();
+    for(let i=0;i<list.length;i++){if(ctl.signal.aborted)break;const it=list[i];Object.assign(cbGR,{i:i+1,qid:String(it.key),sa:it.sa||"",title:it.title||"",step:""});cbGRRefresh();
+      try{await cbGradeOne(it,ctl,lessons);cbGR.done++}
+      catch(e){if(ctl.signal.aborted||(e&&e.code==="cancelled"))break;const m=capText(cbGRMsg(e),160);
+        if(chatIsAccess(e)){stop=m;cbGRErr.set(String(it.key),m);break}cbGR.errs++;cbGRErr.set(String(it.key),m)}}}
+  finally{const r=cbGR;cbGR=null;
+    cbGRNote=r.one?null:stop?{text:stop,err:true}:r.ctl.signal.aborted?{text:`Stopped · ${r.done} graded`}:{text:`Graded ${chPl(r.done,"call")}`+(r.errs?` · ${r.errs} couldn't be graded`:"")};
+    cbGRRefresh()}}
+function cbGRRefresh(){if(tab==="chat"&&callSel)renderChatAudit();if(tab==="calib")renderCalib()}
+/* the round's calls Claude hasn't graded (read so far) */
+const cbUngraded=()=>cbCallItems().filter(it=>cbCG.has(String(it.key))&&!cbCG.get(String(it.key)));
+/* a locked call: a contest lesson where the panel moved Claude's mark, a reinforce lesson where it kept it and said why. callLessons/<queueId>_<crit> */
+async function cbCallLocked(it,R,marks,A,subd,at){const C=cbClaude(it);if(!C||!db)return "";const q=it.q||{};let n=0;
+  for(const r of R){const cl=C.marks[r.id],ag=marks[r.id];if(cl===undefined)continue;
+    const an=String((A[r.id]&&A[r.id].note)||"").trim(),why=cbReason(it.ik,r.id,A[r.id],subd);
+    const base={item:"call",queueId:String(it.key),week:it.week||q.week||"",sa:it.sa||q.agent||"",caseType:String(((C.g.A||{}).caseType)||cbCallType(it)),round:it.round??null,
+      crit:r.id,label:r.label,type:"",what:String((C.why||{})[r.id]||""),by:"panel",at};let doc=null;
+    if(String(cl)!==String(ag))doc=Object.assign({kind:"contest"},base,{from:chMk(cl,r.max),to:chMk(ag,r.max),reason:why||"All matched"});
+    else if(an&&an!=="All matched")doc=Object.assign({kind:"reinforce"},base,{from:chMk(cl,r.max),to:chMk(cl,r.max),reason:an});
+    if(doc){try{await db.doc(`${CL_ROOT}/${it.key}_${r.id}`).set(doc);n++}catch(e){}}}
+  return n?` · ${chPl(n,"lesson")}`:""}
+async function cbCallUnlock(it){if(!db)return;for(const r of cbRubric("call",it)){try{await db.doc(`${CL_ROOT}/${it.key}_${r.id}`).delete()}catch(e){}}}
+/* before the lock, coaching starts from Claude's wentWell and fixes */
+function cbDraftCoach(it){const C=cbClaude(it);if(!C)return null;const R=cbRubric("call",it),g=C.g;
+  return {well:(g.wentWell||[]).map(x=>String(x||"").trim()).filter(Boolean),
+    fix:(g.fixes||[]).filter(f=>f&&typeof f==="object").map(f=>({r:R.find(x=>x.id===f.id)||{id:String(f.id||""),label:String(f.id||""),max:3},m:C.marks[f.id],what:String(f.what||""),should:String(f.should||"")}))}}
+function cbDraftText(it){const D=cbDraftCoach(it);if(!D)return "";const q=it.q||{},p=cbCGPct(it);
+  const L=[`${it.sa||q.agent||"SA"} · ${it.title} · ${[shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" ")}`,`Claude's draft${p!=null?" "+fmt(p)+"%":""}`];
+  if(D.well.length)L.push("","What went well",...D.well.map(x=>"- "+x));
+  if(D.fix.length)L.push("","Next time",...D.fix.map(x=>`- ${x.r.label}${x.m!=null&&x.m!=="na"?` (${x.m}/${x.r.max})`:""}: ${x.what}${x.should?" "+x.should:""}`));return L.join("\n")}
+function cbDraftHtml(it){const D=cbDraftCoach(it),first=chFirst(it.sa)||"the SA";
+  return `<p class="cbdtag" id="cbDraftTag">${cbAv("claude")}<b>Claude's draft</b></p>
+    <h4 class="evh">What went well</h4>${D.well.length?`<ul class="cbwlist" id="cbDWell">${D.well.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:`<p class="tkmut">Nothing listed.</p>`}
+    <h4 class="evh">Next time for ${esc(first)}</h4>${D.fix.length?`<div class="fixes" id="cbDFixes">${D.fix.map(x=>`<article class="fixcard" data-fix="${esc(x.r.id)}"><header class="fixhd"><h4>${esc(x.r.label)}</h4>${x.m!=null?`<span class="cbmk ${chMarkCls(x.m,x.r.max)}">${esc(cbMarkL(x.m))}${x.m==="na"?"":"/"+x.r.max}</span>`:""}</header><p>${esc(x.what||"No note.")}</p>${x.should?`<p class="cbshould"><b>Do</b> ${esc(x.should)}</p>`:""}</article>`).join("")}</div>`:`<p class="tkmut">Nothing to fix.</p>`}
+    <div class="row coachbar"><button type="button" class="btn" data-cb="ccopy" id="cbCoachCopy">Copy all</button></div>`}
+/* the grade box on the board: Grade with Claude / Re-grade, or the run's progress and Stop */
+function cbGradeBoxHtml(it){const k=String(it.key),g=cbCG.get(k),err=cbGRErr.get(k);
+  if(cbGR&&cbGR.qid===k)return `<div class="cbgrun" id="cbGrRun" role="status"><span class="spin" aria-hidden="true"></span><span data-grline>${esc(cbGRLine())}</span><button type="button" class="btn small" data-cb="gstop" id="cbGrStop">Stop</button></div>`;
+  const btn=cbCanGrade()?`<div class="row"><button type="button" class="btn${g?"":" primary"}" data-cb="grade" id="cbGradeBtn"${cbGR||(typeof chatRun!=="undefined"&&chatRun)?" disabled":""}>${g?"Re-grade":"Grade with Claude"}</button></div>`:"";
+  return btn+(err?`<div class="cvnote" id="cbGrErr" role="alert">${esc(err)}</div>`:"")}
+/* the Round tab: the owner grades the round's ungraded calls one after another */
+function cbRoundRunHtml(){if(cbGR&&!cbGR.one)return `<div class="cbgrun" id="cbRoundRun" role="status"><span class="spin" aria-hidden="true"></span><span data-grline>${esc(cbGRLine())}</span><button type="button" class="btn small" data-cb="gstop" id="cbRoundStop">Stop</button></div>`;
+  return cbGRNote?`<div class="cvnote${cbGRNote.err?"":" ok"}" id="cbRoundNote" role="status">${esc(cbGRNote.text)}</div>`:""}
 
 /* ---------- events ---------- */
 function cbGridItem(el){const g=el&&el.closest("#cbGrid");return g?cbItemByIk(g.dataset.ik):callSel&&tab==="chat"?cbCallItem(callSel):null}
@@ -515,7 +632,9 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
     case "tk":{cbTkTab=el.dataset.v==="tx"?"tx":"ticket";document.querySelectorAll('#cTicket [data-cb="tk"]').forEach(b=>{const on=b.dataset.v===cbTkTab;b.setAttribute("aria-selected",String(on));b.tabIndex=on?0:-1});
       const p=$("#cbTkPan-ticket"),x=$("#cbTkPan-tx");if(p)p.hidden=cbTkTab!=="ticket";if(x)x.hidden=cbTkTab!=="tx";if(cbTkTab==="tx"&&it)cbLoadTx(it);return}
     case "evmore":{cbEvMore=!cbEvMore;const f=$("#cbEvFull");if(f)f.hidden=!cbEvMore;el.setAttribute("aria-expanded",String(cbEvMore));return}
-    case "ccopy":if(it)chClip(cbCoachText(it),"Copied");return;
+    case "ccopy":if(it)chClip((cbItems[it.ik]||{}).locked?cbCoachText(it):cbDraftText(it),"Copied");return;
+    case "gstop":if(cbGR)cbGR.ctl.abort();return;
+    case "gradeall":if(amOwner)cbGradeRun(cbUngraded(),false);return;
     case "pclose":cbPanelClose(true);return}
   if(!it)return;const ik=it.ik,k=ik+"|"+crit;
   switch(A){
@@ -533,7 +652,8 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
     case "asave":cbSaveRow(it,crit);break;
     case "lock":cbLock(it);break;
     case "reopen":cbReopen(it);break;
-    case "panel":cbPanelOpen(it,crit);break}});
+    case "panel":cbPanelOpen(it,crit);break;
+    case "grade":if(it.kind==="call"){cbGRErr.delete(String(it.key));cbGradeRun([it],true)}break}});
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!(t.dataset.cbnote||t.dataset.cbag))return;const it=cbGridItem(t);if(!it)return;
   if(t.dataset.cbag){const crit=t.dataset.cbag;if(!cbSettle||cbSettle.ik!==it.ik||cbSettle.crit!==crit)cbSettle={ik:it.ik,crit,mark:null,note:""};cbSettle.note=t.value;return}
   const crit=t.dataset.cbnote,s=cbSub(myId,it.ik);if(s){if(!cbEdit.has(it.ik))return;s.notes=Object.assign({},s.notes,{[crit]:t.value})}else cbDraftOf(it.ik).notes[crit]=t.value;

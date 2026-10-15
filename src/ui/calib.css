@@ -184,3 +184,22 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbtxleg .txtext{color:var(--ink);white-space:pre-wrap;font-size:13.5px;line-height:1.55;overflow-wrap:anywhere}
 .cbwell{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .cbwchip{font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--s3-soft);color:var(--s3)}
+/* Claude on calls: the score in the ticket header, the grade box, the run line, the panel's Claude line and cited facts, the draft coaching */
+.qticket[data-call] .tkverd{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+.tkcl{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}
+.tkcl b{color:var(--ink);font-size:15px;font-weight:700}
+.cbgbox{display:flex;flex-direction:column;gap:8px}
+.cbgbox:empty{display:none}
+.cbgrun{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.cbgrun [data-grline]{flex:1 1 160px;min-width:0}
+#cbRound .cbgrun,#cbRoundNote{margin-bottom:12px}
+.cvnote.ok{color:var(--ink);background:var(--soft)}
+.cbcites{font-size:12px;color:var(--muted)}
+.cbpcl{display:flex;flex-direction:column;gap:8px;padding:10px 12px;margin-bottom:12px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.cbclline{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:start;font-size:13.5px;overflow-wrap:anywhere}
+.cbcited li{padding:4px 6px;border-radius:6px;background:var(--panel)}
+.cbdtag{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 4px;font-size:13.5px}
+.cbwlist{margin:0 0 12px;padding-left:18px;display:grid;gap:4px;font-size:14px;overflow-wrap:anywhere}
+.cbshould{margin:0;font-size:13.5px}
+@media (max-width:560px){.qticket[data-call] .tkverd{justify-content:flex-start}.tkcl{padding-left:0;border-left:0}}
+.cbfacts li.cited{box-shadow:inset 3px 0 0 var(--accent);padding-left:8px}
