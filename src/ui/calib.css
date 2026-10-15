@@ -85,12 +85,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cblink{border:0;background:none;padding:0;color:var(--accent);font-weight:600;text-align:left;font-size:14px}
 .cblink:hover{text-decoration:underline;text-underline-offset:3px}
 
-/* the inline call */
-.cbcallnav{display:flex}
-.cbcall{padding:16px;display:flex;flex-direction:column;gap:16px}
-.cbtk{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 20px;align-items:start}
-.cbtk h2{margin:2px 0 4px;font-size:20px;letter-spacing:-.01em}
-.cbtkmeta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted);align-items:center}
+/* a call in the Audit tab */
 .pill.tp{background:var(--tp-soft);color:var(--tp)}
 .cbverd{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .cbbig{font-size:28px;font-weight:800;line-height:1}
@@ -152,13 +147,40 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbrst.done{color:var(--s2);font-weight:700}
 .cbrst.agreed{color:var(--s3);font-weight:700;white-space:nowrap;max-width:none}
 
-/* the inline call: the checklist on the right */
-.cbcallgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start}
-.cbcallmain{display:flex;flex-direction:column;gap:16px;min-width:0}
-.cbcallgrid>.cbrailbox{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow-y:auto;overscroll-behavior:contain;min-width:0}
-@media (max-width:1000px){.cbcallgrid{grid-template-columns:minmax(0,1fr)}.cbcallgrid>.cbrailbox{order:-1;position:static;max-height:none}}
-@media (max-width:1700px){body.chp-on .cbcallgrid{grid-template-columns:minmax(0,1fr)}body.chp-on .cbcallgrid>.cbrailbox{order:-1;position:static;max-height:none}}
 /* folded: the toggle shows, the list opens under it */
 @media (max-width:1000px){.cbrtog{display:flex}.cbrhd{display:none}.cbrail[data-open="0"] .cbrbody{display:none}.cbrail[data-open="1"] .cbrbody{border-top:1px solid var(--line)}}
 @media (max-width:1700px){body.chp-on .cbrtog{display:flex}body.chp-on .cbrhd{display:none}body.chp-on .cbrail[data-open="0"] .cbrbody{display:none}body.chp-on .cbrail[data-open="1"] .cbrbody{border-top:1px solid var(--line)}}
 @media (prefers-reduced-motion:reduce){.cbrchev{transition:none}}
+
+/* the Round tab: the week by SA */
+.cbttl{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cbttl h2{margin:0;font-size:18px}
+#cbSum{font-size:13.5px;color:var(--muted)}
+.cbconfirm{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 12px;border:1px solid var(--s1);border-radius:10px;background:var(--s1-soft);font-size:14px}
+.cbshort{margin:0;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:13.5px}
+.cbfilt{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.cbmine[aria-pressed="true"]{background:var(--accent);color:var(--on-fill);border-color:var(--accent)}
+.cbgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:12px}
+.cbsa{border:1px solid var(--line);border-radius:12px;background:var(--bg);min-width:0}
+.cbsa h3{margin:0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px}
+.cbilist{list-style:none;margin:0;padding:4px 6px}
+.cbirow{display:grid;grid-template-columns:16px minmax(0,1fr) 56px minmax(84px,auto) auto auto;gap:8px 10px;align-items:center;padding:6px;border-radius:8px;font-size:13.5px}
+.cbirow+.cbirow{border-top:1px solid var(--line)}
+.cbirow .cblink{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cbidate{color:var(--muted);font-size:12.5px}
+.cbimeta{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.cbkic{display:inline-grid;place-items:center;color:var(--muted)}
+.cbkic.call{color:var(--tp)}
+.cbsub{margin:8px 0 6px;font-size:12px;color:var(--muted);font-weight:700}
+@media (max-width:560px){.cbirow{grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:"ic t t" ". d m" ". dots st"}
+  .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t;white-space:normal}.cbirow>.cbidate{grid-area:d}.cbirow>.cbimeta{grid-area:m;text-align:right}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:end}}
+/* the checklist, grouped by SA */
+.cbrgrp>ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.cbrsa{display:block;padding:8px 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cbrt b .cbkic{margin-right:5px;vertical-align:-2px}
+/* the call ticket's transcript, coaching chips */
+.cbtxpan{display:flex;flex-direction:column;gap:14px}
+.cbtxleg h4{margin:0 0 6px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;font-size:13.5px}
+.cbtxleg .txtext{color:var(--ink);white-space:pre-wrap;font-size:13.5px;line-height:1.55;overflow-wrap:anywhere}
+.cbwell{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.cbwchip{font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--s3-soft);color:var(--s3)}

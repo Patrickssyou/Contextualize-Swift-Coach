@@ -67,43 +67,51 @@ function chSaOrder(names){const order=roster.agents.map(a=>a.name);return [...ne
 function chSort(list){const sas=chSaOrder(list.map(c=>c.sa));return list.slice().sort((a,b)=>sas.indexOf(a.sa)-sas.indexOf(b.sa)||String(a.at).localeCompare(String(b.at)))}
 function chFirstLine(c){const m=(c.msgs||[]).find(x=>x.role==="client")||(c.msgs||[])[0];const t=String((m&&m.text)||c.title||"").replace(/\s+/g," ").trim();return t.length>120?t.slice(0,118)+"…":t}
 /* a chat link carries its week (#chat/<week>/<sid>), so a reload opens on the right week */
-function chatHash(){if(!chatSel)return "chat";const c=chatBy(chatSel);return "chat/"+((c&&c.week)||week)+"/"+encodeURIComponent(chatSel)}
-function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&String(chatSel)===String(sid)))navPush();
+function chatHash(){if(callSel)return "call/"+week+"/"+encodeURIComponent(callSel);if(!chatSel)return "chat";const c=chatBy(chatSel);return "chat/"+((c&&c.week)||week)+"/"+encodeURIComponent(chatSel)}
+/* the Audit tab shows one chat (chatSel) or one call from the queue (callSel); #call/<week>/<id> opens a call */
+let callSel=null;
+{const h=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
+  if(/^call\/./.test(h)){const p=h.slice(5).split("/");callSel=p.pop();if(p.length&&chatWeek(p[0]))week=chatWeek(p[0])}}
+function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&!callSel&&String(chatSel)===String(sid)))navPush();
   wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
-  chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
+  callSel=null;chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
+function openCall(id,wk,fromBack){if(!fromBack&&!(tab==="chat"&&callSel===String(id)))navPush();
+  wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
+  callSel=String(id);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
 
 /* ---------- in-page history: the artifact frame may not pass browser Back, so Back pops this stack (a chat, a call or a tab) ---------- */
 const navStack=[];
-const NAV_TAB_L={chats:"Dashboard",calib:"Calibration",learn:"Learning",brain:"Brain",queue:"Calls",calls:"Calls",facts:"Calls",results:"Results",data:"Database"};
-function navHere(){const c=tab==="chat"&&chatSel?chatBy(chatSel):null,call=typeof cbCall!=="undefined"?cbCall:null,kind=typeof cbKind!=="undefined"?cbKind:"chat";
-  let label=NAV_TAB_L[tab]||"Back";
-  if(tab==="chat")label=chatSel?(c&&c.restaurant)||"Chat "+chatSel:"Audit";
-  else if(tab==="calib"&&call){const it=typeof cbItemByIk==="function"?cbItemByIk("call_"+call):null;label=it?it.title:"Call"}
-  return {tab,sid:tab==="chat"&&chatSel?String(chatSel):"",week,call:tab==="calib"?call:null,kind,label}}
-const navSame=(x,y)=>!!x&&!!y&&x.tab===y.tab&&x.sid===y.sid&&(x.call||null)===(y.call||null)&&(x.tab!=="calib"||x.kind===y.kind);
+const NAV_TAB_L={chats:"Dashboard",calib:"Round",learn:"Learning",brain:"Brain",queue:"Call tools",calls:"Call tools",facts:"Call tools",results:"Results",data:"Database"};
+function navHere(){let label=NAV_TAB_L[tab]||"Back",sid="",call=null;
+  if(tab==="chat"&&callSel){call=callSel;const it=typeof cbCallItem==="function"?cbCallItem(callSel):null;label=it?it.title:"Call"}
+  else if(tab==="chat"){sid=chatSel?String(chatSel):"";const c=sid?chatBy(sid):null;label=sid?(c&&c.restaurant)||"Chat "+sid:"Audit"}
+  return {tab,sid,call,week,label}}
+const navSame=(x,y)=>!!x&&!!y&&x.tab===y.tab&&x.sid===y.sid&&(x.call||null)===(y.call||null);
 function navPush(){const h=navHere();if(!navSame(navStack[navStack.length-1],h)){navStack.push(h);if(navStack.length>40)navStack.shift()}}
-/* nothing to go back to: a round chat goes to Calibration, any other chat to the Dashboard, a call to its round */
-function navFallback(){if(tab==="calib")return {tab:"calib",kind:typeof cbKind!=="undefined"?cbKind:"chat",call:null,sid:"",label:"All items"};
-  const c=chatSel&&chatBy(chatSel);if(tab==="chat"&&c&&typeof cbRoundItem==="function"&&cbRoundItem(c))return {tab:"calib",kind:"chat",call:null,sid:"",label:"Calibration"};
-  return {tab:"chats",sid:"",label:"Dashboard"}}
+/* nothing to go back to: a round item goes to the Round tab, any other chat to the Dashboard */
+function navFallback(){const ik=typeof cbItemOnScreen==="function"?cbItemOnScreen():null;
+  if(tab==="chat"&&ik&&typeof cbInRound==="function"&&cbInRound(ik))return {tab:"calib",sid:"",call:null,label:"Round"};
+  if(tab==="chat"&&callSel)return {tab:"calib",sid:"",call:null,label:"Round"};
+  return {tab:"chats",sid:"",call:null,label:"Dashboard"}}
 function navTarget(){const h=navHere();while(navStack.length&&navSame(navStack[navStack.length-1],h))navStack.pop();return navStack[navStack.length-1]||navFallback()}
 const navBackLabel=()=>navTarget().label;
 function navBack(){const to=navTarget();if(navStack[navStack.length-1]===to)navStack.pop();
+  if(to.tab==="chat"&&to.call){openCall(to.call,to.week,true);return}
   if(to.tab==="chat"&&to.sid){openChat(to.sid,to.week,true);return}
-  if(to.tab==="calib"&&typeof cbCall!=="undefined"){cbKind=to.kind==="call"?"call":"chat";cbCall=to.call||null;if(typeof cbPanelClose==="function")cbPanelClose()}
   setTab(to.tab);window.scrollTo({top:0})}
-/* Prev / Next: through the current round when the chat is in it, else through the queue order */
-function navList(c){const it=typeof cbRoundItem==="function"?cbRoundItem(c):null;
-  if(it)return {round:it.round,L:cbChatItems().map(x=>({sid:x.key,week:x.week}))};
-  return {round:null,L:chSort(chatsOfWeek()).map(x=>({sid:String(x.sid),week:chWk(x)}))}}
-function chNavHtml(c){const back=`<button type="button" class="btn small cnavback" id="navBack" data-nav="back">← ${esc(navBackLabel())}</button>`;if(!c)return back;
-  const N=navList(c),i=N.L.findIndex(x=>x.sid===String(c.sid)),p=i>0,n=i>=0&&i<N.L.length-1;
+/* Prev / Next: through the week's round (chats and calls, by SA) when the item is in it, else through the queue order */
+function navList(){const R=typeof cbRoundItems==="function"?cbRoundItems():[],ik=typeof cbItemOnScreen==="function"?cbItemOnScreen():null;
+  if(ik&&R.some(x=>x.ik===ik))return {round:R[0].week,L:R.map(x=>({kind:x.kind,key:x.key,week:x.week})),cur:ik};
+  if(callSel)return {round:null,L:[{kind:"call",key:callSel,week}],cur:"call_"+callSel};
+  return {round:null,L:chSort(chatsOfWeek()).map(x=>({kind:"chat",key:String(x.sid),week:chWk(x)})),cur:"chat_"+chatSel}}
+function chNavHtml(){const back=`<button type="button" class="btn small cnavback" id="navBack" data-nav="back">← ${esc(navBackLabel())}</button>`;if(!chatSel&&!callSel)return back;
+  const N=navList(),i=N.L.findIndex(x=>x.kind+"_"+x.key===N.cur),p=i>0,n=i>=0&&i<N.L.length-1;
   return back+`<span class="cnavstep"><button type="button" class="btn small" id="navPrev" data-nav="prev"${p?"":" disabled"}>‹ Prev</button>
-    <span class="num hint" id="navPos">${i<0?"":(N.round!=null?`Round ${esc(N.round)} · `:"")+`${i+1} of ${N.L.length}`}</span>
+    <span class="num hint" id="navPos">${i<0?"":(N.round!=null?`Week ${esc(weekLabel(N.round))} · `:"")+`${i+1} of ${N.L.length}`}</span>
     <button type="button" class="btn small" id="navNext" data-nav="next"${n?"":" disabled"}>Next ›</button></span>`}
-function chNavPaint(){const el=$("#chNav");if(!el)return;const c=chatSel?chatBy(chatSel):null,h=chNavHtml(c);if(el._h===h)return;
+function chNavPaint(){const el=$("#chNav");if(!el)return;const h=chNavHtml();if(el._h===h)return;
   const f=document.activeElement,k=f&&el.contains(f)?f.id:"";el.innerHTML=h;el._h=h;if(k){const g=document.getElementById(k);if(g&&!g.disabled)g.focus({preventScroll:true})}}
-function navStep(d){const c=chatSel?chatBy(chatSel):null;if(!c)return;const N=navList(c),i=N.L.findIndex(x=>x.sid===String(c.sid)),to=N.L[i+d];if(i<0||!to)return;openChat(to.sid,to.week)}
+function navStep(d){const N=navList(),i=N.L.findIndex(x=>x.kind+"_"+x.key===N.cur),to=N.L[i+d];if(i<0||!to)return;if(to.kind==="call")openCall(to.key,to.week);else openChat(to.key,to.week)}
 
 /* ---------- game layer hooks (read by gameStats in the page) ---------- */
 /* every review: the loaded week's live ones plus the other weeks read once at load */
@@ -153,8 +161,8 @@ function chatHistory(){if(!db||chHistRun)return chHistRun;
   return chHistRun}
 function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain();if(tab==="calib"&&typeof renderCalib==="function")renderCalib()}
 function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="chat"]');if(!tb)return;
-  const c=chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid];tb.classList.toggle("done",!!c);
-  const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=d?chatScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
+  const c=!callSel&&chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid],lk=callSel&&typeof cbItems!=="undefined"?(cbItems["call_"+callSel]||{}).locked:null;tb.classList.toggle("done",!!c||!!lk);
+  const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=lk?lk.pct:d?chatScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
   const n=chatsOfWeek().filter(x=>x.picked&&!chatRev[x.sid]).length;const cc=$("#chCount");if(cc)cc.textContent=n?String(n):"";
   const lr=lrnOpenRound(),sl=$("#st-learn");if(sl)sl.textContent=lr?`${(lr.results||[]).length}/${(lr.sample||[]).length}`:""}
 
@@ -806,12 +814,14 @@ async function chClip(text,done){try{await navigator.clipboard.writeText(text);t
   toast("Couldn't copy. Try again.")}
 const chSec=(id,n,title,ans,body,cls)=>`<div class="qsec ${cls||""}" id="${id}"><div class="qhd"><span class="qnum"><span>${n}</span></span><span class="qttl">${esc(title)}</span><span class="qans"${id==="cs-score"?' id="csScoreAns"':""}>${esc(ans||"")}</span></div><div class="qbody">${body}</div></div>`;
 function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
+  if(callSel){chatAuditSig="";if(typeof cbCallAudit==="function")cbCallAudit(v,force);return}
+  if(typeof cbAuditSig!=="undefined")cbAuditSig="";
   const sid=chatSel?String(chatSel):"",c=sid?chatBy(sid):null,a=c?chatAud[sid]:null,rv=c?chatRev[sid]:null;
   const sig=JSON.stringify([sid,week,!!c,c&&c.picked,c&&c.gradeError,c&&chHash(c),chHash(a),chHash(rv),chatPickOpen===sid,chNoteOpen===sid,
     !!(chatRun&&chatRun.sid===sid),!!chatRun,!!(db&&mcp&&sampleFn),chatsReady,chatNote&&chatNote.text,chatPolicyDoc&&chatPolicyDoc.at,chCalSig(c),!!(c&&typeof cbRoundItem==="function"&&cbRoundItem(c))]);
-  if(!force&&sig===chatAuditSig){paintRun();chTkSet(chTkTab);chNavPaint();if(typeof cbRailPaint==="function")cbRailPaint();return}
+  if(!force&&sig===chatAuditSig&&$("#view-chat .cdesk, #view-chat .empty")){paintRun();chTkSet(chTkTab);chNavPaint();if(typeof cbRailPaint==="function")cbRailPaint();return}
   chatAuditSig=sig;
-  const nav=`<nav class="cnav" id="chNav" aria-label="Chats">${chNavHtml(c)}</nav>`;
+  const nav=`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
   if(!sid){chPanelClose();v.innerHTML=`<div class="panel empty">No chat open. <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
   if(!c){chPanelClose();v.innerHTML=nav+`<div class="panel empty">${(chatsReady&&chW.week===week)||!db?`Chat ${esc(sid)} isn't in ${esc(weekLabel(week))}.`:"Loading…"} <button type="button" class="btn small" data-go="chats">Open the dashboard</button></div>`;return}
   const d=chatDraft(sid),pct=a?chatScore(d.scores):null,vd=chatVerdict(pct),o=a&&(a.orders||[])[0];
@@ -825,8 +835,8 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
       chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
   const pn=$("#tkPan-chat"),top=pn&&pn.closest("[data-sid]")&&pn.closest("[data-sid]").dataset.sid===sid?pn.scrollTop:0;
   const rit=typeof cbRoundItem==="function"?cbRoundItem(c):null,board=`<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside>`;
-  v.innerHTML=nav+`<div class="cdesk${a?" has-tk":""}${rit?" has-rail":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}${rit?`<div class="cside">${board}${cbRailBox("chat",rit.ik)}</div>`:board}<div class="ccol">${secs.join("")}</div></div>`;
-  {const n=$("#chNav");if(n)n._h=chNavHtml(c);const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.kind,rb.dataset.ik)}
+  v.innerHTML=nav+`<div class="cdesk${a?" has-tk":""}${rit?" has-rail":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}${rit?`<div class="cside">${board}${cbRailBox(rit.ik)}</div>`:board}<div class="ccol">${secs.join("")}</div></div>`;
+  {const n=$("#chNav");if(n)n._h=chNavHtml();const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.ik)}
   if(chatPickOpen===sid)chOrdFilter();
   const p2=$("#tkPan-chat");if(p2&&top)p2.scrollTop=top;
   /* the evidence panel lives in the view, so a re-render puts it back (and redraws it: the grade may have changed) */
@@ -1115,29 +1125,6 @@ function lrnChip(c){const r=lrnLast();if(!r||chWk(c)!==lrnWeek()||!lrnInSample(r
 function lrnBand(c,a){const r=lrnOpenRound(),s=r&&chWk(c)===lrnWeek()?lrnInSample(r,c.sid):null;if(!s)return "";
   return `<div class="lrband" id="tkRound"><b>Round ${esc(r.round)}</b><span>Sampled chat</span><span>Claude's score at draw: <b class="num">${fmt(s.aiPct)}%</b> ${esc(chVLabel(s.aiVerdict)||"")}</span>${lrnResult(r,c.sid)?`<span class="rdone">Reviewed ✓</span>`:""}</div>`}
 
-/* Draw: a random 10 of the week's graded chats Patrick hasn't marked, spread across the SAs (one each, then a second each, ...) */
-function lrnSpread(pool,n){const sh=x=>{x=x.slice();for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]]}return x};
-  const by=new Map();sh(pool).forEach(a=>{const k=a.sa||"–";if(!by.has(k))by.set(k,[]);by.get(k).push(a)});
-  const out=[];let sas=sh([...by.keys()]);
-  while(out.length<n&&sas.some(k=>by.get(k).length)){for(const k of sas){if(out.length>=n)break;const l=by.get(k);if(l.length)out.push(l.shift())}sas=sh(sas)}
-  return out}
-async function lrnDraw(){if(!db||lrnBusy||lrnOpenRound())return;lrnBusy=true;lrnNote="";renderLearn();
-  try{const w=lrnWeek(),st=lrnState||{};
-    const [as,rs]=await Promise.all([db.collection(CHAT_PATHS.audits(w)).get(),db.collection(CHAT_PATHS.reviews(w)).get()]);
-    const seen=new Set([...(st.marked||[]).map(String),...lrnRounds().flatMap(r=>(r.sample||[]).map(x=>String(x.sid))),...rs.docs.map(d=>String(d.id))]);
-    const pool=as.docs.map(d=>{const x=d.data();return Object.assign({},x,{sid:String(x.sid||d.id)})}).filter(a=>a.pct!=null&&a.grade&&a.grade.scores&&!seen.has(a.sid));
-    const pick=lrnSpread(pool,LRN_N);
-    if(!pick.length){lrnNote="No chats left to sample.";return}
-    /* the checkpoint under test: the one the sampled audits carry, else the newest */
-    const cps=new Map();pick.forEach(a=>{if(a.checkpoint)cps.set(a.checkpoint,(cps.get(a.checkpoint)||0)+1)});
-    const cp=[...cps.entries()].sort((x,y)=>y[1]-x[1])[0]?.[0]||(brLatest()||{}).id||null,now=new Date().toISOString();
-    const round={round:lrnRounds().length+1,checkpoint:cp,drawnAt:now,status:"open",
-      sample:pick.map(a=>({sid:a.sid,sa:a.sa||"",restaurant:a.restaurant||"",aiPct:a.pct,aiVerdict:a.verdict||((chatVerdict(a.pct)||{}).id)||null,aiScores:clone(a.grade.scores)})),
-      results:[],verdictMatch:null,meanAbsDiff:null,pass:null};
-    const doc={week:w,currentCheckpoint:cp,target:lrnTarget(),marked:(st.marked||[]).map(String),rounds:lrnRounds().concat([round])};
-    await db.doc(LRN_DOC).set(doc);lrnState=doc;
-  }catch(e){lrnNote=e&&e.code==="invalid_argument"?"You can't save to this QA Desk.":"Couldn't draw. Try again."}
-  finally{lrnBusy=false;renderChats()}}
 /* Save review on a sampled chat completes it for the open round; the 10th closes the round with its result */
 async function lrnRecord(rec){const r=lrnOpenRound(),s=r&&rec.week===lrnWeek()?lrnInSample(r,rec.sid):null;if(!db||!s||rec.pct==null)return null;
   const doc=clone(lrnState),R=doc.rounds[doc.rounds.length-1];
@@ -1152,10 +1139,10 @@ async function lrnRecord(rec){const r=lrnOpenRound(),s=r&&rec.week===lrnWeek()?l
 const lrnDay=at=>{const t=Date.parse(at);return isNaN(t)?"–":new Date(t).toLocaleDateString("en-US",{month:"short",day:"numeric"})};
 const lrnSign=d=>d==null||isNaN(d)?"–":(d>0?"+":d<0?"−":"±")+Math.abs(lrnR1(d)).toFixed(1);
 function lrnRoundHtml(){const r=lrnLast(),t=lrnTarget(),w=lrnWeek(),open=r&&r.status==="open",can=!!db&&!lrnBusy&&!open;
-  const draw=`<button type="button" class="btn${open?"":" primary"}" id="lrDraw"${can?"":" disabled"}>${lrnBusy?"Drawing…":"Draw 10"}</button>`;
+  const draw=`<button type="button" class="btn${open?"":" primary"}" id="lrRoundGo" data-go="calib">Open the round</button>`;
   const head=`<div class="bhd"><h2>${r?"Round "+esc(r.round):"Rounds"}</h2><span class="hint num">Week of ${esc(weekLabel(w))}${r&&r.checkpoint?" · "+esc(r.checkpoint):""}</span></div>`;
   const note=lrnNote?`<div class="cvnote">${esc(lrnNote)}</div>`:"";
-  if(!r)return head+`<p class="lrp">No round yet.</p>${note}<div class="row">${draw}</div>`;
+  if(!r)return head+`<p class="lrp">No round yet. Rounds are drawn in the Round tab.</p>${note}<div class="row">${draw}</div>`;
   const S=r.sample||[],R=r.results||[],n=S.length,k=R.length;
   const rows=S.map(s=>{const x=lrnResult(r,s.sid);
     return `<li class="lrrow${x?" done":""}${x&&!x.match?" miss":""}"><span class="lrsa">${esc(s.sa||"–")}</span>
@@ -1240,7 +1227,7 @@ function renderLearn(){const v=$("#view-learn");if(!v||tab!=="learn")return;
   const f=document.activeElement&&document.activeElement.id==="lrPick";$("#lrChat").innerHTML=lrnChatHtml();if(f){const p=$("#lrPick");if(p)p.focus({preventScroll:true})}
   lrnLoadGrades()}
 $("#view-learn").addEventListener("click",e=>{const o=e.target.closest("[data-lopen]");if(o){openChat(o.dataset.lopen,lrnWeek());return}
-  const b=e.target.closest("button");if(b&&b.id==="lrDraw")lrnDraw()});
+  const b=e.target.closest("button");if(b&&b.id==="lrDraw")return});
 $("#view-learn").addEventListener("change",e=>{if(e.target.id==="lrPick"){lrnChat=e.target.value;renderLearn()}});
 $("#view-learn").addEventListener("toggle",e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.cp){if(d.open)lrnCpOpen.add(d.dataset.cp);else lrnCpOpen.delete(d.dataset.cp)}},true);
 

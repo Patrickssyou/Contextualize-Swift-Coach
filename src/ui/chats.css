@@ -8,7 +8,7 @@
 .subtabs button{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 13px 5px 6px;font-weight:600;font-size:13.5px;color:var(--muted);white-space:nowrap}
 .subtabs button:hover{color:var(--ink);border-color:var(--muted)}
 .subtabs button.quiet{padding-left:13px;font-weight:500}
-.subtabs button[aria-selected="true"]{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.subtabs button[aria-selected="true"],.subtabs button[aria-current="page"]{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .subtabs button[aria-selected="true"] .tn{background:var(--accent);color:var(--on-fill)}
 .subtabs button.done .tn{background:var(--s3);color:var(--on-fill)}
 .subtabs button.done .tn span{display:none} .subtabs button.done .tn::after{content:"✓"}

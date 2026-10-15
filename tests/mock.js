@@ -134,7 +134,7 @@ async function openPage(browser, seed, opts, viewport, more) {
     if (u.startsWith('http://qa.test/')) return route.fulfill({ contentType: 'text/html', body: html });
     if (u.includes('xlsx.full.min.js')) return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(path.join(DIR, 'node_modules/xlsx/dist/xlsx.full.min.js')) });
     return route.abort() });
-  await page.addInitScript(MOCK, [seed, LD, opts || {}, { tasks: TASKS, tx: TX, aiReply: AI['dd2c017b-ab6c-434c-b9df-1a6408ee0ee5'], slack: (more && more.slack) || null, chat: (more && more.chat) || null }]);
+  await page.addInitScript(MOCK, [seed, LD, opts || {}, { tasks: TASKS, tx: TX.concat((more && more.tx) || []), aiReply: AI['dd2c017b-ab6c-434c-b9df-1a6408ee0ee5'], slack: (more && more.slack) || null, chat: (more && more.chat) || null }]);
   return { page, ctx, errors };
 }
 
