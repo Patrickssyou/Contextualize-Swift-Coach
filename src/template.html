@@ -1360,7 +1360,6 @@ function renderBoard(){
   const sub=[];
   if(form.gut)sub.push(`<span class="pill none">Gut: ${esc(GUT_L[form.gut])}</span>`);
   sub.push(`<span>${c.complete&&c.total!=null?"Final score":"Running score"}</span>`);
-  if(!form.id)sub.push(`<span class="pill none" id="xpHint">+${xpFor({type:form.type,factsMatch:form.factsMatch,notes:form.notes,rubric:CUR})} XP</span>`);
   $("#boardSub").innerHTML=sub.join("");
   $("#scoredCount").textContent=c.done+" of "+c.n+" scored"+(c.na?` · ${c.na} NA`:"");
   $("#progBar").style.width=(c.done/c.n*100)+"%";
@@ -1424,7 +1423,7 @@ async function saveAudit(){
     for(const qid of new Set([form.queueId].concat(rec.caseIds).filter(Boolean)))if(queue.some(x=>x.id===qid)){try{await db.collection("queue").doc(qid).update({auditId:id,score:rec.total})}catch(e){}}
     const keep={reviewer:form.reviewer,type:form.type},done=new Set([rec.queueId].concat(rec.caseIds).filter(Boolean));
     const wkQ=queue.filter(q=>q.week===rec.week),doneN=wkQ.filter(q=>q.auditId||done.has(q.id)).length,lvUp=Math.floor((before.xp+gained)/100)>before.lv;
-    const msg=`Saved ${fmt(rec.total)}% · +${Math.max(0,gained)} XP`+(wkQ.length?` · ${doneN} of ${wkQ.length}`:"")+(lvUp?` · Level up: ${levelName(Math.floor((before.xp+gained)/100))}`:"");
+    const msg=`Saved ${fmt(rec.total)}%`+(wkQ.length?` · ${doneN} of ${wkQ.length}`:"");
     const nextUp=nextQueued(rec.agent,rec.week,rec.queueId,done),nextAny=nextUp||nextQueued(null,rec.week,rec.queueId,done);
     form=Object.assign(blankForm(),keep,AGENTS.includes(rec.agent)&&rec.role==="sa"?{agent:rec.agent}:{});openNotes=new Set();active=0;lastParsed={};
     const go={label:"Next pick →",fn:()=>{if(nextUp)setTab("calls");else loadQueueItem(nextAny);window.scrollTo({top:0})}};

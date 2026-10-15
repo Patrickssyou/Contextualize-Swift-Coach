@@ -43,18 +43,15 @@ for(const f of fs.readdirSync('data/live4/queue')){const q=JSON.parse(fs.readFil
  await page.click('#singleTouchChips [data-st="yes"]');await page.click('#sourceChips [data-src="call_rec"]');
  await page.click('#crit-1a .head');
  for(const [k,r] of [['3'],['3'],['3'],['3'],['3'],['2','Did not settle who was owed'],['3','Reprinted the ticket'],['n','One-off'],['3'],['3'],['n'],['3']]){await page.keyboard.press(k);if(r){await page.waitForTimeout(30);await page.keyboard.type(r);await page.keyboard.press('Enter')}}
- ok((await page.locator('#xpHint').innerText()).trim()==='+10 XP','board previews +10 XP');
+ ok(await page.locator('#xpHint').count()===0,'no XP preview');
  ok(/%$/.test((await page.locator('#st-score').innerText()).trim()),'Calls tab shows the running %');
  await page.click('[data-tab="facts"]');await page.click('#aiShow');await page.click('[data-m="rootCause"][data-v="same"]');await page.click('[data-tab="calls"]');
- ok((await page.locator('#xpHint').innerText()).trim()==='+12 XP','marking a conclusion adds 2 XP to the preview');
  await page.click('#saveBtn');await page.waitForTimeout(400);
  const xp1=await page.evaluate(()=>gameStats().xp);
  ok(xp1-xp0===12,`save adds XP (${xp0} → ${xp1})`);
- ok(/\+12 XP · 1 of 30/.test(await page.locator('#toast').innerText()),'toast: +12 XP · 1 of 30');
+ ok(/Saved .*% · 1 of 30/.test(await page.locator('#toast').innerText())&&!/XP/.test(await page.locator('#toast').innerText()),'toast: saved % · 1 of 30, no XP');
  ok(await page.locator('#toast .tact',{hasText:'Next pick'}).count()===1,'toast offers Next pick');
- ok((await page.locator('#xpNum').innerText()).trim()===xp1+' XP','header shows XP');
- ok(await page.locator('#streak.on').count()===1&&(await page.locator('#streakN').innerText())==='1','streak lit at 1 day');
- ok(await page.locator('#quest .badge.on',{hasText:'First audit'}).count()===1,'First audit badge earned');
+ ok(await page.locator('#hud').isHidden(),'no level, XP or streak header');
  await page.click('#toast .tact');await page.waitForTimeout(200);
  ok(await page.locator('[role=tab][aria-selected="true"]').getAttribute('data-tab')==='calls','Next pick goes to Calls');
  const nextQ=await page.evaluate(()=>form.queueId);ok(nextQ&&nextQ!==CJ,'next pick loaded');
