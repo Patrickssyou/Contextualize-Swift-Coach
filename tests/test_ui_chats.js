@@ -47,6 +47,19 @@ const noteOf = page => page.evaluate(() => { const s = String(chatSel); return c
 const sel = page => page.locator('[role=tab][data-tab][aria-selected="true"]').getAttribute('data-tab');   // the nav tabs (the ticket's own tabs have no data-tab)
 const width = page => page.evaluate(() => document.documentElement.scrollWidth);
 const txt = (page, s) => page.locator(s).innerText();
+// Evidence shows What happened and the key sources; the strip and every fold sit behind "Timeline and full sources"
+// finding marks live in the draft now (no finding cards on screen): mark, read and annotate them through the page's own functions
+const markF = (page, id, m) => page.evaluate(([id, m]) => chMarkFinding(id, m), [id, m]);
+const fmark = (page, id) => page.evaluate(id => ((chatDraft(String(chatSel)).findings || {})[id] || {}).mark || '', id);
+const fnote = (page, id, t) => page.evaluate(([id, t]) => { chatDraft(String(chatSel)).findings[id].note = t }, [id, t]);
+// a round chat is scored on the calibration grid: pick every mark (and notes), submit, compare, lock (one grader here)
+const calibrate = async (page, sc, notes) => { await page.waitForSelector('#cbGrid [data-cb="submit"]');
+  for (const [k, v] of Object.entries(sc)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
+  for (const [k, t] of Object.entries(notes || {})) { await page.click(`#cbGrid .cbnotebtn[data-crit="${k}"]`); await page.fill(`[data-cbnote="${k}"]`, t) }
+  await page.click('#cbGrid [data-cb="submit"]'); await page.waitForSelector('#cbGrid [data-cb="compare"]');
+  await page.click('#cbGrid [data-cb="compare"]'); await page.waitForSelector('#cbGrid [data-cb="lock"]:not([disabled])');
+  await page.click('#cbGrid [data-cb="lock"]') };
+const full = async page => { if (await page.locator('#evFull').count() && await page.locator('#evFull').isHidden()) { await page.click('#evMore'); await page.waitForTimeout(60) } };
 const shot = async (page, name, full) => { await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; window.scrollTo(0, 0) }); await page.waitForTimeout(120);
   await page.screenshot({ path: path.join(SH, name), fullPage: !!full }) };
 
@@ -58,7 +71,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await sel(page) === 'chats' && await page.locator('#view-chats').isVisible() && await page.locator('[data-area="chats"][aria-current="page"]').count() === 1, 'lands on Chats › Queue');
   ok((await page.locator('.weekpick small').textContent()) === 'Week' && (await txt(page, '#wkLabel')).startsWith('Oct 12'), 'week picker says Week and opens on the case week');
   const subs = (await page.locator('#sub-chats [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-  ok(subs.length === 4 && ['Dashboard', 'Audit', 'Learning', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Dashboard, Audit, Learning, Brain');
+  ok(subs.length === 5 && ['Dashboard', 'Audit', 'Calibration', 'Learning', 'Brain'].every((x, i) => subs[i].includes(x)), 'Chats steps: Dashboard, Audit, Calibration, Learning, Brain');
   ok(/Not pulled yet/.test(await txt(page, '#chatStatus')) && await page.locator('#chatPull').isEnabled(), 'empty week: Pull chats ready');
   await page.click('[data-tab="learn"]'); await page.waitForTimeout(200);
   ok(await sel(page) === 'learn' && await page.evaluate(() => location.hash) === '#learn' && (await txt(page, '#lrNoCp')) === 'No checkpoint yet.' && /No round yet/.test(await txt(page, '#lrRound')) && await page.locator('#lrChart').isHidden(), 'Learning with no brainRuns: No checkpoint yet, no round, no chart');
@@ -78,17 +91,30 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click('.crow[data-open="9900901"] .clink'); await page.waitForTimeout(300);
   ok(await sel(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${PW}/9900901`, 'the chat link carries its week');
   ok((await txt(page, '#cvWord')) === 'Great' && (await txt(page, '#cvCase')).includes('MENU SETUP') && (await txt(page, '#cvCase')).includes('Correct two menu prices shown online'), 'verdict card: case type label and request');
+  ok(await page.locator('#evFull').isHidden() && await page.locator('#evSrcs .evrow').count() >= 1 && (await txt(page, '#evMore')) === 'Timeline and full sources', 'Evidence: What happened and the key sources; the rest behind Timeline and full sources');
+  await full(page);
+  await full(page);
   const dts = (await page.locator('#evStrip dt').allInnerTexts()).map(t => t.trim().toLowerCase());
+  await full(page);
   ok(dts[0] === 'case type' && (await page.locator('#evStrip dd').first().innerText()).trim() === 'Menu setup' && !dts.includes('policy') && !dts.includes('request'), 'Evidence strip: the case type first; no Policy on a non-compensation case');
+  await full(page);
   ok((await page.locator('#evStrip .pill').first().innerText()) === 'No fault' && (await txt(page, '#cs-ev .qans')).startsWith('Menu setup · No order'), 'fault none shows as No fault');
   ok(JSON.stringify(await page.locator('#evBrief li').allInnerTexts()) === JSON.stringify(['The client asked for two price fixes; the SA sent them to the menu team and confirmed once live.']), 'an older audit without a brief: the analysis summary stands in');
+  await full(page);
   ok(await page.locator('#cs-ev details.srcf').count() === 5 && await page.locator('#cs-ev details.srcf[open]').count() === 0 && (await txt(page, '#src-chat > summary')).replace(/\s+/g, ' ') === 'Chat 6 messages', 'sources are folded by default, one line each');
+  await full(page);
   await page.click('#src-chat > summary'); await page.waitForTimeout(80);
+  await full(page);
   ok(await page.locator('#src-chat[open]').count() === 1, 'a source opens on click');
+  await full(page);
   ok(await page.locator('#cs-chat .sysline').count() === 1 && /system/i.test(await txt(page, '#cm-2.sysline')) && (await txt(page, '#cm-2')).includes('Menu change request created') && await page.locator('#cs-chat .bub').count() === 5, 'bot message renders as a system line, not a bubble');
+  await full(page);
   ok(await page.locator('#cs-chat .bub.other').count() === 1 && (await txt(page, '#cs-chat .bub.other .bwho')).includes('trainer'), 'unknown role: neutral bubble labelled with the role');
+  await full(page);
   await page.click('#src-fields > summary'); await page.waitForTimeout(80);
+  await full(page);
   const rf = await txt(page, '#cxFields');
+  await full(page);
   ok(rf.includes('Large Margherita') && /new price/i.test(rf) && rf.includes('16.99') && (await txt(page, '#src-fields > summary')).replace(/\s+/g, ' ') === 'WIRA form Item, New price, Second item, Second price', 'Evidence › WIRA form: a plain title, the field names as the summary, label: value inside');
   ok(JSON.stringify(await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = chVia({ fields: '{"message_source":"cma"}' }) + chVia({ fields: { message_source: 'pos' } }) + chVia({ fields: '{}' });
     return [[...d.querySelectorAll('.viachip')].map(x => x.textContent), chFieldList({ message_source: 'cma', item: 'Pie' }), chFieldList('{"message_source":"pos"}')] })) === JSON.stringify([['via CMA', 'via POS'], [['Item', 'Pie']], []]), 'message_source leaves the form and shows as a "via" chip');
@@ -100,7 +126,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     'chat-1 audit: the ticket renders with verdict and score, no priority');
   ok(await page.locator('#cTicket .tkf').count() === 11 && tk0.includes('No order linked') && tk0.includes('None linked') && tk0.includes('MENU SETUP') && tk0.includes('The client asked for two price fixes'),
     'chat-1 ticket: 11 fields, no order, no recordings, case type, what happened');
-  ok(await page.locator('#tkComp').count() === 0 && await page.locator('.tkfind').count() === 0 && (await txt(page, '#tkFinds')).includes('No findings.') && await page.locator('.vmeta').count() === 0, 'chat-1 ticket: no comp check, No findings, and the board drops the duplicate meta');
+  ok(await page.locator('#tkComp').count() === 0 && await page.locator('.tkfind').count() === 0 && await page.locator('#tkFinds').count() === 0 && await page.locator('.vmeta').count() === 0, 'chat-1 ticket: no comp check, no Findings section, and the board drops the duplicate meta');
   await shot(page, 'chats-audit-case.png'); await shot(page, 'chats-audit-case-full.png', true);
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(100); await shot(page, 'chats-audit-case-dark.png'); await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
@@ -194,10 +220,14 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await shot(page, 'chats-audit-top.png'); await shot(page, 'chats-audit-full.png', true);
   await shot(page, 'ticket-top.png'); await shot(page, 'ticket-full.png', true);
   ok(await page.locator('#cvRoute .rm').count() === 4 && (await txt(page, '#cvEsc')) === 'Level ' + markL(realA.grade.scores.esc), `route marks with escalation Level ${markL(realA.grade.scores.esc)}`);
+  await full(page);
   ok((await txt(page, '#cvCase')).includes('COMPENSATION') && (await page.locator('#evStrip dt').allInnerTexts()).map(t => t.toLowerCase()).includes('policy'), 'a compensation case shows its policy row in the strip');
+  await full(page);
   await page.click('#src-order > summary .srct'); await page.waitForTimeout(80);
+  await full(page);
   const ord = await txt(page, '.ordcard');
   ok(/Ticket 65/.test(ord) && ord.includes('$54.72') && ord.includes('$4.38') && ord.includes('$59.10'), 'Evidence › Order: ticket 65, items $54.72, tax $4.38, total $59.10');
+  await full(page);
   await page.click('#src-order > summary .srct'); await page.waitForTimeout(80);
 
   // ===== 4b. the QA ticket: on top, fields, comp check, findings
@@ -248,11 +278,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const comp = (await txt(page, '#tkComp')).replace(/\s+/g, ' ');
   ok(comp.includes('Due') && comp.includes('$16.42') && comp.includes(`${first} gave`) && comp.includes('$17.73') && comp.includes('Taxes included') && comp.includes('Over by $1.31') && /Wrong/.test(await txt(page, '#tkComp .tkst')), `comp check: Due $16.42, ${first} gave $17.73, Taxes included, Over by $1.31, Wrong`);
   ok((await txt(page, '#tkComp del')).includes('tax $4.38') && (await txt(page, '#tkComp .rwhere')) === 'CHAT' && comp.includes(W.policy.comp.buckets.find(b => b.id === 'made_twice_one_paid').label), "comp check: the tax in the SA's base is struck; where it's written; the policy row");
-  const pr = await page.locator('.tkfind .tkfh .prio').allInnerTexts();
-  ok(pr.length === realA.grade.findings.length && pr[0] === 'P1' && pr.every((p, i) => !i || p >= pr[i - 1]), `findings sorted P1 first (${pr.join(' ')})`);
-  ok((await txt(page, '#tf-amt .tkfs')).includes('set by the comp check') && (await txt(page, '#tf-amt .tkfs')).includes('1/3') && (await txt(page, '#tf-amt .tktype')).includes('Taxes included'), 'the amount finding: 1/3, set by the comp check, typed by the check');
-  ok(await page.locator('.tkfind .tkq .qok').count() >= 3 && await page.locator('.tkfind').first().locator('.tkfix h5').innerText().then(t => t.toLowerCase() === `what ${first.toLowerCase()} should have done`), 'verified quotes show ✓; What <SA> should have done');
-  ok(await page.locator('.tkfind details.tkmodel').count() >= 1 && await page.locator('.tkfind details.tkmodel[open]').count() === 0, 'model messages are folded');
+  // findings are off the screen now; the data stays and the coaching still reads it
+  ok(await page.locator('.tkfind').count() === 0 && realA.grade.findings.length > 0 && await page.locator('#coachFixes .fixcard').count() > 0, 'no finding cards on the ticket; the coaching still has its fixes')
   // ----- the ticket's tabs: Ticket | Chat N
   const nMsg = await page.evaluate(s => chatBy(s).msgs.length, SID), nInt = await page.evaluate(s => chatBy(s).msgs.filter(m => m.internal).length, SID);
   const tabs = (await page.locator('#cTicket [role=tablist] [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
@@ -274,11 +301,12 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.keyboard.press('End'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => document.activeElement.id) === 'tkTab-chat' && await page.locator('#tkPan-chat').isVisible(), 'keyboard: End selects Chat');
   await page.keyboard.press('Enter'); await page.click('#tkTab-ticket'); await page.waitForTimeout(60);
-  const mchip = page.locator('.tkfind .srcchip[data-jump^="tm-"]').first(), mid = (await mchip.getAttribute('data-jump'));
-  await mchip.click(); await page.waitForTimeout(700);
+  const mid = 'tm-' + Math.min(3, nMsg);
+  await page.evaluate(id => chJump(id), mid); await page.waitForTimeout(700);
   ok(await page.evaluate(id => { const el = document.getElementById(id), r = el.getBoundingClientRect(), P = document.getElementById('tkPan-chat').getBoundingClientRect();
     return el.classList.contains('flash') && !!el.closest('#tkPan-chat') && r.top >= Math.max(0, P.top) - 1 && r.bottom <= Math.min(innerHeight, P.bottom) + 1 }, mid) && await page.locator('#tkTab-chat[aria-selected="true"]').count() === 1 && await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}`,
-    `an M# chip on a finding opens the Chat tab, scrolls to ${mid.replace('tm-', 'M')} and highlights it`);
+    `a jump to an M# opens the Chat tab, scrolls to ${mid.replace('tm-', 'M')} and highlights it`);
+  await full(page);
   ok(await page.locator('#src-chat').count() === 1 && await page.locator('#cs-chat > li').count() === nMsg, 'the transcript fold stays in Evidence too');
   // the tab is kept for the page view: a repaint and another chat keep Chat
   await page.evaluate(() => { paintTicket(); renderChatAudit(true) }); await page.waitForTimeout(60);
@@ -296,6 +324,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
   ok(await page.locator('#tkTab-ticket[aria-selected="true"]').count() === 1, 'back on the Ticket tab');
   const tchip = page.locator('.tkfind .srcchip[data-jump^="cx-task-"]').first();
+  await full(page);
   if (await tchip.count()) { await tchip.click(); await page.waitForTimeout(700); ok(await page.evaluate(id => document.getElementById(id).classList.contains('flash') && !!document.getElementById(id).closest('#src-tasks[open]'), await tchip.getAttribute('data-jump')), 'a Task chip opens Tasks and scrolls to the task card') }
   ok(await page.evaluate(t => { const d = document.createElement('div'); d.innerHTML = chSrcChip('Call 2') + chSrcChip('O1') + chSrcChip('Task ' + t);
     return [...d.querySelectorAll('a')].map(a => a.dataset.jump).every(id => !!document.getElementById(id)) }, realA.tasks[0].sid), 'Call, O# and Task chips point at the call card, the order card and the task card in Context');
@@ -325,26 +354,41 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await page.evaluate(() => { const f = [...document.querySelectorAll('#cTicket .tkf')].map(x => x.getBoundingClientRect().left); return f.every(l => Math.abs(l - f[0]) < 1) }), '390px: the field grid stacks in one column');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cTicket').screenshot({ path: path.join(SH, 'ticket-390.png') });
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(120);
+  await full(page);
   const ints = await page.locator('#cs-chat .bub.internal').allInnerTexts();
   ok(ints.length === 3 && ints.every(t => t.includes('internal · inferred')), '3 internal notes tagged internal · inferred');
   ok(await page.locator('.bub.cl').count() > 0 && await page.locator('.bub.me').count() > 0, 'client bubbles left, audited SA bubbles marked');
   // folded, the Calls row lists each call with its recording link; the Order row has the GreenDot link
   await page.evaluate(() => { const d = document.getElementById('src-calls'); if (d) d.open = false }); await page.waitForTimeout(60);
+  await full(page);
   const crow = await page.evaluate(() => [...document.querySelectorAll('#src-calls > summary .srcrow')].map(r => { const a = r.querySelector('a.rec'), b = a && a.getBoundingClientRect(); return { t: r.innerText.replace(/\s+/g, ' ').trim(), href: a && a.getAttribute('href'), tgt: a && a.target, vis: !!b && b.width > 0 && b.height > 0 } }));
+  await full(page);
   ok(crow.length === realA.calls.length && crow.every((r, i) => new RegExp(`^Call ${i + 1} · \\d{1,2}:\\d{2} [AP]M · \\d+:\\d{2} · .+ ▶ Recording$`).test(r.t) && r.vis && r.tgt === '_blank' && r.href.includes('/callrecordings?callIds=' + encodeURIComponent(realA.calls[i].id))) && await page.locator('#src-calls[open]').count() === 0,
     `Calls folded: ${crow.map(r => r.t).join(' | ')}`);
+  await full(page);
   const gd = page.locator('#src-order > summary a.srclink');
+  await full(page);
   ok(await gd.count() === 1 && await gd.isVisible() && (await gd.getAttribute('href')).includes('?orderId=' + encodeURIComponent(realA.orders[0].id)) && await page.locator('#src-order[open]').count() === 0, 'Order folded: the GreenDot link works without opening');
+  await full(page);
   await page.evaluate(() => document.querySelector('#src-calls > summary a.rec').addEventListener('click', e => e.preventDefault(), { once: true })); await page.click('#src-calls > summary a.rec'); await page.waitForTimeout(60);
+  await full(page);
   ok(await page.locator('#src-calls[open]').count() === 0, 'clicking ▶ Recording does not open the fold');
+  await full(page);
   ok(await page.locator('#src-fields').count() === 0 && /^via [A-Z]/.test(await txt(page, '#cTicket .tkid .viachip')), `a message_source-only chat: no WIRA form fold, the source as a chip (${await txt(page, '#cTicket .tkid .viachip')})`);
+  await full(page);
   ok(await page.locator('#src-calls .txcall').count() === 2 && await page.locator('#src-calls .txcall a', { hasText: 'Rec' }).count() === 2 && await page.locator('#src-calls .txsum li').count() > 4 && (await txt(page, '#src-calls > summary')).includes('2 calls'), 'Calls: two call cards with recordings and Claude bullets');
+  await full(page);
   if (!(await page.locator('#src-calls[open]').count())) await page.click('#src-calls > summary');
+  await full(page);
   await page.locator('#src-calls details.txd summary').first().click();
+  await full(page);
   await page.waitForFunction(() => { const t = document.querySelector('#src-calls details.txd .txtext'); return t && t.textContent.length > 100 }, null, { timeout: 5000 });
   ok(true, 'transcript loads from chatTx');
+  await full(page);
   ok(await page.locator('#src-tasks .task').count() === 1 && await page.locator('#src-tasks .task .ttag', { hasText: 'From this chat' }).count() === 1, 'linked task from this chat');
+  await full(page);
   const fsum = (await txt(page, '#src-facts > summary')).replace(/\s+/g, ' '), ncon = realA.facts.claims.filter(c => c.check === 'contradicted').length;
+  await full(page);
   const osum = (await txt(page, '#src-order > summary')).replace(/\s+/g, ' ').trim();
   ok(fsum === `Timeline and SA claims ${realA.facts.timeline.length} facts · ${realA.facts.claims.length} claims · ${ncon} wrong` && /^Order Ticket 65 · \$59\.10 · [a-z ]+ · \d{1,2}:\d{2} [AP]M Open in GreenDot ↗$/.test(osum), `source lines: ${fsum}; ${osum}`);
   const brief0 = await page.locator('#evBrief li').allInnerTexts();
@@ -358,8 +402,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(items.length === realA.grade.findings.length && items[0].startsWith('1. P1 · Approval') && items[1].startsWith('2. P1 · Resolution accuracy') && note0.includes(`Do: ${realA.grade.findings[0].should}`) && note0.includes('Why it matters: '), "coaching uses the ticket's findings, P1 first: what happened, why, do, model");
   // cite links jump without touching the route
   await page.evaluate(() => { const d = document.getElementById('src-facts'); if (d) d.open = false });
+  await full(page);
   const cjump = await page.locator('#evStrip .cite').first().getAttribute('data-jump');
+  await full(page);
   await page.locator('#evStrip .cite').first().click(); await page.waitForTimeout(400);
+  await full(page);
   ok(await page.evaluate(() => location.hash) === `#chat/${WEEK}/${SID}` && await page.evaluate(id => document.getElementById(id).classList.contains('flash') && !!document.getElementById(id).closest('#src-facts[open]'), cjump), 'a fact cite opens the timeline, scrolls to the fact and keeps the route');
   // the four sections and the coaching cards
   ok((await txt(page, '#cTicket .sechd')) === 'QA TICKET' && JSON.stringify(await page.locator('#view-chat .qsec > .qhd .qttl').allInnerTexts()) === '["Evidence","Scorecard","Coaching"]' && JSON.stringify(await page.locator('#view-chat .qnum').allInnerTexts()) === '["1","2","3","4"]',
@@ -371,8 +418,10 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click('#coachEdit'); await page.waitForTimeout(80);
   ok((await page.locator('#coachText').inputValue()) === note0 && (await txt(page, '#coachEdit')) === 'Close note', 'Edit note opens the note, prefilled from the same text');
   await page.click('#coachEdit'); await page.waitForTimeout(80);
+  await full(page);
   ok(await page.locator('#cs-ev details.srcf').count() >= 4 && await page.locator('#calOpen').count() === 0 && !/calibration/i.test(await txt(page, '#view-chat')), 'no calibration button on the audit');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.locator('#cs-coach').screenshot({ path: path.join(SH, 'coaching-cards.png') });
+  await full(page);
   await page.evaluate(() => document.querySelectorAll('#cs-ev details.srcf[open]').forEach(d => d.open = false)); await shot(page, 'audit-4sections.png', true);
 
   // ===== 4c. the evidence panel: a contest (or a row's Sources link) opens what Claude used for that criterion, beside the page (a bottom sheet on phones)
@@ -417,11 +466,6 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.click(`[data-contest="${PC.m.id}"][data-where="row"]`); await page.waitForTimeout(150);
   await page.focus('#cbWhy'); await page.keyboard.press('Escape'); await page.waitForTimeout(100);
   ok(!(await pan()) && await page.locator('#cbox').count() === 0, 'Esc in the contest box closes both');
-  // contest from a finding card
-  const fcard = await page.evaluate(() => { const b = document.querySelector('.tkfind [data-contest][data-where="find"]'); return b && b.dataset.contest });
-  await page.click(`.tkfind [data-contest="${fcard}"]`); await page.waitForTimeout(150);
-  ok((await txt(page, '#chpTitle')) === await page.evaluate(k => chRub(k).label, fcard) && (await txt(page, '#chpVia')) === 'CONTEST', 'a finding card\'s Contest opens the panel too');
-  await page.click('#cbCancel'); await page.waitForTimeout(100);
   // the Sources link: no contest
   await page.click(`[data-psrc="${PC.f.id}"]`); await page.waitForTimeout(150);
   ok(!!(await pan()) && await page.locator('#cbox').count() === 0 && (await txt(page, '#chpVia')) === 'SOURCES' && (await page.locator(`[data-psrc="${PC.f.id}"]`).getAttribute('aria-expanded')) === 'true' && await page.evaluate(() => document.activeElement.id) === 'chpTitle', 'Sources opens the panel without contesting');
@@ -454,8 +498,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   // ===== 5. contest from the scorecard: a different mark opens the contest box; the reason is required; saving re-scores live and marks the row
   const marks = Object.assign({}, realA.grade.scores, { amt: 3 });
   const want = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks);
-  ok(await page.locator('.ccrit [data-contest][data-where="row"]').count() === 9 && await page.locator('.tkfind [data-contest]').count() === realA.grade.findings.filter(f => B.CHAT_RUBRIC.some(r => r.id === f.id)).length && await page.locator('#tf-approval [data-contest]').count() === 0,
-    'every scorecard row and every finding with a criterion has a Contest button');
+  ok(await page.locator('.ccrit [data-contest][data-where="row"]').count() === 9, 'every scorecard row has a Contest button');
   await page.click('[data-cm="amt"][data-v="3"]'); await page.waitForTimeout(100);
   const cbx = page.locator('#cc-amt #cbox');
   ok(await cbx.isVisible() && (await txt(page, '#cbox .cbclaude')) === '1/3' && (await txt(page, '#cbox .cbwhy')).includes(realA.grade.reasons.amt.slice(0, 40)) && await page.locator('#cbox [data-cv="3"][aria-pressed="true"]').count() === 1 && await page.locator('#cbox [data-cv="na"]').count() === (B.CHAT_RUBRIC.find(r => r.id === 'amt').na ? 1 : 0) && await page.locator('#cbox [data-cv]').count() === 4 + (B.CHAT_RUBRIC.find(r => r.id === 'amt').na ? 1 : 0),
@@ -483,11 +526,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const sub = await page.evaluate(p => window.__data[p], `chatLessons/${SID}_amt`);
   ok(sub.kind === 'contest' && sub.from === '1/3' && sub.to === '3/3' && sub.reason === WHY && sub.week === WEEK && 'round' in sub && 'checkpoint' in sub && sub.round === null && !(await page.evaluate(p => !!window.__data[p], P('reviews/' + SID))), 'Submit writes the lesson at once, before Save review, with round and checkpoint fields');
   await page.waitForTimeout(100);
-  ok((await txt(page, '#cc-amt .clearned')) === 'Submitted · learned' && (await txt(page, '#tf-amt .tkyour .clearned')) === 'Submitted · learned', 'the row and the finding card say Submitted · learned');
+  ok((await txt(page, '#cc-amt .clearned')) === 'Submitted · learned', 'the row says Submitted · learned');
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cc-amt').scrollIntoView({ block: 'center' }) }); await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(SH, 'contest-submit.png') });
   ok((await noteOf(page)).includes(`— ${want.v} (${want.p}%)`) && !/\d\. P1 · Resolution accuracy/.test(await noteOf(page)), 'coaching note follows the marks; contested to full marks, the finding leaves it');
-  ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v && (await txt(page, '#tf-amt .tkfs s')) === '1/3' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tf-amt .tkcon')) === 'CONTESTED' && (await txt(page, '#tf-amt .tkyour')).includes(WHY), "the ticket follows: score, verdict, the finding's mark struck and contested, the reason");
+  ok((await txt(page, '#tkPct')) === want.p + '%' && (await txt(page, '#tkWord')) === want.v, 'the ticket follows: score and verdict');
   // Cancel leaves everything as it was
   const crit2 = B.CHAT_RUBRIC.find(r => r.id !== 'amt' && Number.isInteger(realA.grade.scores[r.id]) && realA.grade.scores[r.id] < r.max);
   await page.click(`[data-cm="${crit2.id}"][data-v="${crit2.max}"]`); await page.waitForTimeout(80);
@@ -498,40 +541,40 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   // ===== 5b. Not a mistake: full marks on that criterion, the % and verdict recomputed live, a note box; Agree just marks
   const NF = realA.grade.findings.find(f => f.id !== 'amt' && f.id !== 'approval' && typeof f.score === 'number'), NR = B.CHAT_RUBRIC.find(r => r.id === NF.id);
   const marks2 = Object.assign({}, marks, { [NF.id]: NR.max }), want2 = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks2);
-  await page.click(`#tf-${NF.id} [data-fmark="not"]`); await page.waitForTimeout(100);
-  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && await page.locator(`#tf-${NF.id} [data-fmark="not"][aria-pressed="true"]`).count() === 1 && (await txt(page, `#tf-${NF.id} .tknot`)) === 'NOT A MISTAKE', `Not a mistake greys out ${NF.label}`);
-  ok(await page.locator(`[data-cm="${NF.id}"][data-v="${NR.max}"][aria-pressed="true"]`).count() === 1 && (await txt(page, `#tf-${NF.id} .tkscore`)) === `${NR.max}/${NR.max}` && await page.locator(`#was-${NF.id}`).isVisible(), `${NF.label} restored to full marks (${NR.max}/${NR.max}) on the scorecard`);
+  await markF(page, NF.id, 'not'); await page.waitForTimeout(100);
+  ok(await fmark(page, NF.id) === 'not', `Not a mistake (kept in the draft) on ${NF.label}`);
+  ok(await page.locator(`[data-cm="${NF.id}"][data-v="${NR.max}"][aria-pressed="true"]`).count() === 1 && await page.locator(`#was-${NF.id}`).isVisible(), `${NF.label} restored to full marks (${NR.max}/${NR.max}) on the scorecard`);
   ok((await txt(page, '#cvPct')) === want2.p + '%' && (await txt(page, '#tkPct')) === want2.p + '%' && (await txt(page, '#cvWord')) === want2.v && (await txt(page, '#csScoreAns')) === `${want2.v} · ${want2.p}%`, `% and verdict recomputed live: ${want2.v} ${want2.p}%`);
-  ok(!(await noteOf(page)).includes(`P${NF.priority.slice(1)} · ${NF.label}`) && await page.locator(`#tkn-${NF.id}`).isVisible() && (await txt(page, `label[for="tkn-${NF.id}"]`)).toLowerCase() === "why it wasn't a mistake", 'the finding leaves the coaching note; a note box opens');
+  ok(!(await noteOf(page)).includes(`P${NF.priority.slice(1)} · ${NF.label}`), 'the finding leaves the coaching note');
   const NOTE = 'The lead had already cleared this reply wording.';
-  await page.fill(`#tkn-${NF.id}`, NOTE);
+  await fnote(page, NF.id, NOTE);
   const fa = realA.grade.findings.find(f => f.id !== 'amt' && f.id !== NF.id);
-  await page.click(`#tf-${fa.id} [data-fmark="agree"]`); await page.waitForTimeout(100);
-  ok(await page.locator(`#tf-${fa.id} [data-fmark="agree"][aria-pressed="true"]`).count() === 1 && await page.locator(`#tf-${fa.id}.not`).count() === 0 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE && (await txt(page, '#tkPct')) === want2.p + '%', 'Agree just marks it; the note survives the repaint');
+  await markF(page, fa.id, 'agree'); await page.waitForTimeout(100);
+  ok(await fmark(page, fa.id) === 'agree' && await page.evaluate(id => chatDraft(String(chatSel)).findings[id].note, NF.id) === NOTE && (await txt(page, '#tkPct')) === want2.p + '%', 'Agree just marks it; the note survives');
   // marking the P1 finding drops the ticket to its next priority; un-marking puts the mark back
-  await page.click('#tf-amt [data-fmark="not"]'); await page.waitForTimeout(100);
+  await markF(page, 'amt', 'not'); await page.waitForTimeout(100);
   const nextP = realA.grade.findings.filter(f => f.id !== 'amt' && f.id !== NF.id).map(f => f.priority).sort()[0];
   ok((await txt(page, '#tkPrio')) === nextP && await page.locator(`#cTicket.${nextP.toLowerCase()}`).count() === 1, `all P1s marked not a mistake: the ticket drops to ${nextP}`);
-  await page.click('#tf-amt [data-fmark="not"]'); await page.waitForTimeout(100);
-  ok((await txt(page, '#tkPrio')) === 'P1' && (await txt(page, '#tf-amt .tkscore')) === '3/3' && (await txt(page, '#tkPct')) === want2.p + '%' && await page.locator('#tkn-amt').count() === 0 && await page.locator('#cc-amt.contested').count() === 1, 'un-marking puts the contest back (3/3) with its reason');
-  // ----- 5c. contest from a finding card: pick a mark, give a reason, save
+  await markF(page, 'amt', 'not'); await page.waitForTimeout(100);
+  ok((await txt(page, '#tkPrio')) === 'P1' && (await txt(page, '#tkPct')) === want2.p + '%' && await page.locator('#cc-amt.contested').count() === 1, 'un-marking puts the contest back (3/3) with its reason');
+  // ----- 5c. contest from a scorecard row's Contest button: pick a mark, give a reason, save
   const CF = realA.grade.findings.find(f => { const r = B.CHAT_RUBRIC.find(x => x.id === f.id); return r && !['amt', NF.id, fa.id].includes(f.id) && Number.isInteger(f.score) && f.score <= r.max - 2 }), CR = B.CHAT_RUBRIC.find(r => r.id === CF.id), CTO = CF.score + 1;
-  await page.click(`#tf-${CF.id} [data-contest]`); await page.waitForTimeout(100);
-  ok(await page.locator(`#tf-${CF.id} #cbox`).isVisible() && await page.locator('#cbox [data-cv][aria-pressed="true"]').count() === 0 && await page.locator('#cbSave').isDisabled() && (await page.locator(`#tf-${CF.id} [data-contest]`).getAttribute('aria-expanded')) === 'true', `Contest on the ${CF.label} finding opens the box in the card, no mark picked`);
+  await page.click(`[data-contest="${CF.id}"][data-where="row"]`); await page.waitForTimeout(100);
+  ok(await page.locator(`#cc-${CF.id} #cbox`).isVisible() && await page.locator('#cbox [data-cv][aria-pressed="true"]').count() === 0 && await page.locator('#cbSave').isDisabled() && (await page.locator(`[data-contest="${CF.id}"][data-where="row"]`).getAttribute('aria-expanded')) === 'true', `Contest on ${CF.label} opens the box in the row, no mark picked`);
   await page.click(`#cbox [data-cv="${CTO}"]`);
   ok(await page.locator('#cbSave').isDisabled() && await page.locator(`#cbox [data-cv="${CTO}"][aria-pressed="true"]`).count() === 1, 'a mark alone does not arm Save');
   const WHY2 = 'The client asked for the steps and got them in M9.';
   await page.fill('#cbWhy', WHY2); await page.click('#cbSave'); await page.waitForTimeout(100);
   const marks3 = Object.assign({}, marks2, { [CF.id]: CTO }), want3 = await page.evaluate(s => { const p = chatScore(s); return { p: fmt(p), v: chatVerdict(p).label } }, marks3);
-  ok((await txt(page, `#tf-${CF.id} .tkscore`)) === `${CTO}/${CR.max}` && (await txt(page, `#tf-${CF.id} .tkfs s`)) === `${CF.score}/${CR.max}` && (await txt(page, `#tf-${CF.id} .tkyour`)).includes(WHY2) && await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, '#tkPct')) === want3.p + '%' && (await txt(page, '#cvPct')) === want3.p + '%',
-    `saved from the card: ${CF.label} ${CF.score}/${CR.max} → ${CTO}/${CR.max}, the row contested, ${want3.p}%`);
+  ok((await txt(page, `#cc-${CF.id} .cfrom b`)) === `${CTO}/${CR.max}` && (await txt(page, `#cc-${CF.id} .cfrom s`)) === `${CF.score}/${CR.max}` && (await txt(page, `#cc-${CF.id} .cyour`)).includes(WHY2) && await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, '#tkPct')) === want3.p + '%' && (await txt(page, '#cvPct')) === want3.p + '%',
+    `saved from the row: ${CF.label} ${CF.score}/${CR.max} → ${CTO}/${CR.max}, the row contested, ${want3.p}%`);
   ok(/\d\. P\d · /.test(await noteOf(page)) && (await noteOf(page)).includes(CF.label), 'a contest below full marks keeps the finding in the coaching note');
   const plain2 = await page.evaluate(s => chTicketText(chatBy(s), chatAud[s], chatDraft(s)), SID);
   ok(plain2.includes(`Resolution accuracy · Taxes included · 3/3 · Contested (coach 1/3)`) && plain2.includes(`   Why contested: ${WHY}`), 'the copied ticket carries the contest and its reason');
   await page.evaluate(id => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById(id).scrollIntoView({ block: 'center' }) }, 'cc-amt'); await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(SH, 'contest-saved.png') });
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
-  await page.locator(`#tf-${NF.id}`).scrollIntoViewIfNeeded(); await page.evaluate(id => document.getElementById(id).scrollIntoView({ block: 'center' }), 'tf-' + NF.id); await page.waitForTimeout(150);
+  await page.evaluate(id => document.getElementById(id).scrollIntoView({ block: 'center' }), 'cc-' + NF.id); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(SH, 'ticket-notmistake.png') });
 
   // ===== 6. save review: chatReviews + finding marks + a correction (chatLessons) + XP
@@ -558,7 +601,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const xp1 = await page.evaluate(() => gameStats().xp);
   ok(xp1 - xp0 === 10, `review adds 10 XP (${xp0} → ${xp1})`);
   ok(/Saved .* · \+10 XP · 1 of 9 · 3 lessons/.test(await txt(page, '#toast')) && await page.locator('#toast .tact', { hasText: 'Next chat' }).count() === 1, 'toast: +10 XP · 1 of 9 · 3 lessons, offers Next chat');
-  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1 && (await page.locator(`#tkn-${NF.id}`).inputValue()) === NOTE, 'after saving, the ticket shows the saved marks');
+  ok(await fmark(page, NF.id) === 'not' && await page.evaluate(id => chatDraft(String(chatSel)).findings[id].note, NF.id) === NOTE, 'after saving, the draft keeps the saved marks');
   ok(await page.locator('#cs-score.done').count() === 1 && await page.locator('.vhead .pill', { hasText: 'Reviewed' }).count() === 1, 'reviewed state shown');
   function fmt(p) { return (Math.round(p * 10) / 10).toFixed(1) }
   // ===== 6b. Dashboard: the week's numbers, then one card per SA with the average score, lowest first
@@ -598,25 +641,35 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
 
   // ===== 8. change order: ranked matches, then the whole day (searchable), then No order; every pick re-grades fresh
   if (!(await page.locator('#src-order[open]').count())) await page.click('#src-order > summary .srct');
+  await full(page);
   await page.click('#ordChange'); await page.waitForTimeout(100);
   const cids = new Set(realA.candidates.map(x => x.id)), rest = realA.dayOrders.filter(o => !cids.has(o.id)), c65 = realA.candidates.find(x => x.ticket === '65');
+  await full(page);
   ok(realA.dayOrders.length === 101 && await page.locator('.opick .ocand').count() === realA.candidates.length && (await page.locator('.opick .ocand', { hasText: 'Ticket 65' }).innerText()).includes(c65.why[0]), `Change order: ${realA.candidates.length} ranked matches first, with their reasons`);
+  await full(page);
   ok(await page.locator('#ordList .orow').count() === rest.length && (await txt(page, '#ordN')) === String(rest.length) && await page.locator('#ordPick [data-oid=""]', { hasText: 'No order' }).count() === 1, `then the other ${rest.length} orders of the day, then No order`);
   await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.mouse.move(0, 0);
+  await full(page);
   await page.locator('#src-order').screenshot({ path: path.join(SH, 'chats-change-order.png') });
+  await full(page);
   const vis = () => page.evaluate(() => [...document.querySelectorAll('#ordList .orow')].filter(r => !r.hidden).map(r => r.dataset.q));
   const tgt = rest.find(o => o.ticket && rest.filter(x => x.total === o.total).length === 1 && rest.filter(x => x.ticket === o.ticket).length === 1);
+  await full(page);
   await page.fill('#ordQ', '$' + tgt.total.toFixed(2)); let v = await vis();
   ok(v.length >= 1 && v.includes([tgt.ticket, tgt.total.toFixed(2), tgt.items.toFixed(2)].join(' ')) && v.every(q => q.split(' ').some(k => k.includes(tgt.total.toFixed(2)))) && (await txt(page, '#ordN')) === `${v.length} of ${rest.length}`, `search by amount ($${tgt.total.toFixed(2)}: ${v.length} shown)`);
+  await full(page);
   await page.fill('#ordQ', '#' + tgt.ticket); v = await vis();
   ok(v.length >= 1 && v.every(q => q.split(' ').some(k => k.includes(tgt.ticket))) && v.some(q => q.split(' ')[0] === tgt.ticket), `search by ticket (#${tgt.ticket}: ${v.length} shown)`);
+  await full(page);
   await page.fill('#ordQ', 'zzz');
   ok((await vis()).length === 0 && await page.locator('#ordNone').isVisible(), 'no match says so');
+  await full(page);
   await page.fill('#ordQ', ''); ok((await vis()).length === rest.length, 'clearing the search shows every order');
   await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
   ok(await width(page) <= 390, `390px order picker: no horizontal overflow (${await width(page)})`);
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(100);
   let pq = await nPrompts(page);
+  await full(page);
   await page.click(`#ordList .orow[data-oid="${tgt.id}"]`);
   await page.waitForFunction(([p, id]) => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && a.orders.length === 1 && a.orders[0].id === id && !document.querySelector('#chatSteps') }, [P('audits/' + SID), tgt.id], { timeout: 20000 }); await page.waitForTimeout(150);
   let cs = await caches(page, pq);
@@ -625,6 +678,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const rgc = rg.length ? rg[0].slice(rg[0].indexOf("QA LEAD'S CORRECTIONS")) : '';
   ok(rg.length === 1 && rgc.includes(NOTE) && rgc.includes(NF.label) && rgc.indexOf(NOTE) < rgc.indexOf(LS_NEW.note), "after a re-grade the new correction is in the grade prompt, newest first");
   ok(rgc.includes(`Resolution accuracy · ${amtF.type} (compensation case): the coach gave 1/3, the QA lead says 3/3. Why: ${WHY}`) && rgc.includes(`the QA lead says ${CTO}/${CR.max}. Why: ${WHY2}`), "the re-grade's prompt has the contests: the coach gave X, the QA lead says Y. Why: …");
+  await full(page);
   ok((await txt(page, '.ordcard')).includes('Ticket ' + tgt.ticket) && await page.locator('#src-order .ttag', { hasText: 'Your pick' }).count() === 1, 'the picked order is linked as your pick');
   // → No order: re-grade without the order, money card gone
   await page.click('#ordChange'); await page.waitForTimeout(100);
@@ -636,15 +690,17 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(steps.length === 8 && steps[0].includes('Linked tasks') && await page.locator('#cvStop').isVisible() && await page.locator('#cvGrade').count() === 0, 'grading shows the 8-step checklist and Stop');
   await page.evaluate(() => { window.__opts.sampleMs = 30 });
   await page.waitForFunction(p => { const a = window.__data[p]; return a && a.orderPick === 'reviewer' && !a.orders.length && !document.querySelector('#chatSteps') }, P('audits/' + SID), { timeout: 20000 }); await page.waitForTimeout(150);
+  await full(page);
   ok(await page.locator('.ordcard').count() === 0 && (await txt(page, '#src-order')).includes('No order linked') && await page.locator('#src-order .ttag', { hasText: 'Your pick' }).count() === 1, 'No order: re-graded, the money card is gone');
   cs = await caches(page, pq); ok(cs.length === 4 && cs.every(c => c === false), 'No order re-grades with cache:false');
+  await full(page);
   ok(await page.locator('#src-calls .txcall').count() === 0, 'no order, no recordings');
   ok((await txt(page, '#cTicket')).includes('No order linked') && (await txt(page, '#cTicket')).includes('None linked') && /Can't check/.test(await txt(page, '#tkComp .tkst')), "the ticket after No order: no order, no recordings, the comp check can't check");
   // un-mark Not a mistake and save: the correction is deleted, the mark goes back
-  ok(await page.locator(`#tf-${NF.id}.not`).count() === 1, 'the saved mark survives a re-grade');
-  await page.click(`#tf-${NF.id} [data-fmark="not"]`); await page.waitForTimeout(100);
-  ok(await page.locator(`#tf-${NF.id}.not`).count() === 0 && (await txt(page, `#tf-${NF.id} .tkscore`)) === `${markL(NF.score)}/${NR.max}`, `un-marking puts ${NF.label} back to ${markL(NF.score)}`);
-  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, `#tf-${CF.id} .tkscore`)) === `${CTO}/${CR.max}`, 'the saved contest survives a re-grade');
+  ok(await fmark(page, NF.id) === 'not', 'the saved mark survives a re-grade');
+  await markF(page, NF.id, 'not'); await page.waitForTimeout(100);
+  ok(await fmark(page, NF.id) === '' && await page.locator(`[data-cm="${NF.id}"][data-v="${NF.score}"][aria-pressed="true"]`).count() === 1, `un-marking puts ${NF.label} back to ${markL(NF.score)}`);
+  ok(await page.locator(`#cc-${CF.id}.contested`).count() === 1 && (await txt(page, `#cc-${CF.id} .cfrom b`)) === `${CTO}/${CR.max}`, 'the saved contest survives a re-grade');
   await page.click(`[data-contest="${CF.id}"][data-where="row"]`); await page.waitForTimeout(80);
   ok((await page.locator('#cbWhy').inputValue()) === WHY2 && await page.locator('#cbWithdraw').isVisible(), 'reopening a contest shows its reason and Withdraw');
   const nLs = await count(page, 'chatLessons');
@@ -670,30 +726,32 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   const harbor = await page.evaluate(() => (Object.values(window.__data).find(d => d.restaurant === 'Harbor Crust' && d.grade) || {}).sid);
   await page.evaluate(s => openChat(s), harbor); await page.waitForTimeout(200);
   const hs = await page.evaluate(p => window.__data[p].slack, P('audits/' + harbor));
+  await full(page);
   ok(hs.length === 1 && hs[0].channel === 'pizza-support-ops' && hs[0].replies.length === 1 && await page.locator('#src-slack .task', { hasText: 'printer offline' }).count() === 1 && JSON.stringify(await page.locator('#evBrief li').allInnerTexts()) === JSON.stringify(W.chat.synth.facts.brief), 'Slack threads about the restaurant are linked; the brief shows as the case at a glance');
   ok(await page.evaluate(() => window.__slack.some(x => x.tool === 'slack_search_public' && x.input.keywords[0] === '"Harbor Crust"' && Number(x.input.before) > Number(x.input.after))), 'Slack search: restaurant name, day before to day after');
   await page.evaluate(p => window.claude.use('db').then(db => db.doc(p).get().then(d => { const a = d.data(); a.analysis.caseNotes = { kind: 'repeat', count: 2 }; return db.doc(p).set(a) })), P('audits/' + SID));
   await page.evaluate(s => openChat(s), SID); await page.waitForTimeout(250);
+  await full(page);
   const an = await txt(page, '#evStrip');
   ok(/case notes/i.test(an) && an.includes('repeat'), 'unknown analysis fields are shown, not dropped');
   // the approval flag (offered on a shared fault without approval): a warning in the comp check and a P1 finding with no criterion. Not a mistake only marks it
   const pa = await txt(page, '#tkPct');
-  ok((await txt(page, '#tkComp .rflag')).includes('Offered on a shared fault without approval') && await page.locator('#tkComp .rerr:not(.rflag)', { hasText: 'Offered on a shared fault' }).count() === 0 && await page.locator('#tf-approval').count() === 1 && await page.locator('#tf-approval .tkscore').count() === 0 && (await txt(page, '#tf-approval .prio')) === 'P1', 'approval flag: a warning in the comp check, a P1 finding with no score');
-  await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
-  ok(await page.locator('#tf-approval.not').count() === 1 && (await txt(page, '#tkPct')) === pa && await page.locator('#tkn-approval').isVisible(), 'Not a mistake on approval marks it and leaves the score alone');
-  await page.click('#tf-approval [data-fmark="not"]'); await page.waitForTimeout(100);
+  ok((await txt(page, '#tkComp .rflag')).includes('Offered on a shared fault without approval') && await page.locator('#tkComp .rerr:not(.rflag)', { hasText: 'Offered on a shared fault' }).count() === 0 && await page.evaluate(s => (chFindings(chatBy(s), chatAud[s]).find(f => f.id === 'approval') || {}).priority, SID) === 'P1', 'approval flag: a warning in the comp check, a P1 finding with no criterion');
+  await markF(page, 'approval', 'not'); await page.waitForTimeout(100);
+  ok(await fmark(page, 'approval') === 'not' && (await txt(page, '#tkPct')) === pa, 'Not a mistake on approval marks it and leaves the score alone');
+  await markF(page, 'approval', 'not'); await page.waitForTimeout(100);
   // an older chat-1 audit with misses: no check, findings or priority stored. The page rebuilds the findings from the grade's reasons and cited facts
   await page.evaluate(p => window.claude.use('db').then(db => db.doc(p).get().then(d => { const a = d.data(); a.v = 'chat-1'; delete a.check; delete a.priority; delete a.grade.findings; delete a.grade.amtBy; return db.doc(p).set(a) })), P('audits/' + SID));
   await page.waitForTimeout(250);
   const a1 = await page.evaluate(p => window.__data[p], P('audits/' + SID)), below = B.CHAT_RUBRIC.filter(r => a1.grade.scores[r.id] !== 'na' && Number(a1.grade.scores[r.id]) < r.max).length;
-  ok(await page.locator('#cTicket').isVisible() && await page.locator('#tkComp').count() === 0 && below > 0 && await page.locator('.tkfind').count() === below && (await page.locator('.tkfind .tkfh .prio').allInnerTexts()).every(p => /^P[123]$/.test(p)), `chat-1 audit with misses: ${below} findings rebuilt from the reasons, no comp check`);
-  ok(await page.locator('.tkfind .tkq.fact').count() > 0 && await page.locator('.tkfind .tkq.fact .cite').count() === await page.locator('.tkfind .tkq.fact').count(), 'rebuilt findings show their cited facts as evidence, each with its fact id');
+  ok(await page.locator('#cTicket').isVisible() && await page.locator('#tkComp').count() === 0 && below > 0 && await page.evaluate(s => { const F = chFindings(chatBy(s), chatAud[s]); return F.length + ' ' + F.every(f => /^P[123]$/.test(f.priority)) + ' ' + F.some(f => (f.evidence || []).some(e => e.fact)) }, SID) === `${below} true true`, `chat-1 audit with misses: ${below} findings rebuilt from the reasons and cited facts, no comp check`);
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(150);
   await shot(page, 'chats-audit-dark.png');
   await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
   ok(await width(page) <= 390, `390px audit: no horizontal overflow (${await width(page)})`);
   await shot(page, 'chats-audit-390.png');
+  await full(page);
   ok(await page.evaluate(() => [...document.querySelectorAll('#view-chat .fixcard, #view-chat .srcf, #evStrip')].every(e => e.getBoundingClientRect().right <= 390)), '390px: evidence strip, sources and coaching cards fit');
   await shot(page, 'audit-390.png', true);
   await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
@@ -797,7 +855,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(r1.sample.every(x => { const a = audOf(x.sid); return x.aiPct === a.pct && x.aiVerdict === a.verdict && JSON.stringify(x.aiScores) === JSON.stringify(a.scores) && x.sa === a.sa && x.restaurant === a.restaurant }) && r1.checkpoint === 'cp0' && st.currentCheckpoint === 'cp0' && st.week === LW && JSON.stringify(st.marked) === JSON.stringify([LWo.marked.sid]),
     "the state keeps Claude's score, verdict and marks at draw time, the checkpoint and the week");
   ok((await txt(page, '#lrRound .lrprog')).replace(/\s+/g, ' ').startsWith('0 of 10 reviewed') && await page.locator('#lrDraw').isDisabled() && await page.locator('#st-learn').innerText() === '0/10', 'progress 0 of 10; Draw is off while the round is open; the tab shows 0/10');
-  // review the 10: three with a contest on Gathered the evidence (to 0), the rest as Claude graded them
+  // calibrate the 10 (one grader): three with Gathered the evidence at 0 and a note, the rest as Claude graded them; each Lock records the round
   const WHYL = 'The SA set the hours without checking the current schedule first.';
   for (let i = 0; i < 10; i++) { const x = r1.sample[i];
     await page.click('[data-tab="learn"]'); await page.waitForTimeout(120);
@@ -807,15 +865,15 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
       await page.click('[data-tab="chats"]'); await page.waitForTimeout(200);
       ok(await page.locator('.crow .rndchip').count() === 10 && (await txt(page, `.crow[data-open="${x.sid}"] .rndchip`)) === 'Round 1' && await page.locator('.crow .rndchip.done').count() === 0, 'queue: the 10 sampled chats wear a Round 1 chip');
       await page.click(`.crow[data-open="${x.sid}"] .clink`); await page.waitForTimeout(200) }
-    if (i < 3) { await page.click('[data-cm="ev"][data-v="0"]'); await page.fill('#cbWhy', WHYL); await page.click('#cbSave');
-      await page.waitForFunction(p => !!window.__data[p], `chatLessons/${x.sid}_ev`, { timeout: 3000 });
+    if (i === 0) ok(await page.locator('#cbGrid').count() === 1 && await page.locator('.ccrit').count() === 0 && await page.locator('#chatSave').count() === 0, 'a sampled chat is scored on the calibration grid, not the solo scorecard');
+    await calibrate(page, Object.assign({}, x.aiScores, i < 3 ? { ev: 0 } : {}), i < 3 ? { ev: WHYL } : {});
+    await page.waitForFunction(([p, k]) => !!window.__data[p] && (window.__data['learning/state'].rounds[0].results || []).length === k, [`chatWeeks/${LW}/reviews/${x.sid}`, i + 1], { timeout: 5000 });
+    if (i < 3) { await page.waitForFunction(p => !!window.__data[p], `chatLessons/${x.sid}_ev`, { timeout: 3000 });
       if (i === 0) { const L = await page.evaluate(p => window.__data[p], `chatLessons/${x.sid}_ev`);
-        ok(L.kind === 'contest' && L.round === 1 && L.checkpoint === 'cp0' && L.from === `${x.aiScores.ev}/3` && L.to === '0/3' && L.reason === WHYL && L.sa === x.sa && L.week === LW, 'Submit on a sampled chat: the lesson carries round 1 and checkpoint cp0, written before Save review');
+        ok(L.kind === 'contest' && L.by === 'panel' && L.round === 1 && L.checkpoint === 'cp0' && L.from === `${x.aiScores.ev}/3` && L.to === '0/3' && L.reason === WHYL && L.sa === x.sa && L.week === LW, 'Lock on a sampled chat: the lesson carries round 1, checkpoint cp0 and the grader\'s note');
         await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cTicket').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(100);
         await page.screenshot({ path: path.join(SH, 'learning-audit-banner.png') }) } }
-    await page.click('#chatSave');
-    await page.waitForFunction(([p, k]) => !!window.__data[p] && (window.__data['learning/state'].rounds[0].results || []).length === k, [`chatWeeks/${LW}/reviews/${x.sid}`, i + 1], { timeout: 5000 });
-    if (i === 0) ok(/ · Round 1: 1 of 10/.test(await txt(page, '#toast')), 'the save toast counts the round: Round 1: 1 of 10') }
+    if (i === 0) ok(/ · Round 1: 1 of 10/.test(await txt(page, '#toast')), 'the lock toast counts the round: Round 1: 1 of 10') }
   st = await state(); r1 = st.rounds[0];
   const revs = await page.evaluate(w => Object.fromEntries(Object.entries(window.__data).filter(([p]) => p.startsWith(`chatWeeks/${w}/reviews/`)).map(([p, d]) => [p.split('/').pop(), d])), LW);
   const exp = r1.sample.map(x => { const v = revs[x.sid]; return { d: Math.round((v.pct - x.aiPct) * 10) / 10, m: v.verdict === x.aiVerdict } });
@@ -844,7 +902,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   await page.waitForFunction(() => (window.__data['learning/state'].rounds || []).length === 2, null, { timeout: 5000 });
   st = await state(); const r2 = st.rounds[1], seen1 = new Set(r1.sample.map(x => x.sid).concat([LWo.reviewed.sid, LWo.marked.sid]));
   ok(r2.round === 2 && r2.sample.length === 2 && r2.sample.every(x => !seen1.has(x.sid)) && r2.checkpoint === 'cp1' && st.currentCheckpoint === 'cp1', 'a second Draw takes only chats never marked (2 left), on checkpoint cp1');
-  for (const x of r2.sample) { await page.click(`#lrRound [data-lopen="${x.sid}"]`); await page.waitForTimeout(250); await page.click('#chatSave');
+  for (const x of r2.sample) { await page.click(`#lrRound [data-lopen="${x.sid}"]`); await page.waitForTimeout(250); await calibrate(page, x.aiScores);
     await page.waitForFunction(p => !!window.__data[p], `chatWeeks/${LW}/reviews/${x.sid}`, { timeout: 5000 }); await page.waitForTimeout(150); await page.click('[data-tab="learn"]'); await page.waitForTimeout(150) }
   st = await state();
   ok(st.rounds[1].status === 'done' && st.rounds[1].verdictMatch === 2 && st.rounds[1].meanAbsDiff === 0 && st.rounds[1].pass === true, 'round 2: 2 of 2, 0 pts, a pass');
@@ -891,11 +949,11 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     await page.goto('http://qa.test/'); await page.waitForTimeout(400);
     await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#cTicket'); await page.waitForTimeout(250);
     const pct0 = await txt(page, '#tkPct');
-    ok(await page.locator('.ccrit [data-reinforce][data-where="row"]').count() === 9 && await page.locator('.tkfind [data-reinforce][data-where="find"]').count() === 2, 'every scorecard row and every finding with a criterion has Reinforce');
-    ok(await page.evaluate(() => [...document.querySelectorAll('.tkfind .tkact')].every(g => { const b = [...g.querySelectorAll('button')].map(x => x.textContent); return b.indexOf('Reinforce') === b.indexOf('Contest') + 1 })), 'Reinforce sits next to Contest');
-    // open from the finding card: the mark is locked to Claude's, Submit needs a better reason
-    await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(150);
-    ok(await page.locator('#tf-ev #cbox').isVisible() && (await page.locator('#tf-ev [data-reinforce]').getAttribute('aria-expanded')) === 'true' && (await page.locator('#tf-ev [data-contest]').getAttribute('aria-expanded')) === 'false', 'Reinforce opens the box in the finding card');
+    ok(await page.locator('.ccrit [data-reinforce][data-where="row"]').count() === 9, 'every scorecard row has Reinforce');
+    ok(await page.evaluate(() => [...document.querySelectorAll('.ccrit .cmarks')].every(g => { const b = [...g.querySelectorAll('button')].map(x => x.textContent); return b.indexOf('Reinforce') === b.indexOf('Contest') + 1 })), 'Reinforce sits next to Contest');
+    // open from the row: the mark is locked to Claude's, Submit needs a better reason
+    await page.click('#cc-ev [data-reinforce][data-where="row"]'); await page.waitForTimeout(150);
+    ok(await page.locator('#cc-ev #cbox').isVisible() && (await page.locator('#cc-ev [data-reinforce][data-where="row"]').getAttribute('aria-expanded')) === 'true' && (await page.locator('#cc-ev [data-contest][data-where="row"]').getAttribute('aria-expanded')) === 'false', 'Reinforce opens the box in the row');
     ok(await page.evaluate(() => { const b = [...document.querySelectorAll('#cbox [data-cv]')]; return b.length === 4 && b.every(x => x.disabled) && b.filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cv).join() === '2' }), "the mark is locked to Claude's 2");
     ok((await page.locator('#cbox label[for="cbWhy"]').textContent()) === 'Better reason' && await page.locator('#cbSave').isDisabled(), 'label Better reason; Submit off until it is filled');
     ok((await txt(page, '#chpVia')) === 'REINFORCE' && (await txt(page, '#chpTitle')) === 'Gathered the evidence', 'the side panel opens with the header Reinforce');
@@ -905,23 +963,23 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     const WHYR = 'Two points is right, but because no pickup window was checked, not the order itself.';
     await page.fill('#cbWhy', WHYR); ok(await page.locator('#cbSave').isEnabled(), 'a reason turns Submit on');
     await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'reinforce-box.png') });
-    await page.locator('#tf-ev').screenshot({ path: path.join(SH, 'reinforce-finding.png') });
+    await page.locator('#cc-ev').screenshot({ path: path.join(SH, 'reinforce-row.png') });
     await page.click('#cbSave');
     await page.waitForFunction(p => !!window.__data[p], LP, { timeout: 3000 });
     const L1 = await page.evaluate(p => window.__data[p], LP);
     ok(L1.kind === 'reinforce' && L1.from === '2/3' && L1.to === '2/3' && L1.reason === WHYR && L1.what === 'Voided O1 without checking the pickup time first (F2).' && L1.crit === 'ev' && L1.label === 'Gathered the evidence' && L1.type === 'Did not check the order' && L1.caseType === 'order_issue' && L1.sid === RS && L1.sa === 'Ivo Lark' && !isNaN(Date.parse(L1.at)),
       'Submit writes chatLessons/<sid>_ev at once: kind reinforce, from = to = 2/3, the reason, what, crit, label, type, caseType');
     ok((await txt(page, '#tkPct')) === pct0 && await page.evaluate(s => chatDraft(s).scores.ev, RS) === 2 && await page.locator('#cbox').count() === 0 && !(await page.evaluate(() => !!(chPanel))), 'the score does not move; the box and the panel close');
-    ok((await txt(page, '#tf-ev .tkrei')) === 'REINFORCED' && (await txt(page, '#tf-ev .tkrei-why')).includes(WHYR) && (await txt(page, '#tf-ev .tkrei-why')).includes('Submitted · learned') && (await txt(page, '#cc-ev .crei')) === 'REINFORCED' && (await txt(page, '#cc-ev .crei-why')).includes(WHYR),
-      'the finding and the row show Reinforced and the better reason');
+    ok((await txt(page, '#cc-ev .crei')) === 'REINFORCED' && (await txt(page, '#cc-ev .crei-why')).includes(WHYR) && (await txt(page, '#cc-ev .crei-why')).includes('Submitted · learned'),
+      'the row shows Reinforced and the better reason');
     ok(await page.evaluate(s => JSON.stringify(chatDraft(s).reinforce), RS) === JSON.stringify({ ev: { reason: WHYR } }), 'the draft keeps d.reinforce[crit] = {reason}');
     ok((await page.evaluate(() => { const s = String(chatSel); return chTicketText(chatBy(s), chatAud[s], chatDraft(s)) })).includes('   Better reason: ' + WHYR), 'the copied ticket carries the better reason');
     // from a scorecard row, then withdraw: the draft entry and the lesson go
-    await page.click('#cc-tone [data-reinforce]'); await page.waitForTimeout(120);
+    await page.click('#cc-tone [data-reinforce][data-where="row"]'); await page.waitForTimeout(120);
     ok(await page.locator('#cc-tone #cbox.rei').isVisible() && (await txt(page, '#chpVia')) === 'REINFORCE', 'Reinforce from a row opens the box and the panel');
     await page.fill('#cbWhy', 'Brief is fine; the miss is the refund not being named.'); await page.click('#cbSave');
     await page.waitForFunction(p => !!window.__data[p], LT, { timeout: 3000 });
-    await page.click('#cc-tone [data-reinforce]'); await page.waitForTimeout(120);
+    await page.click('#cc-tone [data-reinforce][data-where="row"]'); await page.waitForTimeout(120);
     ok((await page.locator('#cbWhy').inputValue()).startsWith('Brief is fine') && await page.locator('#cbWithdraw').isVisible(), 'reopening shows the reason and Withdraw');
     await page.click('#cbWithdraw'); await page.waitForFunction(p => !window.__data[p], LT, { timeout: 3000 });
     ok(await page.locator('#cc-tone .crei').count() === 0 && await page.locator('#cbox').count() === 0 && await page.evaluate(s => !chatDraft(s).reinforce.tone, RS) && await page.evaluate(p => !!window.__data[p], LP), 'Withdraw removes the draft entry and deletes that lesson only');
@@ -931,39 +989,47 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     ok(JSON.stringify(rvR.reinforce) === JSON.stringify({ ev: { mark: '2/3', reason: WHYR } }) && JSON.stringify(rvR.contests) === '{}' && rvR.scores.ev === 2 && L2 && L2.kind === 'reinforce' && L2.at === L1.at, 'Save review stores reinforce {mark, reason} and keeps the lesson (same date)');
     // a reload (the mock store doesn't survive one): drop the working copy and what this session submitted, so both come back from the review and chatLessons
     await page.evaluate(() => { chatDrafts.clear(); chSubmitted.clear(); renderChatAudit(true) }); await page.waitForTimeout(150);
-    ok((await txt(page, '#tf-ev .tkrei')) === 'REINFORCED' && (await txt(page, '#tf-ev .tkrei-why')).includes(WHYR) && (await txt(page, '#tf-ev .tkrei-why')).includes('Submitted · learned'), 'after a reload the finding is still Reinforced (from the review), and learned (from chatLessons)');
+    ok((await txt(page, '#cc-ev .crei')) === 'REINFORCED' && (await txt(page, '#cc-ev .crei-why')).includes(WHYR) && (await txt(page, '#cc-ev .crei-why')).includes('Submitted · learned'), 'after a reload the row is still Reinforced (from the review), and learned (from chatLessons)');
     // Learning tab list
     await page.click('[data-tab="brain"]'); await page.waitForTimeout(250);
     const li = (await page.locator('#brLessons .lsitem.reinforce').allInnerTexts()).map(t => t.replace(/\s+/g, ' '));
     ok(li.length === 1 && li[0].includes('Gathered the evidence') && /REINFORCED/i.test(li[0]) && li[0].includes('2/3') && li[0].includes(WHYR) && /Better reason/i.test(li[0]), 'What the coach learned lists it as Reinforced, the mark and the better reason');
     // withdraw after reload: the lesson goes
-    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#tf-ev'); await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(120); await page.click('#cbWithdraw');
+    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#cc-ev'); await page.click('#cc-ev [data-reinforce][data-where="row"]'); await page.waitForTimeout(120); await page.click('#cbWithdraw');
     await page.waitForFunction(p => !window.__data[p], LP, { timeout: 3000 });
-    ok(await page.locator('#tf-ev .tkrei').count() === 0, 'Withdraw after a reload deletes the lesson doc');
+    ok(await page.locator('#cc-ev .crei').count() === 0, 'Withdraw after a reload deletes the lesson doc');
     // contest on a reinforced criterion replaces it
-    await page.click('#tf-tone [data-reinforce]'); await page.fill('#cbWhy', 'Right mark, wrong reason.'); await page.click('#cbSave'); await page.waitForFunction(p => (window.__data[p] || {}).kind === 'reinforce', LT, { timeout: 3000 });
-    await page.click('#tf-tone [data-contest]'); await page.locator('#cbox [data-cv="3"]').click(); await page.fill('#cbWhy', 'It was clear enough.'); await page.click('#cbSave');
+    await page.click('#cc-tone [data-reinforce][data-where="row"]'); await page.fill('#cbWhy', 'Right mark, wrong reason.'); await page.click('#cbSave'); await page.waitForFunction(p => (window.__data[p] || {}).kind === 'reinforce', LT, { timeout: 3000 });
+    await page.click('#cc-tone [data-contest][data-where="row"]'); await page.locator('#cbox [data-cv="3"]').click(); await page.fill('#cbWhy', 'It was clear enough.'); await page.click('#cbSave');
     await page.waitForFunction(p => (window.__data[p] || {}).kind === 'contest', LT, { timeout: 3000 });
-    ok(await page.locator('#tf-tone .tkrei').count() === 0 && await page.locator('#tf-tone [data-reinforce]').count() === 0 && (await txt(page, '#tf-tone .tkcon')) === 'CONTESTED', 'a contest replaces the reinforce; a contested finding has no Reinforce');
+    ok(await page.locator('#cc-tone .crei').count() === 0 && await page.locator('#cc-tone [data-reinforce][data-where="row"]').count() === 0 && (await txt(page, '#cc-tone .ccon')) === 'CONTESTED', 'a contest replaces the reinforce; a contested row has no Reinforce');
     // ----- order status
     const ordLine = (await page.locator('.tkgrid .tkf', { hasText: 'Order' }).first().innerText()).replace(/\s+/g, ' ');
     ok(ordLine.includes('Voided · No pick up') && ordLine.includes('Refunded $24.50 (full)'), 'the ticket Order line: Voided · No pick up, Refunded $24.50 (full)');
+    await full(page);
     await page.click('#src-order summary'); await page.waitForTimeout(150);
+    await full(page);
     const cards = await page.locator('#src-order .ordcard').allInnerTexts();
     ok(cards.length === 2 && cards[0].includes('Voided · No pick up') && !cards[0].includes('Refunded') && cards[1].includes('Refunded $24.50 (full)') && !cards[1].includes('Voided'), 'order cards: the voided one shows Voided · No pick up, the refunded one Refunded $24.50 (full)');
+    await full(page);
     ok(await page.locator('#src-order .ordcard .ostat').count() === 2, 'nothing for a submitted order with no refund');
+    await full(page);
     await page.locator('#src-order .ordcard').first().scrollIntoViewIfNeeded(); await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
+    await full(page);
     await page.locator('#src-order').screenshot({ path: path.join(SH, 'order-voided.png') });
+    await full(page);
     await page.click('#ordChange'); await page.waitForTimeout(200);
+    await full(page);
     const rows = await page.evaluate(() => [...document.querySelectorAll('#ordList .orow')].map(r => [r.querySelector('.otk').textContent, (r.querySelector('.ostat') || {}).textContent || '']));
     ok(JSON.stringify(rows) === JSON.stringify([['#4472', 'Voided'], ['#4473', ''], ['#4474', '']]), 'day order rows: Voided only, no Draft tag');
     await page.click('#ordCancel').catch(() => {}); await page.waitForTimeout(100);
     // dark and phone
     await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(100);
+    await full(page);
     ok(await page.evaluate(() => getComputedStyle(document.querySelector('.ordcard .ostat')).color) === 'rgb(248, 113, 113)', 'dark: the status tag takes the dark tokens');
     await page.emulateMedia({ colorScheme: 'light' });
     await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
-    await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(250);
+    await page.click('#cc-ev [data-reinforce][data-where="row"]'); await page.waitForTimeout(250);
     ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbox').getBoundingClientRect().right <= 390), `390px: the reinforce box and order tags fit (${await width(page)})`);
     await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'reinforce-390.png') });
     ok(!errors.length, 'no console errors (reinforce, orders) ' + JSON.stringify(errors));
