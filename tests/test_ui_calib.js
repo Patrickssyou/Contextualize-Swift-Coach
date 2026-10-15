@@ -1,36 +1,66 @@
-// Calibration: three graders (Pat, Howard, Li Qi; all invented) mark the same items blind, reveal per person, compare, settle rows, lock the agreed score.
-// Chats come from an open Learning round (learnWorld, invented); calls from an invented week of the call queue. Rules checked against the mock's access rules:
+// The Round: one week, 3 chats and 3 calls per SA, marked blind by three graders (Pat, Howard, Li Qi; all invented), compared, settled and locked.
+// World A seeds a drawn round so the flow is deterministic: the Round tab, a chat and a call in the Audit tab, the mixed checklist, Back / Prev / Next,
+// Learning sync, old hashes, Howard's view. World B draws (3 + 3 per SA, short SAs, items drawn before, redraw only before any submission).
+// World C: only Pat has opened the desk, so Howard and Li Qi are pending columns. Rules checked against the mock's access rules:
 // a draft under data/users/<id> is private, calibMarks/<uid> is written by <uid> only.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
 const { openPage, learnWorld, DIR } = require('./mock.js');
 const B = require('../src/chat.js');
-const RV1 = JSON.parse(fs.readFileSync(path.join(DIR, 'src/rubric_v1.json'), 'utf8'));
 const SH = path.join(DIR, 'shots'); fs.mkdirSync(SH, { recursive: true });
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; console.log('ok -', m) };
 const fmt = p => (Math.round(p * 10) / 10).toFixed(1);
 const PAT = 'u_test', HOW = 'u_howard', LIQ = 'u_liqi', people = { [PAT]: 'Pat', [HOW]: 'Howard', [LIQ]: 'Li Qi' };
-const LW = '2026-10-05', NOW = '2026-10-14T16:00:00Z';
-const L = learnWorld(LW);
-// the open round: ten chats never reviewed or marked, one with Claude at ev 3 / path 3 first
-const pool = L.list.filter(x => x.sid !== L.reviewed.sid && x.sid !== L.marked.sid);
-const first = pool.find(x => x.scores.ev === 3 && x.scores.path === 3), rest = pool.filter(x => x !== first).slice(0, 9);
-const sample = [first].concat(rest).map(x => ({ sid: x.sid, sa: x.sa, restaurant: x.restaurant, aiPct: x.pct, aiVerdict: x.verdict, aiScores: x.scores }));
-const S0 = sample[0].sid, S1 = sample[1].sid, IK = 'chat_' + S0;
-const state = { week: LW, currentCheckpoint: 'cp0', target: { verdicts: 8, pts: 5, streak: 2 }, marked: [L.marked.sid], rounds: [{ round: 1, checkpoint: 'cp0', drawnAt: LW + 'T12:00:00.000Z', status: 'open', sample, results: [], verdictMatch: null, meanAbsDiff: null, pass: null }] };
+const LW = '2026-10-05', PREV = '2026-09-28', NOW = '2026-10-14T16:00:00Z', WL = 'Oct 5 – 11';
+const L = learnWorld(LW), aud = sid => L.list.find(x => x.sid === sid);
+
+// the live call rubric (v2: 0–3, N/A left out), read from the template so the test follows it
+const tpl = fs.readFileSync(path.join(DIR, 'src/template.html'), 'utf8');
+const CALL_V2 = new Function(tpl.slice(tpl.indexOf('const NA_ANY'), tpl.indexOf('const clone = x =>')) + 'return CALL_V2')();
+const V2I = CALL_V2.flatMap(s => s.items);
+const callPct = m => { let W = 0, E = 0; V2I.forEach(x => { const v = m[x.id]; if (v === 'na' || v == null) return; W += x.w; E += v / 3 * x.w }); return Math.round(E / W * 1000) / 10 };
+
+// invented calls: Ana 4 (one drawn in an earlier round, one a case with a second SA and a WIRA task), Ben 3 (+1 removed), Cleo 1, Eli 2 (one MGR), one from another week
+const TXI = [];
+const mkCall = (id, sa, i, o) => { o = o || {}; const cid = 'c0ffee00-0000-4000-8000-0000000001' + String(i).padStart(2, '0'), day = `2026-10-0${5 + (i % 4)}`, t = `1${i % 8}:15`;
+  const legs = [{ id: cid, at: `${day}T${t}:00`, sec: 240 + i * 10, who: sa, own: true, graded: true, sampled: true, dir: 'in' }];
+  if (o.team) legs.push({ id: cid.replace(/..$/, '9' + (i % 10)), at: `${day}T${t.slice(0, 2)}:25:00`, sec: 120, who: 'Mo Reyes', group: 'sa', own: false, graded: false, dir: 'out' });
+  TXI.push([cid, `Agent: Thanks for calling Tarro support, this is ${sa.split(' ')[0]}.\nCaller: My pickup order from Sample Oven ${id} was not ready.\nAgent: I am calling the store now.`]);
+  return ['queue/' + id, { agent: sa, type: o.mgr ? 'mgr' : 'call', kind: o.mgr ? 'MGR' : 'CL', callDate: day, callTime: t, restaurantId: 'R95' + String(i).padStart(3, '0'), restaurantName: `Sample Oven ${id}`,
+    callId: cid, durationSec: 240 + i * 10, link: `https://greendot.example.test/restaurant/R95${String(i).padStart(3, '0')}`, week: o.week || LW, pos: i, source: 'lightdash', removed: !!o.removed, auditId: null, score: null,
+    chain: { legs, count: legs.length, talkSec: legs.reduce((s, l) => s + l.sec, 0), agents: o.team ? 2 : 1 },
+    tasks: o.team ? [{ id: 'T88' + i, title: 'Remake the pickup order', status: 'Done', url: 'https://wira.example.test/tasks/T88' + i, desc: 'The store remade the order.' }] : null,
+    aiFacts: { summary: 'The caller says a pickup order was not ready on time.', rootCause: 'Ticket did not print', facts: { calls: { [cid]: ['The caller says the order was 20 minutes late', 'The SA called the store'] },
+      timeline: [{ id: 'F1', src: 'Call 1', when: '0:12', who: 'Caller', kind: 'said', what: 'Says the pickup order was not ready 20 minutes after the quoted time' }, { id: 'F2', src: 'Call 1', when: '1:40', who: sa, kind: 'did', what: 'Called the store, which said the ticket never printed' }], promises: [] } } }] };
+const calls = [mkCall('qana1', 'Ana Ruiz', 1), mkCall('qana2', 'Ana Ruiz', 2, { team: true }), mkCall('qana3', 'Ana Ruiz', 3), mkCall('qana4', 'Ana Ruiz', 4),
+  mkCall('qben1', 'Ben Okafor', 5), mkCall('qben2', 'Ben Okafor', 6), mkCall('qben3', 'Ben Okafor', 7), mkCall('qben4', 'Ben Okafor', 8, { removed: true }),
+  mkCall('qcle1', 'Cleo Marsh', 9), mkCall('qeli1', 'Eli Novak', 10, { mgr: true }), mkCall('qeli2', 'Eli Novak', 11), mkCall('qold1', 'Ana Ruiz', 12, { week: PREV })];
+const Q = id => calls.find(([p]) => p === 'queue/' + id)[1];
+
+// the learning state before this pass: an open round of 10 chats (no results), excluding the reviewed and the marked chat
+const pool = L.list.filter(x => x.sid !== L.reviewed.sid && x.sid !== L.marked.sid).slice(0, 10);
+const samp = x => ({ sid: x.sid, sa: x.sa, restaurant: x.restaurant, aiPct: x.pct, aiVerdict: x.verdict, aiScores: x.scores });
+const oldState = { week: LW, currentCheckpoint: 'cp0', target: { verdicts: 8, pts: 5, streak: 2 }, marked: [L.marked.sid], rounds: [{ round: 1, checkpoint: 'cp0', drawnAt: LW + 'T12:00:00.000Z', status: 'open', sample: pool.map(samp), results: [], verdictMatch: null, meanAbsDiff: null, pass: null }] };
+const prevRound = ['calibRounds/' + PREV, { week: PREV, drawnAt: PREV + 'T09:00:00.000Z', by: PAT, sas: ['Ana Ruiz'], items: [{ kind: 'call', key: 'qana1', sa: 'Ana Ruiz', restaurant: 'Sample Oven qana1', at: '2026-10-06T11:15' }] }];
+const joined = [['calibMarks/' + PAT, { joinedAt: '2026-10-12T09:00:00.000Z', lastSeen: '2026-10-12T09:00:00.000Z' }], ['calibMarks/' + HOW, { joinedAt: '2026-10-12T09:05:00.000Z', lastSeen: '2026-10-12T09:05:00.000Z' }],
+  ['calibMarks/' + LIQ, { joinedAt: '2026-10-12T09:10:00.000Z', lastSeen: '2026-10-12T09:10:00.000Z' }]];
+const pulls = [['pulls/2026-10-05', { status: 'done', week: '2026-10-05', at: '2026-10-13T08:00:00.000Z', added: 12 }], ['pulls/2026-09-28', { status: 'done', week: '2026-09-28', at: '2026-10-05T08:00:00.000Z', added: 0 }]];
+const base0 = L.seed.filter(([p]) => p !== 'learning/state').concat(pulls, calls);
+
+// World A: a drawn round, in SA order: up to 3 chats then up to 3 calls each
+const SAS = ['Ana Ruiz', 'Ben Okafor', 'Cleo Marsh', 'Dev Patel', 'Eli Novak', 'Faye Lund'];
+const items = []; SAS.forEach(sa => { L.list.filter(x => x.sa === sa).slice(0, 3).forEach(x => items.push({ kind: 'chat', key: x.sid, sa, restaurant: x.restaurant, at: '2026-10-06T10:15:00.000Z', aiPct: x.pct }));
+  calls.filter(([, q]) => q.agent === sa && !q.removed && q.week === LW).slice(0, 3).forEach(([p, q]) => items.push({ kind: 'call', key: p.split('/')[1], sa, restaurant: q.restaurantName, at: q.callDate + 'T' + q.callTime })) });
+const chatItems = items.filter(x => x.kind === 'chat'), callItems = items.filter(x => x.kind === 'call');
+const roundA = ['calibRounds/' + LW, { week: LW, drawnAt: '2026-10-13T09:00:00.000Z', by: PAT, sas: SAS, items }];
+const stateA = Object.assign({}, oldState, { rounds: [Object.assign({}, oldState.rounds[0], { status: 'replaced', replacedAt: '2026-10-13T09:00:00.000Z' }),
+  { round: 2, week: LW, checkpoint: 'cp0', drawnAt: '2026-10-13T09:00:00.000Z', status: 'open', sample: chatItems.map(x => samp(aud(x.key))), results: [], verdictMatch: null, meanAbsDiff: null, pass: null }] });
+// the chat under test: Claude at ev 3 / path 3 (Dev's first)
+const S0 = '9930010', IK = 'chat_' + S0, IDX0 = items.findIndex(x => x.key === S0);
 const base = { fr: 3, ev: 1, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 3 };
 const howM = Object.assign({}, base, { ev: 2, path: 2 }), liqM = Object.assign({}, base, { rs: 2 });
-// twelve invented calls across four SAs, each with facts read
-const AG = ['Ana Ruiz', 'Ben Okafor', 'Cleo Marsh', 'Dev Patel'];
-const calls = []; for (let i = 0; i < 12; i++) { const id = 'qcal' + String(i + 1).padStart(2, '0'), cid = 'c0ffee00-0000-4000-8000-0000000000' + String(i + 10);
-  calls.push(['queue/' + id, { agent: AG[i % 4], type: 'call', kind: 'CL', callDate: '2026-10-0' + (5 + (i % 4)), callTime: '1' + (i % 8) + ':15', restaurantId: 'R95' + String(i).padStart(3, '0'), restaurantName: `Sample Oven ${i + 1}`,
-    callId: cid, durationSec: 240 + i * 10, link: `https://greendot.example.test/restaurant/R95${String(i).padStart(3, '0')}`, week: LW, pos: i, source: 'lightdash', removed: false, auditId: null, score: null,
-    chain: { legs: [{ id: cid, at: `2026-10-0${5 + (i % 4)}T1${i % 8}:15:00`, sec: 240 + i * 10, who: AG[i % 4], own: true, graded: true, sampled: true, dir: 'in' }], count: 1, agents: 1 },
-    aiFacts: { summary: 'The caller says a pickup order was not ready on time.', rootCause: 'Ticket did not print', facts: { calls: {}, timeline: [{ id: 'F1', src: 'Call 1', when: '0:12', who: 'Caller', kind: 'said', what: 'Says the pickup order was not ready 20 minutes after the quoted time' }, { id: 'F2', src: 'Call 1', when: '1:40', who: AG[i % 4], kind: 'did', what: 'Called the store, which said the ticket never printed' }], promises: [] } } }]) }
-const seed = L.seed.filter(([p]) => p !== 'learning/state').concat([['learning/state', state],
-  ['calibMarks/' + PAT, { joinedAt: '2026-10-12T09:00:00.000Z', lastSeen: '2026-10-12T09:00:00.000Z' }], ['calibMarks/' + HOW, { joinedAt: '2026-10-12T09:05:00.000Z', lastSeen: '2026-10-12T09:05:00.000Z' }],
-  ['calibMarks/' + LIQ, { joinedAt: '2026-10-12T09:10:00.000Z', lastSeen: '2026-10-12T09:10:00.000Z' }],
-  [`calibMarks/${HOW}/items/${IK}`, { kind: 'chat', key: S0, marks: howM, notes: { ev: 'Opened the schedule eventually, partial credit.', path: 'Should have confirmed the old hours first.' }, submittedAt: '2026-10-13T10:00:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z' }],
-  ['pulls/2026-10-05', { status: 'done', week: '2026-10-05', at: '2026-10-13T08:00:00.000Z', added: 12 }], ['pulls/2026-09-28', { status: 'done', week: '2026-09-28', at: '2026-10-05T08:00:00.000Z', added: 0 }]]).concat(calls);
+const seedA = base0.concat([['learning/state', stateA], prevRound, roundA], joined,
+  [[`calibMarks/${HOW}/items/${IK}`, { kind: 'chat', key: S0, marks: howM, notes: { ev: 'Opened the schedule eventually, partial credit.', path: 'Should have confirmed the old hours first.' }, submittedAt: '2026-10-13T10:00:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z' }]]);
+
 const txt = (page, s) => page.locator(s).innerText();
 const width = page => page.evaluate(() => document.documentElement.scrollWidth);
 const D = (page, p) => page.evaluate(p => window.__data[p] ? JSON.parse(JSON.stringify(window.__data[p])) : null, p);
@@ -40,323 +70,296 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
 const gridShot = async (page, name) => { await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cs-score').scrollIntoView({ block: 'start' }) }); await page.waitForTimeout(120);
   await page.locator('#cs-score').screenshot({ path: path.join(SH, name) }) };
 const asUser = (page, uid, op) => page.evaluate(([uid, op]) => window.__as(uid, async db => { try { await new Function('db', 'return (async () => {' + op + '})()')(db); return 'ok' } catch (e) { return e && e.code || String(e) } }), [uid, op]);
+const subDoc = (kind, key, marks) => ({ kind, key, marks, notes: {}, submittedAt: '2026-10-14T11:00:00.000Z', updatedAt: '2026-10-14T11:00:00.000Z' });
+const callMarks = v => Object.fromEntries(V2I.map(x => [x.id, v]));
+const tab = page => page.evaluate(() => tab);
 
 (async () => {
   const b = await chromium.launch();
-  let { page, ctx, errors } = await openPage(b, seed, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW });
-  await page.goto('http://qa.test/#calib'); await page.waitForTimeout(600);
+  let { page, ctx, errors } = await openPage(b, seedA, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW, tx: TXI });
+  await page.goto('http://qa.test/'); await page.waitForTimeout(700);
 
-  // ===== 1. the Calibration tab: the round, KPIs, presence
-  const tabs = (await page.locator('#sub-chats [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-  ok(tabs.length === 5 && ['Dashboard', 'Audit', 'Calibration', 'Learning', 'Brain'].every((x, i) => tabs[i].includes(x)), 'Chats steps: Dashboard, Audit, Calibration, Learning, Brain');
-  ok((await txt(page, '#cbRound h2')) === 'Round 1' && await page.locator('#cbItems tbody tr').count() === 10 && await page.locator('#cbDraw').isDisabled(), "Calibration: Round 1, the round's 10 chats, Draw off while the round is open");
-  ok((await txt(page, '#cbkAgreed b')) === '0 / 10' && (await txt(page, '#cbkTurn b')) === '10' && (await txt(page, '#st-calib')) === '10', 'KPIs: Agreed 0 / 10, Your turn 10 (also on the tab)');
-  ok(await page.locator(`#cbItems tr[data-ik="${IK}"] .cbdot.done`).count() === 1 && (await txt(page, `#cbItems tr[data-ik="${IK}"] .pill`)) === 'Scoring' && (await txt(page, `#cbItems tr[data-ik="${IK}"] .cbdot.done`)) === 'H', "the list: Howard's dot is filled, stage Scoring");
-  ok(await page.evaluate(() => (window.__presence || []).some(p => p.tab === 'calib' && p.item === null)), 'presence: the tab is sent');
+  // ===== 1. one workspace, the Round first
+  const areas = (await page.locator('.tabs.areas [data-area]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+  const subs = (await page.locator('#sub-chats button').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+  ok(areas.length === 3 && areas[0] === 'Audits' && /^Results/.test(areas[1]) && /^Database/.test(areas[2]), 'one Audits area beside Results and Database (Chats and Calls merged)');
+  ok(subs.length === 6 && ['Round', 'Audit', 'Dashboard', 'Learning', 'Brain', 'Call tools'].every((x, i) => subs[i].includes(x)) && /^1/.test(subs[0]) && /^2/.test(subs[1]), 'tabs: 1 Round, 2 Audit, Dashboard, Learning, Brain, Call tools');
+  ok(await tab(page) === 'calib' && await page.evaluate(() => location.hash) === '#calib' && await page.locator('#sub-calls').isHidden(), 'the page opens on the Round tab');
+  ok((await txt(page, '#cbRound h2')) === 'Week ' + WL && (await txt(page, '#cbSum')) === `${items.length} items · you: 0 of ${items.length} done` && items.length === 22, `Round header: "Week ${WL}" and "22 items · you: 0 of 22 done"`);
+  const groups = await page.locator('#cbItems .cbsa').evaluateAll(x => x.map(g => ({ sa: g.dataset.sa, n: g.querySelectorAll('.cbirow').length, calls: g.querySelectorAll('.cbirow[data-kind="call"]').length })));
+  ok(JSON.stringify(groups.map(g => g.sa)) === JSON.stringify(SAS) && groups[0].n === 6 && groups[0].calls === 3 && groups[3].calls === 0, 'grouped by SA: Ana has 3 chats and 3 calls; Dev no calls');
+  const short = (await txt(page, '#cbShort')).replace(/\s+/g, ' ');
+  ok(/Cleo 2 of 3 chats, 1 of 3 calls/.test(short) && /Dev 2 of 3 chats, 0 of 3 calls/.test(short) && /Faye 1 of 3 chats, 0 of 3 calls/.test(short) && !/Ana|Ben/.test(short), 'short SAs show "2 of 3" for what they lack');
+  const rowA = await page.locator(`#cbItems .cbirow[data-ik="chat_${chatItems[0].key}"]`).innerText(), rowC = await page.locator('#cbItems .cbirow[data-ik="call_qana1"]').innerText();
+  ok(rowA.includes(chatItems[0].restaurant) && rowA.includes('Claude ' + fmt(aud(chatItems[0].key).pct) + '%') && rowC.includes('Sample Oven qana1') && /CL · 4:10/.test(rowC.replace(/\s+/g, ' ')) && /Oct 6/.test(rowC), 'rows: a chat shows Claude\'s score, a call its type and length, both their date');
+  ok(await page.locator(`#cbItems .cbirow[data-ik="${IK}"] .cbdot.done`).count() === 1 && (await txt(page, `#cbItems .cbirow[data-ik="${IK}"] .pill`)) === 'Scoring' && (await txt(page, '#st-calib')) === '22', "Howard's dot is filled on his item; the tab counts my 22");
+  ok(await page.locator('#cbRedraw, #cbDraw').count() === 0 && await page.locator('#cbGrBtn').isVisible(), 'a grader has submitted: no Redraw; Graders for the owner');
+  await page.click('[data-cb="filt"][data-v="call"]'); await page.waitForTimeout(100);
+  ok(await page.locator('#cbItems .cbirow').count() === 9 && await page.locator('#cbItems .cbirow[data-kind="chat"]').count() === 0 && await page.locator('#cbItems .cbsa').count() === 4, 'Calls: the 9 calls, SAs without calls drop out');
+  await page.click('[data-cb="filt"][data-v="chat"]'); await page.waitForTimeout(100);
+  ok(await page.locator('#cbItems .cbirow').count() === 13 && await page.locator('#cbItems .cbirow[data-kind="call"]').count() === 0, 'Chats: the 13 chats');
+  await page.click('[data-cb="filt"][data-v="all"]'); await page.click('[data-cb="mine"]'); await page.waitForTimeout(100);
+  ok(await page.locator('#cbItems .cbirow').count() === 22 && (await page.locator('[data-cb="mine"]').getAttribute('aria-pressed')) === 'true', 'Mine to do: all 22 before I submit anything');
+  await page.click('[data-cb="mine"]');
   await page.evaluate(h => window.__peers([{ by: h, presence: { tab: 'calib', item: null } }]), HOW); await page.waitForTimeout(150);
-  ok(/You and Howard are here/.test(await txt(page, '#cbRound .cbhd')), 'presence: "You and Howard are here" in the round header');
+  ok(/You and Howard are here/.test(await txt(page, '#cbRound .cbhd')), 'presence: "You and Howard are here" in the header');
+  // Continue opens the first item I haven't submitted; Back returns to the Round
+  ok((await txt(page, '#cbGo')).startsWith('Start'), 'Start before anything is done');
+  await page.click('#cbGo'); await page.waitForTimeout(350);
+  ok(await tab(page) === 'chat' && await page.evaluate(() => chatSel) === items[0].key && (await txt(page, '#navBack')).includes('Round'), 'Start opens the first item; Back names the Round');
+  await page.click('#navBack'); await page.waitForTimeout(250);
+  ok(await tab(page) === 'calib', 'Back returns to the Round tab');
 
-  // ===== 2. a chat in the round: the Audit shows the shared grid, blind
+  // ===== 2. a round chat in the Audit tab: the shared grid, blind
   await page.click(`[data-cb="open"][data-ik="${IK}"]`); await page.waitForTimeout(400);
-  ok(await page.evaluate(() => tab) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${LW}/${S0}` && await page.locator('#cbGrid').count() === 1, 'a round chat opens in Audit with the calibration grid');
-  ok(await page.locator('.ccrit').count() === 0 && await page.locator('[data-contest],[data-reinforce]').count() === 0, 'no solo scorecard, no Contest or Reinforce on a round chat');
-  ok(await page.evaluate(() => (window.__presence || []).some(p => p.tab === 'chat' && p.item)), 'presence: the item on screen is sent');
+  ok(await tab(page) === 'chat' && await page.evaluate(() => location.hash) === `#chat/${LW}/${S0}` && await page.locator('#cbGrid').count() === 1 && (await txt(page, '#cbGrid .cbmeta')).includes(`Week ${WL} · ${IDX0 + 1} of 22`), 'a round chat opens in Audit with the calibration grid');
+  ok(await page.locator('.ccrit').count() === 0 && await page.locator('[data-contest],[data-reinforce]').count() === 0 && await page.locator('#tkFinds').count() === 0, 'no solo scorecard, no Contest or Reinforce, no Findings');
   await page.evaluate(([h, ik]) => window.__peers([{ by: h, presence: { tab: 'chat', item: ik } }]), [HOW, IK]); await page.waitForTimeout(150);
-  ok(/You and Howard are here/.test(await txt(page, '#cbGrid .cbmeta')), "presence on the item's scorecard");
-  ok((await txt(page, '#cbr-ev > td >> nth=0')).trim() === String(sample[0].aiScores.ev) && (await cell(page, 'ev', 2).innerText()).includes('✓ Scored') && (await cell(page, 'ev', 3).innerText()).includes('Not yet'), "blind: Claude's mark shows, Howard ✓ Scored, Li Qi Not yet");
+  ok(/You and Howard are here/.test(await txt(page, '#cbGrid .cbmeta')) && await page.evaluate(() => (window.__presence || []).some(p => p.tab === 'chat' && p.item)), "presence on the item's scorecard");
+  ok((await txt(page, '#cbr-ev > td >> nth=0')).trim() === '3' && (await cell(page, 'ev', 2).innerText()).includes('✓ Scored') && (await cell(page, 'ev', 3).innerText()).includes('Not yet'), "blind: Claude's mark shows, Howard ✓ Scored, Li Qi Not yet");
   ok(await page.locator('#cbGrid [data-cb="peek"]').count() === 0 && await page.locator('#cbGrid [data-cb="submit"]').isDisabled() && (await txt(page, '#cbFilled')) === '0/9', 'no Reveal before you submit; Submit off at 0/9');
-  ok(await page.locator('#tkFinds').count() === 0 && await page.locator('.tkfind').count() === 0, 'the ticket has no Findings section');
-  ok(await page.locator('#evBrief li').count() >= 1 && await page.locator('#evBrief li').count() <= 5 && await page.locator('#evSrcs .evrow').count() >= 1 && await page.locator('#evFull').isHidden(), 'Evidence: What happened beside the source rows; full sources folded away');
-  await page.click('#evMore'); await page.waitForTimeout(80);
-  ok(await page.locator('#evFull').isVisible() && await page.locator('#evFull details.srcf').count() >= 2 && (await page.locator('#evMore').getAttribute('aria-expanded')) === 'true', 'Timeline and full sources opens the folds');
-  await page.click('#evMore');
-  // criterion → where the evidence is
   await page.click('#cbGrid [data-psrc="ev"]'); await page.waitForTimeout(200);
-  ok(await page.locator('#chPanel').isVisible() && (await txt(page, '#chpTitle')) === 'Gathered the evidence' && (await page.locator('#cbGrid [data-psrc="ev"]').getAttribute('aria-expanded')) === 'true', "clicking a criterion's name opens its sources panel");
+  ok(await page.locator('#chPanel').isVisible() && (await txt(page, '#chpTitle')) === 'Gathered the evidence', "a chat criterion opens its sources panel");
   await page.click('#chpClose'); await page.waitForTimeout(100);
-  await gridShot(page, 'calib-scorecard-blind.png');
-
-  // ===== 3. scoring: the draft is private, then Submit
+  // scoring: the draft is private, then Submit
   for (const [k, v] of Object.entries(base)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
   await page.click('#cbGrid [data-cb="note"][data-crit="ev"]'); await page.fill('[data-cbnote="ev"]', 'Set the hours without checking the schedule.');
   await page.click('#cbGrid button[data-cb="note"][data-crit="ev"]:not(.cbnotebtn)');
   const DP = `data/users/${PAT}/calib_${IK}`;
   await waitDoc(page, DP, `d.marks.ev===1&&d.marks.tone===3&&/schedule/.test(d.notes.ev)`);
-  ok(!(await D(page, `calibMarks/${PAT}/items/${IK}`)) && (await txt(page, '#cbFilled')) === '9/9' && await page.locator('#cbGrid [data-cb="submit"]').isEnabled(), 'marks save to your private draft (debounced), not shared; Submit on at 9/9');
-  ok(await asUser(page, HOW, `await db.doc('${DP}').get()`) === 'permission_denied', "Howard can't read Pat's draft");
-  ok(await asUser(page, HOW, `await db.doc('calibMarks/${PAT}/items/x').set({a:1})`) === 'permission_denied' && await asUser(page, HOW, `await db.doc('calibMarks/${HOW}/items/x').set({a:1})`) === 'ok', 'calibMarks/{self}: Howard writes his own marks, never Pat\'s');
-  await asUser(page, HOW, `await db.doc('calibMarks/${HOW}/items/x').delete()`);
-  await page.click('#cbGrid [data-cb="submit"]');
-  await waitDoc(page, `calibMarks/${PAT}/items/${IK}`, 'd.submittedAt');
+  ok(!(await D(page, `calibMarks/${PAT}/items/${IK}`)) && (await txt(page, '#cbFilled')) === '9/9', 'marks save to your private draft (debounced), not shared');
+  ok(await asUser(page, HOW, `await db.doc('${DP}').get()`) === 'permission_denied' && await asUser(page, HOW, `await db.doc('calibMarks/${PAT}/items/x').set({a:1})`) === 'permission_denied', "Howard can't read Pat's draft or write Pat's marks");
+  await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/${IK}`, 'd.submittedAt'); await page.waitForTimeout(150);
   const sub = await D(page, `calibMarks/${PAT}/items/${IK}`);
-  ok(JSON.stringify(sub.marks) === JSON.stringify(Object.assign({}, base)) && sub.kind === 'chat' && sub.key === S0 && /schedule/.test(sub.notes.ev) && !JSON.stringify(sub).includes('Pat'), 'Submit copies the draft to calibMarks/<you>/items/<item> (ids only, no names)');
-  await page.waitForTimeout(150);
-  ok(await page.locator(`#cbGrid th[data-col="${HOW}"] [data-cb="peek"]`).count() === 1 && await page.locator(`#cbGrid th[data-col="${LIQ}"] [data-cb="peek"]`).count() === 0 && (await cell(page, 'ev', 2).innerText()).includes('✓ Scored'), 'after submit: Reveal on Howard (submitted), none on Li Qi');
+  ok(JSON.stringify(sub.marks) === JSON.stringify(base) && sub.kind === 'chat' && sub.key === S0 && !JSON.stringify(sub).includes('Pat'), 'Submit copies the draft to calibMarks/<you>/items/<item> (ids only)');
   await page.click(`#cbGrid th[data-col="${HOW}"] [data-cb="peek"]`); await page.waitForTimeout(100);
-  ok((await cell(page, 'ev', 2).innerText()).trim().startsWith('2') && (await cell(page, 'path', 2).innerText()).trim().startsWith('2') && (await cell(page, 'ev', 3).innerText()).includes('Not yet'), "Reveal shows Howard's marks only");
-  await gridShot(page, 'calib-scorecard-revealed.png');
-  await page.click(`#cbGrid th[data-col="${HOW}"] [data-cb="peek"]`); await page.waitForTimeout(80);
-  ok((await cell(page, 'ev', 2).innerText()).includes('✓ Scored'), 'Hide puts him back');
-  // Li Qi submits elsewhere: her column lights up live
-  await asUser(page, LIQ, `await db.doc('calibMarks/${LIQ}/items/${IK}').set({kind:'chat',key:'${S0}',marks:${JSON.stringify(liqM)},notes:{rs:'Missed the closing time in the restatement.'},submittedAt:'2026-10-14T15:00:00.000Z',updatedAt:'2026-10-14T15:00:00.000Z'})`);
+  ok((await cell(page, 'ev', 2).innerText()).trim().startsWith('2') && (await cell(page, 'ev', 3).innerText()).includes('Not yet'), "Reveal shows Howard's marks only");
+  await page.click(`#cbGrid th[data-col="${HOW}"] [data-cb="peek"]`);
+  await asUser(page, LIQ, `await db.doc('calibMarks/${LIQ}/items/${IK}').set(${JSON.stringify(Object.assign(subDoc('chat', S0, liqM), { notes: { rs: 'Missed the closing time in the restatement.' } }))})`);
   await page.waitForFunction(l => !!document.querySelector(`#cbGrid th[data-col="${l}"] [data-cb="peek"]`), LIQ, { timeout: 3000 });
   ok(true, "Li Qi submits from her own view: her Reveal appears live");
-
-  // ===== 4. Compare all: spread, agreed, settle (one row from Howard, live)
+  // compare, settle, lock
   await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(150);
-  ok(await page.locator('#cbGrid thead th', { hasText: 'Spread' }).count() === 1 && (await txt(page, '#cbr-fr .cbsp')) === 'Match' && (await txt(page, '#cbr-ev .cbsp')) === '1 apart' && await page.locator('#cbr-ev [data-cb="row"]').count() === 1 && (await txt(page, '#cbr-fr .cbag')).trim() === '3', 'Compare all: spread pills, matched rows agreed, the rest Settle');
-  ok((await txt(page, '#cbToSettle')) === '3' && await page.locator('#cbGrid [data-cb="lock"]').isDisabled(), '3 rows to settle; Lock off');
-  await page.click('#cbr-ev > td >> nth=0'); await page.waitForTimeout(100);
-  const cards = await page.locator('#cbGrid .cbdet .cbnt header').allInnerTexts();
-  ok(cards.length === 4 && /Claude/.test(cards[0]) && /You/.test(cards[1]) && /Howard/.test(cards[2]) && /Li Qi/.test(cards[3]) && (await txt(page, '#cbGrid .cbdet')).includes('Opened the schedule eventually'), "a row opens everyone's note cards with Claude's reason");
-  await page.click('#cbr-ev > td >> nth=0'); await page.waitForTimeout(80);
+  ok((await txt(page, '#cbr-fr .cbsp')) === 'Match' && (await txt(page, '#cbr-ev .cbsp')) === '1 apart' && (await txt(page, '#cbToSettle')) === '3', 'Compare all: spread pills, 3 rows to settle');
   await asUser(page, HOW, `await db.doc('calibItems/${IK}/rows/ev').set({mark:1,note:'Evidence comes before any action.',by:'${HOW}',at:'2026-10-14T15:30:00.000Z'})`);
   await page.waitForFunction(() => { const c = document.querySelector('#cbr-ev .cbag'); return c && c.innerText.trim().startsWith('1') }, null, { timeout: 3000 });
-  ok((await txt(page, '#cbToSettle')) === '2', "Howard settles Gathered the evidence: Pat sees it live");
   const settle = async (crit, mark, note) => { if (!(await page.locator(`#cbr-${crit}.open`).count())) await page.click(`#cbr-${crit} > td >> nth=0`); await page.waitForTimeout(80);
     await page.click(`#cbGrid [data-cb="apick"][data-crit="${crit}"][data-v="${mark}"]`); await page.fill(`[data-cbag="${crit}"]`, note); await page.click(`#cbGrid [data-cb="asave"][data-crit="${crit}"]`);
     await waitDoc(page, `calibItems/${IK}/rows/${crit}`, `d.note===${JSON.stringify(note)}`); await page.waitForTimeout(120) };
-  await settle('path', 3, 'Setting the hours was the right path.');
-  await settle('rs', 3, 'Confirmed back in M2.');
-  await settle('tone', 3, 'Clear and kind, not just polite.');
-  ok((await D(page, `calibItems/${IK}/rows/path`)).by === PAT && (await txt(page, '#cbToSettle')) === '0' && await page.locator('#cbGrid [data-cb="lock"]').isEnabled(), 'settled rows are their own docs; every row agreed: Lock on');
-
-  // ===== 5. Lock: the agreed score, lessons (contest + reinforce), the round result
+  await settle('path', 3, 'Setting the hours was the right path.'); await settle('rs', 3, 'Confirmed back in M2.'); await settle('tone', 3, 'Clear and kind, not just polite.');
+  ok((await txt(page, '#cbToSettle')) === '0' && await page.locator('#cbGrid [data-cb="lock"]').isEnabled(), 'every row agreed (one live from Howard): Lock on');
   const agreed = Object.assign({}, base, { ev: 1, path: 3, rs: 3, tone: 3 }), pct = B.chatScore(agreed), vd = B.chatVerdict(pct);
-  await page.click('#cbGrid [data-cb="lock"]');
-  await waitDoc(page, 'calibItems/' + IK, 'd.locked');
+  await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + IK, 'd.locked');
   const it = await D(page, 'calibItems/' + IK);
-  ok(it.locked.pct === pct && it.locked.verdict === vd.id && it.locked.by === PAT && it.kind === 'chat' && it.key === S0 && it.round === 1 && JSON.stringify(it.locked.marks) === JSON.stringify(agreed), `Lock writes the agreed score the scorecard computes (${pct}%, ${vd.label})`);
-  ok((await D(page, `calibItems/${IK}/rows/fr`)).note === 'All matched', 'matched rows get an "All matched" row doc on lock');
+  ok(it.locked.pct === pct && it.locked.verdict === vd.id && it.round === LW && JSON.stringify(it.locked.marks) === JSON.stringify(agreed), `Lock writes the agreed score (${pct}%, ${vd.label}) for the week's round`);
   await page.waitForFunction(p => !!window.__data[p], `chatLessons/${S0}_tone`, { timeout: 5000 });
   const les = await page.evaluate(s => Object.fromEntries(Object.entries(window.__data).filter(([p]) => p.startsWith(`chatLessons/${s}_`)).map(([p, d]) => [p.split('_').pop(), d])), S0);
-  ok(Object.keys(les).sort().join() === 'ev,path,rs,tone', 'lessons only where the panel moved Claude or gave a real reason');
-  ok(les.ev.kind === 'contest' && les.ev.from === '3/3' && les.ev.to === '1/3' && les.ev.reason === 'Evidence comes before any action.' && les.ev.by === 'panel' && les.ev.round === 1 && les.ev.what === 'Cites F1 and F2.', 'contest lesson: Claude 3/3 → agreed 1/3, the agreed note, by panel, round 1');
-  ok(['path', 'rs', 'tone'].every(k => les[k].kind === 'reinforce' && les[k].from === '3/3' && les[k].to === '3/3' && les[k].by === 'panel') && les.tone.reason === 'Clear and kind, not just polite.', 'reinforce lessons: same mark, the agreed reason');
-  const st = await D(page, 'learning/state'), res = st.rounds[0].results;
-  ok(res.length === 1 && res[0].sid === S0 && res[0].yourPct === pct && res[0].aiPct === sample[0].aiPct && res[0].match === (vd.id === sample[0].aiVerdict), "the round records Claude vs the panel's agreed score");
-  const rv = await D(page, `chatWeeks/${LW}/reviews/${S0}`);
-  ok(rv && rv.panel === true && rv.pct === pct && JSON.stringify(rv.scores) === JSON.stringify(agreed), 'the review is the panel\'s agreed score');
+  ok(Object.keys(les).sort().join() === 'ev,path,rs,tone' && les.ev.kind === 'contest' && les.ev.from === '3/3' && les.ev.to === '1/3' && les.ev.by === 'panel' && les.ev.round === 2, 'lessons: a contest where the panel moved Claude, tagged with the Learning round');
+  // Learning sync: the round records the panel's agreed score
+  const st = await D(page, 'learning/state'), res = st.rounds[1].results;
+  ok(res.length === 1 && res[0].sid === S0 && res[0].yourPct === pct && res[0].aiPct === aud(S0).pct && st.rounds[0].status === 'replaced', "Learning: the open round records Claude vs the panel's agreed score");
   await page.waitForTimeout(250);
-  ok((await txt(page, '#tkPct')) === fmt(pct) + '%' && (await txt(page, '#cbAgPct')) === fmt(pct) + '%' && /Agreed/.test(await txt(page, '#cbGrid .cbstatus')) && await page.locator('#coachCopy').count() === 1 && await page.locator('#chatSave').count() === 0, 'the ticket shows the agreed score; coaching from it, no solo Save');
-  ok((await txt(page, '#cbSent')).includes('Gathered the evidence: Claude 3, agreed 1') && (await txt(page, '#cbWho')).includes('Howard: 7 of 9'), 'outcome: sent to the coach, who matched');
+  ok((await txt(page, '#tkPct')) === fmt(pct) + '%' && (await txt(page, '#cbAgPct')) === fmt(pct) + '%' && (await txt(page, '#cbSent')).includes('Gathered the evidence: Claude 3, agreed 1'), 'the ticket shows the agreed score; sent to the coach');
   await gridShot(page, 'calib-scorecard-agreed.png');
-  // Reopen withdraws them
-  await page.click('#cbGrid [data-cb="reopen"]');
-  await waitDoc(page, 'calibItems/' + IK, 'd.locked===null');
-  await page.waitForFunction(s => !Object.keys(window.__data).some(p => p.startsWith(`chatLessons/${s}_`)), S0, { timeout: 5000 });
-  ok(!(await D(page, `chatWeeks/${LW}/reviews/${S0}`)) && await page.locator('#cbGrid [data-cb="lock"]').isEnabled(), 'Reopen clears the lock, withdraws the panel lessons and the review');
-  await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + IK, 'd.locked');
-  await page.waitForFunction(p => !!window.__data[p], `chatLessons/${S0}_ev`, { timeout: 5000 });
-  ok((await D(page, 'learning/state')).rounds[0].results.length === 1, 'locking again records the round once');
-  // a draft on another item, for Howard's view later
-  await page.evaluate(([s, w]) => openChat(s, w), [S1, LW]); await page.waitForTimeout(300);
-  await page.click('#cbGrid [data-cb="pick"][data-crit="fr"][data-v="2"]'); await waitDoc(page, `data/users/${PAT}/calib_chat_${S1}`);
-  const rowSubs = await page.evaluate(() => window.__subs.filter(s => s.on && /^calibItems\/.+\/rows$/.test(s.path)).map(s => s.path));
-  ok(rowSubs.length === 1 && rowSubs[0] === `calibItems/chat_${S1}/rows`, 'rows: one live subscription, for the item on screen');
-  ok(await page.evaluate(() => window.__subs.filter(s => /^calibMarks/.test(s.path)).length) === 4, 'calibMarks: one subscription plus one per grader');
+  await page.evaluate(() => window.scrollTo(0, 0)); await shot(page, 'audit-chat.png');
 
-  // ===== 6. the Calibration tab after one agreed chat
-  await page.click('[data-tab="calib"]'); await page.waitForTimeout(250);
-  ok((await txt(page, '#cbkAgreed b')) === '1 / 10' && (await txt(page, '#cbkTurn b')) === '9' && (await txt(page, `#cbItems tr[data-ik="${IK}"] .pill`)) === 'Agreed', 'KPIs: Agreed 1 / 10, Your turn 9; the item is Agreed');
-  // all three submitted: 9 criteria, ev, path and rs split → 6 of 9 the same
-  ok((await txt(page, '#cbkSame b')) === Math.round(6 / 9 * 100) + '%', 'Same mark, all graders: 6 of 9 criteria');
-  const cl = B.CHAT_RUBRIC.filter(r => String(sample[0].aiScores[r.id]) === String(agreed[r.id])).length;
-  ok((await txt(page, '#cbkClaude b')) === Math.round(cl / 9 * 100) + '%', `Claude vs agreed: ${cl} of 9`);
-  const dis = await page.locator('#cbDis .cbbar').allInnerTexts();
-  ok(dis.length >= 3 && /Gathered the evidence|Resolution path|Restated/.test(dis[0]) && dis[0].includes('100%'), 'Where we disagree most: the split criteria first');
-  ok(await page.locator('#cbEach .cbbar').count() === 4 && (await txt(page, `#cbEach [data-g="${HOW}"]`)).includes(Math.round(7 / 9 * 100) + '%') && await page.locator('#cbEach [data-g="claude"]').count() === 1, 'Each grader vs the agreed mark, Claude included');
-  await shot(page, 'calib-tab.png', true);
-
-  // ===== 7. calls: draw 10 from the week's queue, the inline call, its grid and lock
-  await page.click('[data-cb="kind"][data-v="call"]'); await page.waitForTimeout(150);
-  ok((await txt(page, '#cbRound h2')) === 'No round yet' && await page.locator('#cbDraw').isEnabled(), 'Calls: no round yet, Draw on');
-  await page.click('#cbDraw');
-  await page.waitForFunction(() => Object.keys(window.__data).some(p => p.startsWith('calibRounds/')), null, { timeout: 5000 });
-  const rd = await page.evaluate(() => Object.entries(window.__data).find(([p]) => p.startsWith('calibRounds/'))[1]);
-  const per = {}; rd.items.forEach(x => per[x.sa] = (per[x.sa] || 0) + 1);
-  ok(rd.kind === 'call' && rd.week === LW && rd.items.length === 10 && new Set(rd.items.map(x => x.key)).size === 10 && Object.values(per).every(k => k >= 2 && k <= 3) && rd.by === PAT, `Draw 10: ten calls spread across the SAs (${Object.values(per).join(' ')})`);
-  await page.waitForTimeout(200);
-  ok((await txt(page, '#cbRound h2')) === 'Round 1' && await page.locator('#cbItems tbody tr').count() === 10 && await page.locator('#cbDraw').isDisabled(), 'the call round lists its 10');
-  const CK = rd.items[0].key, CIK = 'call_' + CK;
-  await page.click(`[data-cb="open"][data-ik="${CIK}"]`); await page.waitForTimeout(250);
-  ok(await page.locator('#cbCall').isVisible() && (await txt(page, '#cbCall h2')).startsWith('Sample Oven') && (await txt(page, '#cbCall .cbtkmeta')).includes('CL call') && await page.locator('#cbCall .evrow a', { hasText: '▶ Recording' }).count() === 1 && (await txt(page, '#cbBrief')).includes('not ready on time'), 'the call opens inline: ticket, facts, recording');
-  ok(await page.locator('#cbGrid tbody tr[id^="cbr-"]').count() === 12 && (await txt(page, '#cbr-1a > td >> nth=0')).trim() === '–' && await page.locator('#cbr-1a [data-cb="pick"]').count() === 4 && await page.locator('#cbr-1a [data-cb="pick"][data-v="0"]').count() === 0, 'call grid: 12 rubric items, Claude –, marks 1–3 and N/A');
+  // ===== 3. a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching
+  await page.click('[data-tab="calib"]'); await page.waitForTimeout(200);
+  await page.click('[data-cb="open"][data-ik="call_qana2"]'); await page.waitForTimeout(400);
+  ok(await tab(page) === 'chat' && await page.evaluate(() => callSel) === 'qana2' && await page.evaluate(() => location.hash) === `#call/${LW}/qana2`, 'a round call opens in the Audit tab (#call/<week>/<id>)');
+  ok(await page.locator('#cTicket').isVisible() && await page.locator('#cs-ev').isVisible() && await page.locator('#cs-score').isVisible() && await page.locator('#cs-coach').isVisible(), 'four sections: Ticket, Evidence, Scorecard, Coaching');
+  const tk = (await txt(page, '#cbTkPan-ticket')).replace(/\s+/g, ' ');
+  ok((await txt(page, '#cTicket .tkid')).includes('Sample Oven qana2') && tk.includes('Ana Ruiz') && tk.includes('R95002') && /CALL TYPE CL/i.test(tk) && /TALK TIME 6:20/i.test(tk) && /LINKED CALLS 2 calls/i.test(tk) && /TEAM Case with Mo Reyes/i.test(tk) && /WIRA TASKS 1 linked/i.test(tk) && await page.locator('#cbTkPan-ticket .tkrec').count() === 2,
+    'Ticket: SA, restaurant and code, call type, talk time, linked calls, the other SA on the case, tasks, recordings');
+  ok((await page.locator('#cTicket [role=tab]').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim()).join('|') === 'Ticket|Transcript 2', 'tabs: Ticket | Transcript');
+  await page.click('#cbTkTab-tx');
+  await page.waitForFunction(() => /My pickup order from Sample Oven qana2/.test((document.getElementById('cbTkPan-tx') || {}).innerText || ''), null, { timeout: 4000 });
+  ok(await page.locator('#cbTkPan-ticket').isHidden() && await page.locator('#cbTkPan-tx .cbtxleg').count() === 2 && (await txt(page, '#cbTkPan-tx')).includes('Caller: My pickup order') && await page.locator('#cbTkPan-tx a.tkrec').count() === 2, 'Transcript: each linked call with its recording and the speaker-labelled text');
+  await page.evaluate(() => document.getElementById('cTicket').scrollIntoView({ block: 'start' })); await shot(page, 'audit-call-transcript.png');
+  await page.click('#cbTkTab-ticket'); await page.waitForTimeout(80);
+  const br = await page.locator('#cbEvBrief li').allInnerTexts();
+  ok(br.length >= 1 && br.length <= 5 && br[0].includes('not ready on time') && await page.locator('#cbEvSrcs .evrow[data-ek="call"] a.rec').count() === 2 && await page.locator('#cbEvSrcs .evrow[data-ek="task"]').count() === 1 && await page.locator('#cbEvSrcs .evrow[data-ek="gd"]').count() === 1, 'Evidence: What happened from the AI facts; a row per call with ▶ Recording, the WIRA task, GreenDot');
+  ok(await page.locator('#cbEvFull').isHidden(), 'full sources folded');
+  await page.click('#cbEvMore'); await page.waitForTimeout(80);
+  ok(await page.locator('#cbEvFull').isVisible() && await page.locator('#cbEvFull .legs li').count() === 2 && (await txt(page, '#cbEvFull')).includes('the ticket never printed') && (await txt(page, '#cbEvFull')).includes('The store remade the order.'), 'Timeline and full sources: the legs, the facts timeline, the task');
+  await page.click('#cbEvMore');
+  ok(await page.locator('#cbGrid tbody tr[id^="cbr-"]').count() === 12 && (await txt(page, '#cbr-1a > td >> nth=0')).trim() === '–' && await page.locator('#cbr-1a [data-cb="pick"]').count() === 5 && await page.locator('#cbr-1a [data-cb="pick"][data-v="0"]').count() === 1, 'call grid on the live rubric: 12 rows, marks 0–3 and N/A, Claude –');
   await page.click('#cbGrid [data-cb="panel"][data-crit="2b"]'); await page.waitForTimeout(150);
   const pn = await txt(page, '#cbPanel');
-  ok(await page.locator('#cbPanel').isVisible() && pn.includes('Root cause and fault') && pn.includes(RV1.call[1].items.find(x => x.id === '2b').lv['1']) && pn.includes('the ticket never printed'), "a call criterion opens its levels and the call's facts");
-  await page.click('#cbPanel [data-cb="pclose"]'); await page.waitForTimeout(80);
+  ok(await page.locator('#cbPanel').isVisible() && pn.includes('Root cause and fault') && pn.includes(V2I.find(x => x.id === '2b').lv[0]) && pn.includes(V2I.find(x => x.id === '2b').lv[3]) && pn.includes('the ticket never printed'), "a call criterion opens the panel: its 0–3 levels and the call's facts");
+  // rail vs the panel at 1280: the checklist folds above the ticket
+  const ov = () => page.evaluate(() => { const p = document.getElementById('cbPanel').getBoundingClientRect(), r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect();
+    return { hit: r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom, above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display } });
+  let o = await ov();
+  ok(!o.hit && o.above && o.body === 'none', '1280px with the panel open: the checklist folds to a toggle above the ticket, no overlap');
+  await page.click('#cbRail .cbrtog'); await page.waitForTimeout(100); o = await ov();
+  ok(!o.hit && o.body !== 'none', 'opened, the list stays clear of the panel');
+  await page.click('#cbRail .cbrtog'); await page.click('#cbPanel [data-cb="pclose"]'); await page.waitForTimeout(100);
   ok(await page.locator('#cbPanel').isHidden(), 'the panel closes');
-  const cm = {}; RV1.call.forEach(s => s.items.forEach(x => cm[x.id] = 3)); cm['2b'] = 2; cm['3b'] = 'na';
+  const cm = callMarks(3); cm['2b'] = 1; cm['2d'] = 2; cm['3b'] = 'na';
   for (const [k, v] of Object.entries(cm)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
-  await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/${CIK}`, 'd.submittedAt'); await page.waitForTimeout(120);
+  await page.click('#cbGrid [data-cb="note"][data-crit="2b"]'); await page.fill('[data-cbnote="2b"]', 'Blamed the store before checking the ticket printer.');
+  await page.click('#cbGrid button[data-cb="note"][data-crit="2b"]:not(.cbnotebtn)');
+  await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/call_qana2`, 'd.submittedAt'); await page.waitForTimeout(120);
   await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(120);
-  await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + CIK, 'd.locked');
-  let W = 0, E = 0; RV1.call.forEach(s => s.items.forEach(x => { const v = cm[x.id], p = v === 'na' ? 1 : (v - 1) / 2; W += x.w; E += p * x.w }));
-  const cpct = Math.round(E / W * 1000) / 10, ci = await D(page, 'calibItems/' + CIK);
-  ok(Math.abs(ci.locked.pct - cpct) < 0.051 && ci.locked.verdict === B.chatVerdict(ci.locked.pct).id && ci.kind === 'call' && ci.key === CK, `call lock: the call rubric calc (${ci.locked.pct}%)`);
-  await page.waitForTimeout(200);
-  ok((await txt(page, '#cbCall .cbverd')).includes(fmt(ci.locked.pct) + '%') && !(await page.evaluate(k => Object.keys(window.__data).some(p => p.startsWith('chatLessons/') && p.includes(k)), CK)), 'the agreed call score shows; no chat lessons for a call');
-  await shot(page, 'calib-call.png', true);
-  await page.click('[data-cb="back"]'); await page.waitForTimeout(150);
-  ok((await txt(page, '#cbkAgreed b')) === '1 / 10' && (await txt(page, '#cbkClaude b')) === '–', 'call KPIs: 1 agreed, no Claude column for calls');
+  await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/call_qana2', 'd.locked');
+  const ci = await D(page, 'calibItems/call_qana2'), cpct = callPct(cm);
+  ok(ci.locked.pct === cpct && ci.kind === 'call' && ci.key === 'qana2' && ci.round === LW, `call lock: the live rubric's calc, N/A left out (${cpct}%)`);
+  await page.waitForTimeout(250);
+  ok((await txt(page, '#tkPct')) === fmt(cpct) + '%' && (await txt(page, '#cvPct')) === fmt(cpct) + '%' && (await txt(page, '#cs-score .qans')).includes('Agreed'), 'the ticket and board show the agreed call score');
+  const fix = await page.locator('#cbFixes .fixcard').evaluateAll(x => x.map(c => ({ id: c.dataset.fix, t: c.innerText })));
+  ok(await page.locator('#cbWell .cbwchip').count() === 9 && fix.length === 2 && fix[0].id === '2b' && fix[0].t.includes('Blamed the store before checking') && fix[0].t.includes('1/3') && fix[1].id === '2d' && await page.locator('#cbCoachCopy').count() === 1,
+    'Coaching from the agreed marks: what went well (9 rows at 3), a card per row below full marks with its note, Copy all');
+  ok(!(await page.evaluate(() => Object.keys(window.__data).some(p => p.startsWith('chatLessons/') && p.includes('qana2')))), 'no chat lessons for a call');
+  await page.evaluate(() => window.scrollTo(0, 0)); await shot(page, 'audit-call.png');
 
-  // ===== 8. 390px and dark
-  await page.click('[data-cb="kind"][data-v="chat"]'); await page.waitForTimeout(100);
-  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(100);
-  ok(await page.evaluate(() => getComputedStyle(document.querySelector('#cbRound')).backgroundColor) !== 'rgb(255, 255, 255)' && await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g1').trim()) === '#5fc7da', 'dark: the tab and the grader colours take the dark tokens');
-  await shot(page, 'calib-dark.png', true);
-  for (const wd of [390, 760]) { await page.setViewportSize({ width: wd, height: 860 }); await page.waitForTimeout(150); ok(await width(page) <= wd, `${wd}px Calibration tab (dark): no horizontal overflow (${await width(page)})`) }
+  // ===== 4. the mixed checklist and Prev / Next across chats and calls
+  const R = await page.locator('#cbRail .cbrrow').evaluateAll(x => x.map(r => ({ ik: r.dataset.ik, kind: r.dataset.kind, st: r.dataset.st, cur: r.classList.contains('cur') })));
+  ok(R.length === 22 && await page.locator('#cbRail .cbrgrp').count() === 6 && R.filter(r => r.kind === 'call').length === 9 && await page.locator('#cbRail .cbrrow[data-kind="call"] .cbkic.call').count() === 9 && R.find(r => r.cur).ik === 'call_qana2', 'the checklist: 22 items by SA, an icon per kind, the open call highlighted');
+  const qi = items.findIndex(x => x.key === 'qana2');
+  ok((await txt(page, '#navPos')) === `Week ${WL} · ${qi + 1} of 22`, 'Prev / Next run through the round');
+  await page.click('#navPrev'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => callSel) === 'qana1', 'Prev: the call before');
+  await page.click('#navPrev'); await page.waitForTimeout(350);
+  ok(await page.evaluate(() => callSel) === null && await page.evaluate(() => chatSel) === items[qi - 2].key && await page.locator('#cbGrid').count() === 1, 'Prev again crosses from calls to the last Ana chat');
+  await page.click('#navNext'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => callSel) === 'qana1' && (await txt(page, '#navBack')).includes(items[qi - 2].restaurant), 'Next steps back to the call; Back names the chat');
+  await page.click('#navBack'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => chatSel) === items[qi - 2].key && await page.evaluate(() => callSel) === null, 'Back returns to that chat');
+  // the four statuses
+  const [cA, cB, cC] = [items[0], items[1], items[2]];
+  await asUser(page, PAT, `await db.doc('calibMarks/${PAT}/items/chat_${cA.key}').set(${JSON.stringify(subDoc('chat', cA.key, base))})`);
+  for (const u of [HOW, LIQ]) await asUser(page, u, `await db.doc('calibMarks/${u}/items/chat_${cA.key}').set(${JSON.stringify(subDoc('chat', cA.key, base))})`);
+  await asUser(page, PAT, `await db.doc('calibMarks/${PAT}/items/chat_${cB.key}').set(${JSON.stringify(subDoc('chat', cB.key, base))})`);
+  await page.waitForTimeout(300);
+  const st2 = Object.fromEntries((await page.locator('#cbRail .cbrrow').evaluateAll(x => x.map(r => [r.dataset.ik, [r.dataset.st, r.innerText.replace(/\s+/g, ' ')]]))));
+  ok(st2['chat_' + cA.key][0] === 'done' && /All in/.test(st2['chat_' + cA.key][1]) && st2['chat_' + cB.key][0] === 'wait' && /Waiting on others/.test(st2['chat_' + cB.key][1]) && st2['chat_' + cC.key][0] === 'mine' && /Yours to do/.test(st2['chat_' + cC.key][1]) && st2.call_qana2[0] === 'agreed' && st2.call_qana2[1].includes('Agreed ' + fmt(cpct) + '%'),
+    'statuses: all in, waiting on others, yours to do, agreed with the score');
+  ok((await txt(page, '#cbRailDone')) === '4 of 22 done (you)', '"4 of 22 done (you)"');
+  ok(await page.evaluate(() => { const s = document.querySelector('#view-chat .cside'), r = document.getElementById('cbRail').getBoundingClientRect(), c = document.querySelector('#view-chat .ccol').getBoundingClientRect(); return getComputedStyle(s).position === 'sticky' && r.left >= c.right }), '1280px: the checklist sits in the sticky right column');
+  // 390px: the toggle above the ticket
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+  o = await page.evaluate(() => { const r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect(); return { above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display } });
+  ok(o.above && o.body === 'none' && await width(page) <= 390, '390px chat: a Round checklist toggle above the ticket, no overflow');
+  await page.evaluate(() => openCall('qana2')); await page.waitForTimeout(300);
+  ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cTicket, #cs-ev, #cs-coach, #chNav button')].every(e => e.getBoundingClientRect().right <= 391)), '390px call audit: no horizontal overflow');
+  await shot(page, 'audit-call-390.png', true);
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cTicket')).backgroundColor) !== 'rgb(255, 255, 255)' && await width(page) <= 390, 'dark: the call audit takes the dark tokens');
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(150);
+  await shot(page, 'audit-call-dark.png');
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(120);
-  await shot(page, 'calib-390.png', true);
-  await page.click(`[data-cb="open"][data-ik="${IK}"]`); await page.waitForTimeout(300);
-  ok(await width(page) <= 390 && await page.evaluate(() => { const s = document.querySelector('#cbGrid .cbscroll'); return !!s && s.getBoundingClientRect().right <= 390 }), '390px audit: the grid scrolls inside its box, the page does not');
-  await shot(page, 'calib-scorecard-390.png', true);
-  await page.click('[data-tab="calib"]'); await page.waitForTimeout(100);
-  await page.click('[data-cb="kind"][data-v="call"]'); await page.click(`[data-cb="open"][data-ik="${CIK}"]`); await page.waitForTimeout(200);
-  ok(await width(page) <= 390, '390px call view: no horizontal overflow');
+
+  // ===== 5. Learning lists the round's chats; the Round tab after two agreed items
+  await page.click('[data-tab="learn"]'); await page.waitForTimeout(200);
+  ok(await page.locator('#lrRound .lrrow').count() === 13 && (await txt(page, '#lrRound .bhd h2')) === 'Round 2' && await page.locator('#lrRound [data-go="calib"]').count() === 1 && await page.locator('#lrDraw').count() === 0, "Learning: Round 2 lists the week's 13 chats; drawing happens in the Round tab");
+  await page.click('[data-tab="calib"]'); await page.waitForTimeout(250);
+  ok((await txt(page, '#cbkAgreed b')) === '2 / 22' && (await txt(page, '#cbkAgreed .hint')).startsWith('1 chat · 1 call') && (await txt(page, '#cbSum')).endsWith('you: 4 of 22 done') && (await txt(page, '#cbGo')).startsWith('Continue'), 'KPIs split by kind; header and Continue move on');
+  ok((await txt(page, '#cbkSame b')) === Math.round(18 / 21 * 100) + '%' && (await txt(page, '#cbkClaude b')) === Math.round(B.CHAT_RUBRIC.filter(r => String(aud(S0).scores[r.id]) === String(agreed[r.id])).length / 9 * 100) + '%', 'Same mark and Claude vs agreed');
+  ok(await page.locator('#cbDisChat .cbbar').count() >= 3 && /hint/.test(await page.locator('#cbDisCall').getAttribute('class')) && await page.locator('#cbEach .cbbar').count() === 4, 'Where we disagree most, split by Chats and Calls; each grader vs agreed');
+  await page.click('#cbGo'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => chatSel) === cC.key, 'Continue opens the first item I haven\'t submitted');
+  await page.click('[data-tab="calib"]'); await page.waitForTimeout(200);
+  await shot(page, 'round-tab.png', true);
+  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+  ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cbItems .cbirow')].every(e => e.getBoundingClientRect().right <= 390)), '390px Round tab: rows stack, no horizontal overflow');
+  await shot(page, 'round-tab-390.png', true);
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
+  ok(await page.evaluate(() => getComputedStyle(document.querySelector('#cbRound')).backgroundColor) !== 'rgb(255, 255, 255)' && await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g1').trim()) === '#5fc7da' && await width(page) <= 390, 'dark: the Round tab and the grader colours take the dark tokens');
+  await shot(page, 'round-tab-390-dark.png', true);
+  await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 });
   ok(!errors.length, 'no console errors (Pat) ' + JSON.stringify(errors));
 
-  // ===== 9. Howard's view: his own column, Pat's draft stays hidden
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // ===== 6. old hashes and Call tools
+  await page.click('[data-calltools]'); await page.waitForTimeout(200);
+  ok(await tab(page) === 'queue' && await page.locator('#sub-calls').isVisible() && (await page.locator('[data-calltools]').getAttribute('aria-current')) === 'page', 'Call tools opens Snapshot with its own row (Snapshot, Calls, Facts)');
+  for (const [h, t, extra] of [['#calls', 'calls'], ['#queue', 'queue'], ['#facts', 'facts'], ['#chats', 'chats'], ['#calib', 'calib'], ['#round', 'calib'], ['#learn', 'learn'], ['#score', 'calls'],
+    [`#chat/${LW}/${S0}`, 'chat', () => page.evaluate(() => callSel === null && chatSel === '9930010')], [`#call/${LW}/qana3`, 'chat', () => page.evaluate(() => callSel === 'qana3' && !!document.querySelector('#cTicket[data-call="qana3"]'))]]) {
+    await page.goto('http://qa.test/' + h); await page.reload(); await page.waitForTimeout(600);
+    ok(await tab(page) === t && (await page.locator('#sub-calls').isVisible()) === ['calls', 'queue', 'facts'].includes(t) && (!extra || await extra()), `${h} still opens ${t}`) }
+  ok(!errors.length, 'no console errors (hashes) ' + JSON.stringify(errors));
+
+  // ===== 7. Howard's view: not the owner
+  await page.goto('http://qa.test/#calib'); await page.reload(); await page.waitForTimeout(600);
   await page.evaluate(h => window.__switch(h), HOW).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(800);
-  ok(await page.evaluate(() => myId) === HOW && await page.evaluate(() => amOwner) === false, 'reloaded as Howard (not the owner)');
-  await page.evaluate(() => setTab('calib')); await page.click('[data-cb="kind"][data-v="chat"]'); await page.waitForTimeout(250);
-  ok((await txt(page, '#cbkTurn b')) === '9' && (await txt(page, `#cbItems tr[data-ik="${IK}"] .pill`)) === 'Agreed', "Howard's KPIs: his turn on 9, the first chat Agreed");
-  await page.click(`[data-cb="open"][data-ik="chat_${S1}"]`); await page.waitForTimeout(350);
-  ok(/you/i.test(await txt(page, `#cbGrid th[data-col="${HOW}"]`)) && await page.locator('#cbr-fr [data-cb="pick"]').count() > 0 && (await cell(page, 'fr', 1).innerText()).includes('Not yet'), "Howard scores in his own column; Pat's draft shows as Not yet");
-  ok(!(await page.evaluate(() => (window.__denied || []).length)), 'the page never reads someone else\'s draft');
+  ok(await page.evaluate(() => myId) === HOW && await page.evaluate(() => amOwner) === false && await tab(page) === 'calib', 'reloaded as Howard (not the owner), on the Round');
+  ok(await page.locator('#cbGrBtn, #cbDraw, #cbRedraw').count() === 0, 'no Graders, Draw or Redraw for him');
+  await page.click(`[data-cb="open"][data-ik="chat_${cC.key}"]`); await page.waitForTimeout(350);
+  ok(/you/i.test(await txt(page, `#cbGrid th[data-col="${HOW}"]`)) && await page.locator('#cbr-fr [data-cb="pick"]').count() > 0, 'Howard scores in his own column');
+  ok(!(await page.evaluate(() => (window.__denied || []).length)), "the page never reads someone else's draft");
   ok(!errors.length, 'no console errors (Howard) ' + JSON.stringify(errors));
   await ctx.close();
 
+  // ===== 8. World B: the draw
   {
-  // ===== 10. the round checklist, Back and Prev / Next (a fresh desk: Pat submitted S2, all three S3, S4 agreed; a call round of 10)
-  const S = i => sample[i].sid, ikOf = i => 'chat_' + S(i), sub = (u, i, m) => [`calibMarks/${u}/items/${ikOf(i)}`, { kind: 'chat', key: S(i), marks: m || base, notes: {}, submittedAt: '2026-10-13T11:00:00.000Z', updatedAt: '2026-10-13T11:00:00.000Z' }];
-  const aPct = B.chatScore(base);
-  const seed2 = seed.concat([sub(PAT, 2), sub(PAT, 3), sub(HOW, 3), sub(LIQ, 3), sub(PAT, 4), sub(HOW, 4), sub(LIQ, 4),
-    ['calibItems/' + ikOf(4), { kind: 'chat', key: S(4), round: 1, locked: { by: PAT, at: '2026-10-14T09:00:00.000Z', pct: aPct, verdict: B.chatVerdict(aPct).id, marks: base } }],
-    ['calibRounds/r1', { kind: 'call', week: LW, items: calls.slice(0, 10).map(([p, q]) => ({ key: p.split('/')[1], sa: q.agent })), drawnAt: '2026-10-14T08:00:00.000Z', by: PAT }]]);
-  ({ page, ctx, errors } = await openPage(b, seed2, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
-  await page.goto('http://qa.test/#calib'); await page.waitForTimeout(600);
-  await page.click(`[data-cb="open"][data-ik="${ikOf(0)}"]`); await page.waitForTimeout(400);
-  const rows = () => page.evaluate(() => [...document.querySelectorAll('#cbRail .cbrrow')].map(r => ({ ik: r.dataset.ik, st: r.dataset.st, cur: r.classList.contains('cur'), t: r.innerText.replace(/\s+/g, ' ').trim() })));
-  let R = await rows();
-  ok(await page.locator('#cbRail').isVisible() && R.length === 10 && R[0].cur && R.filter(r => r.cur).length === 1, 'Audit: the round checklist lists the 10 round chats, the open one highlighted');
-  ok(R[0].t.startsWith(sample[0].restaurant) && R[0].t.includes(sample[0].sa.split(' ')[0]) && !R[0].t.includes(sample[0].sa.split(' ')[1]), 'a row: restaurant and the SA first name');
-  ok(R[0].st === 'mine' && /Yours to do/.test(R[0].t) && R[2].st === 'wait' && /Waiting on others/.test(R[2].t) && R[3].st === 'done' && /All in/.test(R[3].t) && R[4].st === 'agreed' && R[4].t.includes('Agreed ' + fmt(aPct) + '%'), 'statuses: yours to do, waiting on others, all in, agreed with the score');
-  ok((await txt(page, '#cbRailDone')) === '3 of 10 done (you)', '"3 of 10 done (you)" at the top');
-  ok(await page.evaluate(() => { const s = document.querySelector('#view-chat .cside'), r = document.getElementById('cbRail').getBoundingClientRect(), b = document.getElementById('chatBoard').getBoundingClientRect(), c = document.querySelector('#view-chat .ccol').getBoundingClientRect();
-    return getComputedStyle(s).position === 'sticky' && r.left >= c.right && Math.abs(r.left - b.left) < 1 && r.top >= b.bottom }), '1280px: the checklist sits under the board in the sticky right column, clear of the sections');
-  await page.evaluate(() => window.scrollTo(0, 500)); await page.waitForTimeout(150);
-  ok(await page.evaluate(() => { const r = document.querySelector('#view-chat .cside').getBoundingClientRect(); return Math.abs(r.top - 12) < 2 && window.scrollY >= 450 }), 'the right column stays on screen when the audit scrolls');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await shot(page, 'calib-audit-rail.png');
-  // Back: open A (from Calibration), open B from the checklist, Back → A, Back → Calibration
-  ok((await txt(page, '#navBack')).includes('Calibration'), 'Back names where it goes: Calibration');
-  await page.click(`#cbRail [data-ik="${ikOf(5)}"]`); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => chatSel) === S(5) && (await page.locator('#cbRail .cbrrow.cur').getAttribute('data-ik')) === ikOf(5) && (await txt(page, '#navBack')).includes(sample[0].restaurant), 'a checklist row opens that chat; Back now names the chat we came from');
-  await page.click('#navBack'); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => tab) === 'chat' && await page.evaluate(() => chatSel) === S(0), 'Back returns to chat A');
-  await page.click('#navBack'); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => tab) === 'calib' && await page.locator('#cbItems').isVisible(), 'Back again returns to the Calibration tab');
-  // Prev / Next through the round
-  await page.click(`[data-cb="open"][data-ik="${ikOf(0)}"]`); await page.waitForTimeout(350);
-  ok(await page.locator('#navPrev').isDisabled() && await page.locator('#navNext').isEnabled() && (await txt(page, '#navPos')) === 'Round 1 · 1 of 10', 'first round chat: Prev off, "Round 1 · 1 of 10"');
-  await page.click('#navNext'); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => chatSel) === S(1) && (await txt(page, '#navPos')) === 'Round 1 · 2 of 10' && await page.locator('#navPrev').isEnabled(), 'Next steps to the second round chat');
-  await page.click('#navPrev'); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => chatSel) === S(0), 'Prev steps back');
-  await page.click(`#cbRail [data-ik="${ikOf(9)}"]`); await page.waitForTimeout(350);
-  ok(await page.locator('#navNext').isDisabled() && (await txt(page, '#navPos')) === 'Round 1 · 10 of 10', 'last round chat: Next off');
-  await page.click('#navBack'); await page.waitForTimeout(350);
-  ok(await page.evaluate(() => chatSel) === S(0), 'Back after Prev/Next and a checklist jump returns to the previous chat');
-  // a chat outside the round: Prev / Next follow the queue order, no checklist
-  const outSid = L.list.find(x => !sample.some(y => y.sid === x.sid)).sid;
-  await page.evaluate(([s, w]) => openChat(s, w), [outSid, LW]); await page.waitForTimeout(350);
-  const qOrder = await page.evaluate(() => chSort(chatsOfWeek()).map(c => String(c.sid)));
-  ok(await page.locator('#cbRail').count() === 0 && (await txt(page, '#navPos')) === `${qOrder.indexOf(String(outSid)) + 1} of ${qOrder.length}`, 'outside the round: no checklist, Prev / Next through the queue order');
-  await page.click('#navBack'); await page.waitForTimeout(300);
-  // rail vs the facts panel at 1280: the checklist folds above the ticket, clear of the panel
-  await page.click('#cbGrid [data-psrc="ev"]'); await page.waitForTimeout(250);
-  const ov = () => page.evaluate(() => { const p = document.getElementById('chPanel').getBoundingClientRect(), r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect();
-    return { hit: r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom, above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display, tog: getComputedStyle(document.querySelector('#cbRail .cbrtog')).display } });
-  let o = await ov();
-  ok(await page.locator('#chPanel').isVisible() && !o.hit && o.above && o.body === 'none' && o.tog !== 'none', '1280px with the facts panel open: the checklist folds to a toggle above the ticket, no overlap');
-  await page.click('#cbRail .cbrtog'); await page.waitForTimeout(120); o = await ov();
-  ok(!o.hit && o.body !== 'none' && (await page.locator('#cbRail .cbrtog').getAttribute('aria-expanded')) === 'true', 'the toggle opens the list, still clear of the panel');
-  await shot(page, 'calib-audit-rail-panel.png');
-  await page.click('#cbRail .cbrtog'); await page.click('#chpClose'); await page.waitForTimeout(150);
-  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbRailBody')).display) !== 'none' && await page.evaluate(() => getComputedStyle(document.querySelector('#cbRail .cbrtog')).display) === 'none', 'panel closed: the checklist is back on the right');
-  // 390px: a "Round checklist" toggle above the ticket
-  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
-  o = await page.evaluate(() => { const r = document.getElementById('cbRail').getBoundingClientRect(), t = document.getElementById('cTicket').getBoundingClientRect(); return { above: r.bottom <= t.top, body: getComputedStyle(document.getElementById('cbRailBody')).display, w: r.right } });
-  ok(o.above && o.body === 'none' && o.w <= 390 && (await txt(page, '#cbRail .cbrtog')).includes('Round checklist') && await width(page) <= 390, '390px: a Round checklist toggle above the ticket, folded, no overflow');
-  await page.click('#cbRail .cbrtog'); await page.waitForTimeout(120);
-  ok(await page.locator('#cbRail .cbrrow').first().isVisible() && await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cbRail .cbrrow, #chNav button')].every(e => e.getBoundingClientRect().right <= 390)), '390px: the list opens, rows and the nav fit');
-  await shot(page, 'calib-audit-rail-390.png');
-  await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(120);
-  ok(await page.evaluate(() => getComputedStyle(document.getElementById('cbRail')).backgroundColor) !== 'rgb(255, 255, 255)' && await width(page) <= 390, 'dark: the checklist takes the dark tokens');
-  await shot(page, 'calib-audit-rail-390-dark.png');
-  await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(150);
-  await shot(page, 'calib-audit-rail-dark.png');
-  await page.emulateMedia({ colorScheme: 'light' });
-  // calls: the same checklist in the inline call view; a row is a navigation
-  await page.click('[data-tab="calib"]'); await page.click('[data-cb="kind"][data-v="call"]'); await page.waitForTimeout(200);
-  const C0 = 'call_' + calls[0][0].split('/')[1], C3 = 'call_' + calls[3][0].split('/')[1];
-  await page.click(`[data-cb="open"][data-ik="${C0}"]`); await page.waitForTimeout(250);
-  ok(await page.locator('#cbRail .cbrrow').count() === 10 && (await page.locator('#cbRail .cbrrow.cur').getAttribute('data-ik')) === C0 && (await txt(page, '#cbRailDone')) === '0 of 10 done (you)' && await page.evaluate(() => { const r = document.getElementById('cbRail').getBoundingClientRect(), c = document.getElementById('cbCall').getBoundingClientRect(); return r.left >= c.right }), 'call view: the round checklist on the right');
-  await page.click(`#cbRail [data-ik="${C3}"]`); await page.waitForTimeout(250);
-  ok((await page.locator('#cbGrid').getAttribute('data-ik')) === C3 && (await txt(page, '#view-calib .cnavback')).includes('Sample Oven 1'), 'a call row opens that call; Back names the previous call');
-  await page.click('#view-calib [data-cb="back"]'); await page.waitForTimeout(250);
-  ok((await page.locator('#cbGrid').getAttribute('data-ik')) === C0, 'Back returns to the previous call');
-  await page.click('#view-calib [data-cb="back"]'); await page.waitForTimeout(250);
-  ok(await page.locator('#cbItems').isVisible(), 'Back again returns to the call list');
-  ok(!errors.length, 'no console errors (checklist, Back) ' + JSON.stringify(errors));
-  await ctx.close();
+    const seedB = base0.concat([['learning/state', oldState], prevRound], joined);
+    ({ page, ctx, errors } = await openPage(b, seedB, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW, tx: TXI }));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(700);
+    await page.evaluate(h => window.__switch(h), HOW).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(700);
+    ok((await txt(page, '#cbNone')) === 'No round for this week yet.' && await page.locator('#cbDraw').count() === 0, 'no round: the line only for a grader who is not the owner');
+    await page.evaluate(p => window.__switch(p), PAT).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(800);
+    ok((await txt(page, '#cbNone')) === 'No round for this week yet.' && await page.locator('#cbDraw').isVisible(), 'the owner sees Draw');
+    await page.click('#cbDraw'); await waitDoc(page, 'calibRounds/' + LW);
+    const rd = await D(page, 'calibRounds/' + LW), cnt = (sa, k) => rd.items.filter(x => x.sa === sa && x.kind === k).length;
+    ok(rd.week === LW && rd.by === PAT && JSON.stringify(rd.sas) === JSON.stringify(SAS) && rd.items.length === 22, 'Draw writes calibRounds/<week>: 22 items for the 6 SAs');
+    ok(['Ana Ruiz', 'Ben Okafor'].every(sa => cnt(sa, 'chat') === 3 && cnt(sa, 'call') === 3) && cnt('Cleo Marsh', 'chat') === 2 && cnt('Cleo Marsh', 'call') === 1 && cnt('Dev Patel', 'call') === 0 && cnt('Eli Novak', 'call') === 2 && cnt('Faye Lund', 'chat') === 1, '3 chats and 3 calls per SA; a short SA gets what exists');
+    const anaChats = rd.items.filter(x => x.sa === 'Ana Ruiz' && x.kind === 'chat').map(x => x.key), anaCalls = rd.items.filter(x => x.sa === 'Ana Ruiz' && x.kind === 'call').map(x => x.key).sort();
+    ok(anaChats.includes(L.list[0].sid) && JSON.stringify(anaCalls) === '["qana2","qana3","qana4"]', 'items not drawn before come first (the one Ana chat outside the old Learning round; her calls skip the one drawn last week)');
+    ok(!rd.items.some(x => x.key === 'qben4' || x.key === 'qold1') && rd.items.filter(x => x.kind === 'chat').every(x => x.aiPct === aud(x.key).pct), 'removed and other-week calls are never drawn; chats carry Claude\'s score at draw');
+    let stB = await D(page, 'learning/state');
+    ok(stB.rounds.length === 2 && stB.rounds[0].status === 'replaced' && stB.rounds[0].replacedAt && stB.rounds[1].status === 'open' && stB.rounds[1].week === LW && stB.week === LW && stB.rounds[1].sample.length === 13
+      && stB.rounds[1].sample.every(x => { const a = aud(x.sid); return x.aiPct === a.pct && x.aiVerdict === a.verdict && JSON.stringify(x.aiScores) === JSON.stringify(a.scores) }), 'Learning: the old open round is marked replaced (kept), the new one lists the 13 chats with Claude at draw');
+    await page.waitForTimeout(250);
+    ok((await txt(page, '#cbSum')) === '22 items · you: 0 of 22 done' && await page.locator('#cbRedraw').isVisible() && await page.locator('#cbRdConfirm').count() === 0, 'the round shows; Redraw while nobody has submitted');
+    await page.click('#cbRedraw'); await page.waitForTimeout(100);
+    ok(await page.locator('#cbRdConfirm').isVisible() && (await txt(page, '#cbRdConfirm')).includes('Replace this week\'s 22 items'), 'Redraw asks in the page first');
+    await page.click('#cbRdConfirm [data-cb="redraw"]'); await page.waitForTimeout(100);
+    ok(await page.locator('#cbRdConfirm').count() === 0 && (await D(page, 'calibRounds/' + LW)).drawnAt === rd.drawnAt, 'Cancel leaves the round alone');
+    await page.click('#cbRedraw'); await page.click('#cbRdGo');
+    await page.waitForFunction(() => window.__data['learning/state'].rounds.length === 3, null, { timeout: 5000 }); await page.waitForTimeout(200);
+    stB = await D(page, 'learning/state');
+    ok(stB.rounds.length === 3 && stB.rounds[1].status === 'replaced' && stB.rounds[2].status === 'open' && (await D(page, 'calibRounds/' + LW)).items.length === 22, 'Redraw replaces the round and its Learning round');
+    const first = (await D(page, 'calibRounds/' + LW)).items[0];
+    await asUser(page, HOW, `await db.doc('calibMarks/${HOW}/items/${first.kind}_${first.key}').set(${JSON.stringify(subDoc(first.kind, first.key, {}))})`); await page.waitForTimeout(250);
+    ok(await page.locator('#cbRedraw').count() === 0, 'once anyone submits, no Redraw');
+    ok(!errors.length, 'no console errors (draw) ' + JSON.stringify(errors));
+    await ctx.close();
+  }
 
-  // ===== 11. expected graders: only Pat has opened the desk (and his name doesn't resolve: the owner counts as Pat)
-  const seed3 = seed.filter(([p]) => !/^calibMarks\/(u_howard|u_liqi)/.test(p));
-  ({ page, ctx, errors } = await openPage(b, seed3, { people: { [HOW]: 'Howard', [LIQ]: 'Li Qi' }, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
-  await page.goto('http://qa.test/#calib'); await page.waitForTimeout(600);
-  ok(await page.locator(`#cbItems tr[data-ik="${IK}"] .cbdot`).count() === 3 && await page.locator(`#cbItems tr[data-ik="${IK}"] .cbdot.pend`).count() === 2, 'the list: three dots per item, two pending');
-  ok(await page.locator('#cbGrBtn').isVisible(), 'owner: a Graders control in the header');
-  await page.click(`[data-cb="open"][data-ik="${IK}"]`); await page.waitForTimeout(400);
-  const ph = await page.locator('#cbGrid thead th.pend').allInnerTexts();
-  ok(ph.length === 2 && /Howard/i.test(ph[0]) && /Li Qi/i.test(ph[1]) && await page.locator('#cbGrid thead th.pend .cbav.pend').count() === 2 && (await page.locator('#cbGrid thead th.pend .cbav').first().innerText()) === 'H' && (await page.locator('#cbGrid thead th.pend .cbav').nth(1).innerText()) === 'LQ', 'one joined grader: two pending columns, Howard and Li Qi, with dashed initials');
-  ok((await cell(page, 'ev', 2).innerText()).includes("Hasn't opened it") && (await cell(page, 'ev', 3).innerText()).includes("Hasn't opened it") && /0 of 3/.test(await txt(page, '#cbGrid .cbstatus')), '"Hasn\'t opened it" cells; the status counts to 3');
-  ok(await page.locator('#cbGrid .cbstatus .cbdot.pend').count() === 2, 'the status dots show the two pending');
-  await gridShot(page, 'calib-pending.png');
-  // Pat submits and locks alone: "Each grader vs agreed" lists Howard and Li Qi as empty
-  for (const [k, v] of Object.entries(base)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
-  await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/${IK}`, 'd.submittedAt'); await page.waitForTimeout(150);
-  ok(/1 of 3/.test(await txt(page, '#cbGrid .cbstatus')), 'after submit: 1 of 3 submitted');
-  await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(120); await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + IK, 'd.locked');
-  await page.click('[data-tab="calib"]'); await page.waitForTimeout(250);
-  const each = await page.locator('#cbEach .cbbar').allInnerTexts();
-  ok(each.length === 4 && /Howard/.test(each[1]) && /–/.test(each[1]) && /Li Qi/.test(each[2]) && /–/.test(each[2]) && await page.locator('#cbEach .cbav.pend').count() === 2, 'Each grader vs agreed: Howard and Li Qi listed, empty');
-  // the owner edits the expected list
-  await page.click('#cbGrBtn'); await page.waitForTimeout(100);
-  ok((await page.inputValue('#cbGrIn')) === 'Pat, Howard, Li Qi', 'the editor starts from the expected names (default: Pat, Howard, Li Qi)');
-  await page.fill('#cbGrIn', 'Pat, Howard, Li Qi, Mara'); await page.click('#cbGrEd [data-cb="grsave"]');
-  await waitDoc(page, 'settings/calibGraders', 'd.expected.length===4'); await page.waitForTimeout(200);
-  const gd = await D(page, 'settings/calibGraders');
-  ok(JSON.stringify(gd.expected) === JSON.stringify(['Pat', 'Howard', 'Li Qi', 'Mara']) && gd.by === PAT && await page.locator('#cbGrEd').count() === 0 && await page.locator(`#cbItems tr[data-ik="chat_${S1}"] .cbdot.pend`).count() === 3, 'Save writes settings/calibGraders; a fourth pending dot appears');
-  await shot(page, 'calib-pending-tab.png', true);
-  await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
-  await page.click('#cbGrBtn'); await page.waitForTimeout(100);
-  ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbGrEd').getBoundingClientRect().right <= 390), '390px: the graders editor fits');
-  await page.click('#cbGrEd [data-cb="graders"]');
-  await page.setViewportSize({ width: 1280, height: 900 });
-  // Howard opens it: his column becomes real, he can't edit the list
-  await page.evaluate(h => window.__switch(h), HOW).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(800);
-  await page.evaluate(() => setTab('calib')); await page.waitForTimeout(250);
-  ok(await page.locator('#cbGrBtn').count() === 0, 'not the owner: no Graders control');
-  await page.click(`[data-cb="open"][data-ik="chat_${S1}"]`); await page.waitForTimeout(400);
-  const ph2 = await page.locator('#cbGrid thead th.pend').allInnerTexts(), cols = await page.locator('#cbGrid thead th[data-col]').count();
-  ok(cols === 4 && ph2.length === 2 && /Li Qi/i.test(ph2[0]) && /Mara/i.test(ph2[1]) && /Pat/i.test(await txt(page, `#cbGrid th[data-col="${PAT}"]`)), "Howard's view: Pat (owner, by join order), Howard, then Li Qi and Mara pending");
-  ok(!errors.length, 'no console errors (pending graders) ' + JSON.stringify(errors));
-  await ctx.close(); }
+  // ===== 9. World C: expected graders. Only Pat has opened it (and his name doesn't resolve: the owner counts as Pat)
+  {
+    const seedC = base0.concat([['learning/state', stateA], prevRound, roundA, joined[0]]);
+    ({ page, ctx, errors } = await openPage(b, seedC, { people: { [HOW]: 'Howard', [LIQ]: 'Li Qi' }, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW, tx: TXI }));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(700);
+    ok(await page.locator(`#cbItems .cbirow[data-ik="${IK}"] .cbdot`).count() === 3 && await page.locator(`#cbItems .cbirow[data-ik="${IK}"] .cbdot.pend`).count() === 2, 'the list: three dots per item, two pending');
+    await page.click(`[data-cb="open"][data-ik="${IK}"]`); await page.waitForTimeout(400);
+    const ph = await page.locator('#cbGrid thead th.pend').allInnerTexts();
+    ok(ph.length === 2 && /Howard/i.test(ph[0]) && /Li Qi/i.test(ph[1]) && await page.locator('#cbGrid thead th.pend .cbav.pend').count() === 2 && (await page.locator('#cbGrid thead th.pend .cbav').nth(1).innerText()) === 'LQ', 'one joined grader: two pending columns, Howard and Li Qi, dashed initials');
+    ok((await cell(page, 'ev', 2).innerText()).includes("Hasn't opened it") && /0 of 3/.test(await txt(page, '#cbGrid .cbstatus')), '"Hasn\'t opened it"; the status counts to 3');
+    await gridShot(page, 'calib-pending.png');
+    for (const [k, v] of Object.entries(base)) await page.click(`#cbGrid [data-cb="pick"][data-crit="${k}"][data-v="${v}"]`);
+    await page.click('#cbGrid [data-cb="submit"]'); await waitDoc(page, `calibMarks/${PAT}/items/${IK}`, 'd.submittedAt'); await page.waitForTimeout(150);
+    ok(/1 of 3/.test(await txt(page, '#cbGrid .cbstatus')), 'after submit: 1 of 3 submitted');
+    await page.click('#cbGrid [data-cb="compare"]'); await page.waitForTimeout(120); await page.click('#cbGrid [data-cb="lock"]'); await waitDoc(page, 'calibItems/' + IK, 'd.locked');
+    await page.click('[data-tab="calib"]'); await page.waitForTimeout(250);
+    const each = await page.locator('#cbEach .cbbar').allInnerTexts();
+    ok(each.length === 4 && /Howard/.test(each[1]) && /–/.test(each[1]) && /Li Qi/.test(each[2]) && await page.locator('#cbEach .cbav.pend').count() === 2, 'Each grader vs agreed: Howard and Li Qi listed, empty');
+    await page.click('#cbGrBtn'); await page.waitForTimeout(100);
+    ok((await page.inputValue('#cbGrIn')) === 'Pat, Howard, Li Qi', 'the editor starts from the default names');
+    await page.fill('#cbGrIn', 'Pat, Howard, Li Qi, Mara'); await page.click('#cbGrEd [data-cb="grsave"]');
+    await waitDoc(page, 'settings/calibGraders', 'd.expected.length===4'); await page.waitForTimeout(200);
+    ok(JSON.stringify((await D(page, 'settings/calibGraders')).expected) === '["Pat","Howard","Li Qi","Mara"]' && await page.locator(`#cbItems .cbirow[data-ik="call_qana1"] .cbdot.pend`).count() === 3, 'Save writes settings/calibGraders; a fourth pending dot');
+    await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+    await page.click('#cbGrBtn'); await page.waitForTimeout(100);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbGrEd').getBoundingClientRect().right <= 390), '390px: the graders editor fits');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(h => window.__switch(h), HOW).catch(() => {}); await page.waitForLoadState('load'); await page.waitForTimeout(800);
+    await page.click('[data-cb="open"][data-ik="call_qana1"]'); await page.waitForTimeout(400);
+    const ph2 = await page.locator('#cbGrid thead th.pend').allInnerTexts();
+    ok(await page.locator('#cbGrid thead th[data-col]').count() === 4 && ph2.length === 2 && /Li Qi/i.test(ph2[0]) && /Mara/i.test(ph2[1]) && /Pat/i.test(await txt(page, `#cbGrid th[data-col="${PAT}"]`)), "Howard's view of a call: Pat (owner, by join order), Howard, then Li Qi and Mara pending");
+    ok(!errors.length, 'no console errors (pending graders) ' + JSON.stringify(errors));
+    await ctx.close();
+  }
   await b.close();
   console.log(`\nui calib: ${n} checks passed`);
 })().catch(e => { console.error('TEST FAILED', e); process.exit(1) });
