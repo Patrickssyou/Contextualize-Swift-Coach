@@ -485,6 +485,7 @@ details.txd .txtext{margin-top:6px}
 @media (max-width:560px){.tabnav .btn{flex:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.confetti{display:none}}
 /*__UI_CHATS_CSS__*/
+/*__UI_CALIB_CSS__*/
 </style>
 
 <div class="wrap">
@@ -510,6 +511,7 @@ details.txd .txtext{margin-top:6px}
   <div class="subtabs" role="tablist" aria-label="Chats" id="sub-chats">
     <button type="button" role="tab" data-tab="chats" aria-selected="true"><span class="tn"><span>1</span></span>Dashboard<span class="count" id="chCount"></span></button>
     <button type="button" role="tab" data-tab="chat" aria-selected="false"><span class="tn"><span>2</span></span>Audit<span class="tst num" id="st-chat"></span></button>
+    <button type="button" role="tab" data-tab="calib" aria-selected="false">Calibration<span class="tst num" id="st-calib"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
   </div>
@@ -522,6 +524,7 @@ details.txd .txtext{margin-top:6px}
   <!-- CHATS: the week's WIRA chats (Queue), one chat audited (Audit), the teacher/student rounds and checkpoints (Learning), the policy, calibration cases and staff the brain reads (Brain). Filled by src/ui/chats.js -->
   <section id="view-chats" hidden></section>
   <section id="view-chat" hidden></section>
+  <section id="view-calib" hidden></section>
   <section id="view-learn" hidden></section>
   <section id="view-brain" hidden></section>
 
@@ -850,7 +853,7 @@ function labelOf(ver,t,k){return (itemsOf(ver,t).find(i=>i.id===k)||{}).label||k
 function wOf(ver,t,k){return (itemsOf(ver,t).find(i=>i.id===k)||{}).w||0}
 
 /* ---------- state ---------- */
-let db=null, mcp=null, downloads=null, userCap=null, myId=null, sampleFn=null;
+let db=null, mcp=null, downloads=null, userCap=null, myId=null, sampleFn=null, roomCap=null, amOwner=false;
 let audits=[], queue=[], queueAll=[], dbReady=false, queueReady=false, exportMeta=null, exporting=false, exportNote="";
 const blankFacts = () => ({rootCause:"",faultAgent:"",faultCorrect:"",errorType:"",actionTaken:"",promised:"",followUpOwner:"",singleTouch:"",sources:[],sourcesOther:""});
 const blankForm = () => ({id:null,agent:"",otherAgent:"",type:"call",link:"",restaurantId:"",callId:"",callDate:"",reviewer:store.get("qa.reviewer")||"",gut:"",
@@ -886,8 +889,8 @@ function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 /* ---------- tabs & week ---------- */
 /* Areas: Chats (default: 1 Queue → 2 Audit, plus Learning and Brain), Calls (parked: 1 Snapshot (queue) → 2 Calls → 3 Facts), Results, Database.
    Results and Database are call views, so the call steps stay in reach there. "score" is the old Scorecard tab: it opens Calls. "chat/<sid>" opens that chat in Audit. */
-const TABS=["chats","chat","learn","brain","queue","calls","facts","results","data"];
-const AREA_OF={chats:"chats",chat:"chats",learn:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
+const TABS=["chats","chat","calib","learn","brain","queue","calls","facts","results","data"];
+const AREA_OF={chats:"chats",chat:"chats",calib:"chats",learn:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
 const lastTab={chats:"chats",calls:"queue",results:"results",data:"data"};
 function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="chats";tab=t;const area=AREA_OF[t];lastTab[area]=t;
   document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
@@ -2092,11 +2095,12 @@ function celebrate(from){try{if(matchMedia("(prefers-reduced-motion: reduce)").m
   document.body.append(box);setTimeout(()=>box.remove(),1000)}
 
 /*__UI_CHATS__*/
+/*__UI_CALIB__*/
 
 /* ---------- render ---------- */
 function renderAll(){
   $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
-  renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderChats();renderGame();
+  renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderChats();renderGame();if(typeof renderCalib==="function")renderCalib();
 }
 const h0=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
 /* #chat/<week>/<sid> opens that chat on its week; #chat/<sid> on the default week */
@@ -2108,11 +2112,12 @@ setTab(tab);renderForm();
 /* ---------- capabilities ---------- */
 (async()=>{
   const c=window.claude;if(!c||!c.use){banner("Open this page in Claude to save audits. Scoring still works here, but nothing is stored.");return}
-  const [d,u,m,dl,sm]=await Promise.all(["db","user","mcp","downloads","sample"].map(n=>Promise.resolve().then(()=>c.use(n)).catch(()=>null)));
-  db=d;userCap=u;mcp=m;downloads=dl;sampleFn=typeof sm==="function"?sm:null;renderChain();renderTasks();renderAi();renderChats()
-  if(u){try{myId=await u.id()}catch(e){}try{mayAuto=(await u.canEdit())===true}catch(e){}}
+  const [d,u,m,dl,sm,rm]=await Promise.all(["db","user","mcp","downloads","sample","room"].map(n=>Promise.resolve().then(()=>c.use(n)).catch(()=>null)));
+  db=d;userCap=u;mcp=m;downloads=dl;sampleFn=typeof sm==="function"?sm:null;roomCap=rm;renderChain();renderTasks();renderAi();renderChats()
+  /* only the owner's visit pulls a week on its own: other graders open the desk with their own connectors and must not trigger a pull */
+  if(u){try{myId=await u.id()}catch(e){}try{amOwner=(await u.isOwner())===true;mayAuto=amOwner}catch(e){}}
   if(!db){banner("Sign in to claude.ai to save audits. You can still score a call, but it won't be logged.");renderAll();return}
-  chatsListen();
+  chatsListen();if(typeof calibListen==="function")calibListen();
   db.collection("audits").onSnapshot(s=>{audits=s.docs.map(x=>({id:x.id,...x.data()}));dbReady=true;renderAll();maybeAutoPull()},()=>banner("Lost the connection to the audit log. Reload the page."));
   db.collection("queue").onSnapshot(s=>{queueAll=s.docs.map(x=>({id:x.id,...x.data()}));queue=queueAll.filter(q=>!q.removed);queueReady=true;mergeOpen();renderAll();maybeAutoPull()},()=>{});
   db.collection("pulls").onSnapshot(s=>{pulls=Object.fromEntries(s.docs.map(x=>[x.id,x.data()]));pullsReady=true;renderQueue();renderData();maybeAutoPull()},()=>{pullsReady=true;maybeAutoPull()});
