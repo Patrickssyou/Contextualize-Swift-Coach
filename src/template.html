@@ -503,17 +503,17 @@ details.txd .txtext{margin-top:6px}
   </header>
   <div id="banner" class="banner" hidden></div>
   <nav class="tabs areas" aria-label="Sections">
-    <button type="button" data-area="chats" aria-current="page">Chats</button>
-    <button type="button" data-area="calls">Calls</button>
+    <button type="button" data-area="chats" aria-current="page">Audits</button>
     <button type="button" class="quiet" data-area="results" data-tab="results">Results<span class="count" id="rCount"></span></button>
     <button type="button" class="quiet" data-area="data" data-tab="data">Database</button>
   </nav>
-  <div class="subtabs" role="tablist" aria-label="Chats" id="sub-chats">
-    <button type="button" role="tab" data-tab="chats" aria-selected="true"><span class="tn"><span>1</span></span>Dashboard<span class="count" id="chCount"></span></button>
+  <div class="subtabs" role="tablist" aria-label="Audits" id="sub-chats">
+    <button type="button" role="tab" data-tab="calib" aria-selected="true"><span class="tn"><span>1</span></span>Round<span class="tst num" id="st-calib"></span></button>
     <button type="button" role="tab" data-tab="chat" aria-selected="false"><span class="tn"><span>2</span></span>Audit<span class="tst num" id="st-chat"></span></button>
-    <button type="button" role="tab" data-tab="calib" aria-selected="false">Calibration<span class="tst num" id="st-calib"></span></button>
+    <button type="button" role="tab" data-tab="chats" aria-selected="false">Dashboard<span class="count" id="chCount"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
+    <button type="button" class="quiet" data-calltools="1">Call tools</button>
   </div>
   <div class="subtabs" role="tablist" aria-label="Calls" id="sub-calls" hidden>
     <button type="button" role="tab" data-tab="queue" aria-selected="false"><span class="tn"><span>1</span></span>Snapshot<span class="count" id="qCount"></span></button>
@@ -890,16 +890,20 @@ function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 /* Areas: Chats (default: 1 Queue → 2 Audit, plus Learning and Brain), Calls (parked: 1 Snapshot (queue) → 2 Calls → 3 Facts), Results, Database.
    Results and Database are call views, so the call steps stay in reach there. "score" is the old Scorecard tab: it opens Calls. "chat/<sid>" opens that chat in Audit. */
 const TABS=["chats","chat","calib","learn","brain","queue","calls","facts","results","data"];
-const AREA_OF={chats:"chats",chat:"chats",calib:"chats",learn:"chats",brain:"chats",queue:"calls",calls:"calls",facts:"calls",results:"results",data:"data"};
-const lastTab={chats:"chats",calls:"queue",results:"results",data:"data"};
-function setTab(t){if(t==="score")t="calls";if(!TABS.includes(t))t="chats";tab=t;const area=AREA_OF[t];lastTab[area]=t;
+/* one Audits area: Round, Audit, Dashboard, Learning, Brain; the old call screens (Snapshot, Calls, Facts) sit behind "Call tools" with their own row */
+const CALL_TOOLS=["queue","calls","facts"];
+const AREA_OF={chats:"chats",chat:"chats",calib:"chats",learn:"chats",brain:"chats",queue:"chats",calls:"chats",facts:"chats",results:"results",data:"data"};
+const lastTab={chats:"calib",results:"results",data:"data"};
+function setTab(t){if(t==="score")t="calls";if(t==="round")t="calib";if(!TABS.includes(t))t="calib";tab=t;const area=AREA_OF[t];lastTab[area]=t;
   document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
   document.querySelectorAll(".tabs [data-area]").forEach(b=>{if(b.dataset.area===area)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")});
-  $("#sub-chats").hidden=area!=="chats";$("#sub-calls").hidden=area==="chats";
+  $("#sub-chats").hidden=area!=="chats";$("#sub-calls").hidden=!CALL_TOOLS.includes(t)&&area==="chats";
+  {const ct=document.querySelector("[data-calltools]");if(ct){if(CALL_TOOLS.includes(t))ct.setAttribute("aria-current","page");else ct.removeAttribute("aria-current")}}
   TABS.forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+(t==="chat"?chatHash():t))}catch(e){}
   if(t==="calls"||t==="facts")renderForm();renderAll()}
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
 document.querySelectorAll(".tabs [data-area], .subtabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab||lastTab[b.dataset.area]));
+{let lastTool="queue";const ct=document.querySelector("[data-calltools]");if(ct)ct.onclick=()=>setTab(CALL_TOOLS.includes(tab)?tab:lastTool);document.addEventListener("click",e=>{const b=e.target.closest("#sub-calls [data-tab]");if(b)lastTool=b.dataset.tab})}
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);chatsWeekListen();renderAll()};
 $("#wkNext").onclick=()=>{week=addDays(week,7);chatsWeekListen();renderAll()};
 
@@ -2104,7 +2108,7 @@ function renderAll(){
 const h0=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
 /* #chat/<week>/<sid> opens that chat on its week; #chat/<sid> on the default week */
 if(/^chat\/./.test(h0)){const p=h0.slice(5).split("/");chatSel=p.pop();if(p.length&&chatWeek(p[0]))week=chatWeek(p[0])}
-tab=h0==="score"?"calls":/^chat\//.test(h0)?"chat":TABS.includes(h0)?h0:"chats";
+tab=h0==="score"?"calls":h0==="round"?"calib":/^(chat|call)\//.test(h0)?"chat":TABS.includes(h0)?h0:"calib";
 lastParsed=parseLink(form.link);
 setTab(tab);renderForm();
 
