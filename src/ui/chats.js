@@ -1,7 +1,7 @@
 /* ---------- CHATS: the WIRA chat audit area (Queue · Audit · Learning · Brain). The audit has four sections: 1 Ticket, 2 Evidence, 3 Scorecard, 4 Coaching. The brain is src/chat.js; this is the page around it. ----------
    db (CHAT_PATHS): chatWeeks/<week>/chats/<sid> (the queue; the doc is the chat), …/audits/<sid> (Claude's pre-grade), …/tx/<sid> (transcripts),
        …/reviews/<sid> (the reviewer's marks, coaching and finding marks); chatCalib/<sid> (calibration cases), settings/chatPolicy, settings/staff;
-       chatLessons/<sid>_<crit> (what the coach learned: contested marks, kind "contest", and findings marked "not a mistake", kind "not"; the newest 20 go into every grade).
+       chatLessons/<sid>_<crit> (what the coach learned: contested marks, kind "contest", right marks with a better reason, kind "reinforce", and findings marked "not a mistake", kind "not"; the newest 20 go into every grade).
    chatWeeks/<week> itself is a small index doc written on pull, so the game layer can find the weeks that have reviews.
    Live subscriptions: the selected week's chats, audits and reviews (resubscribed once per week change), plus calibration, corrections, policy and staff.
    Transcripts are read per chat when opened; other weeks' reviews are read once per load with .get() for XP and the streak.
@@ -10,7 +10,7 @@
 let chats=[], chatAud={}, chatRev={}, chatCal=[], chLessons=[], chatPolicyDoc=null, staffDoc=null, chatsReady=false;
 let chatSel=null, chatRun=null, chatPullRun=null, chatNote=null, chatPickOpen=null, chatAuditSig="", chLastRun=null;
 let polDirty=false, staffDirty=false, chOrdQ="", chNoteOpen="";
-/* the open contest box (one at a time): {sid, crit, where: "row" | "find", to, reason} */
+/* the open contest box (one at a time): {sid, crit, where: "row" | "find", mode: "contest" | "reinforce", to, reason}. Reinforce keeps Claude's mark and gives a better reason */
 let chContest=null;
 const chatDrafts=new Map(), chatTxCache=new Map(), chModelOpen=new Set();
 const CH_LESSONS="chatLessons";
@@ -352,7 +352,8 @@ $("#view-chats").addEventListener("click",e=>{
 function chatDraft(sid){const a=chatAud[sid],rv=chatRev[sid],base=chHash(a),rvAt=chHash(rv);let d=chatDrafts.get(sid);
   if(!d||d.base!==base||d.rvAt!==rvAt){d={base,rvAt,scores:clone((rv&&rv.scores)||(a&&a.grade&&a.grade.scores)||{}),coach:rv&&typeof rv.coaching==="string"?rv.coaching:null,
     reviewer:(rv&&rv.reviewer)||(d&&d.reviewer)||store.get("qa.reviewer")||"",findings:clone((rv&&rv.findings&&typeof rv.findings==="object")?rv.findings:{}),
-    contests:Object.fromEntries(Object.entries((rv&&rv.contests)||{}).filter(([id])=>rv.scores&&rv.scores[id]!=null).map(([id,x])=>[id,{to:rv.scores[id],reason:String((x&&x.reason)||"")}]))};
+    contests:Object.fromEntries(Object.entries((rv&&rv.contests)||{}).filter(([id])=>rv.scores&&rv.scores[id]!=null).map(([id,x])=>[id,{to:rv.scores[id],reason:String((x&&x.reason)||"")}])),
+    reinforce:Object.fromEntries(Object.entries((rv&&rv.reinforce)||{}).filter(([id,x])=>x&&String(x.reason||"").trim()).map(([id,x])=>[id,{reason:String(x.reason)}]))};
     chatDrafts.set(sid,d);if(chContest&&chContest.sid===sid)chContest=null}
   return d}
 /* the coaching note: the ticket's findings (P1 first, minus any marked not a mistake) when the grade has them, else the older "next time" list */
@@ -413,8 +414,16 @@ function chTaskCard(t,withId){const u=safeUrl(t.url)||wiraUrl(t.sid),f=[];
   if((t.comments||[]).length)f.push(["Comments",`<ul class="cmts">${t.comments.map(x=>`<li><b>${esc(prettyWho(x.who)||"Someone")}</b> ${esc(x.text)}</li>`).join("")}</ul>`]);
   return `<div class="task"${withId?` id="cx-task-${esc(t.sid)}"`:""}><div class="thead"><a class="tid" href="${esc(u)}" target="_blank" rel="noopener">${esc(t.sid)} ↗</a>${t.parent?`<span class="ttag">From this chat</span>`:""}${t.intent||t.project?`<span class="tcat">${esc(t.intent||t.project)}</span>`:""}${t.status?`<span>${esc(capFirst(t.status))}</span>`:""}</div>
     <div class="ttitle">${esc(t.title||"Untitled")}</div><dl class="tfields">${f.map(([x,y])=>`<dt>${x}</dt><dd>${y}</dd>`).join("")}</dl></div>`}
+/* an order's status: Voided (and why), Draft, Refunded $x (full or partial). Nothing for a submitted order */
+const chRefundKind=o=>{const s=(String(o.pay||"")+" "+String(o.refundType||"")).toLowerCase();return /full/.test(s)?"full":/partial/.test(s)?"partial":Number(o.refunded)>=Number(o.total||0)-0.005?"full":"partial"};
+function chOrdStatus(o,voidOnly){const st=String((o&&o.status)||"").toLowerCase(),out=[];if(!o)return [];
+  if(st==="voided"){const w=String(o.voidWhy||"").replace(/_/g," ").replace(/\s+/g," ").trim().toLowerCase();out.push("Voided"+(w?" · "+capFirst(w):""))}
+  else if(st==="draft"&&!voidOnly)out.push("Draft");
+  if(!voidOnly&&Number(o.refunded)>0)out.push(`Refunded ${money(o.refunded)} (${chRefundKind(o)})`);
+  return out}
+const chOrdTags=(o,voidOnly)=>chOrdStatus(o,voidOnly).map(t=>`<span class="ostat">${esc(t)}</span>`).join("");
 function chOrderCard(o,noId){const src=titleCase(String(o.source||"").replace(/_/g," "));
-  return `<div class="ordcard"${o.label&&!noId?` id="cx-ord-${esc(o.label)}"`:""}><div class="ordhd"><b>Ticket ${esc(o.ticket||"?")}</b>${o.type?`<span>${esc(capFirst(o.type))}</span>`:""}${src?`<span>${esc(src)}</span>`:""}<span class="num">${esc(when(o.at))}</span>${o.coupon?`<span class="ttag">Coupon ${esc(o.coupon)}</span>`:""}${o.label?`<span class="num olab">${esc(o.label)}</span>`:""}</div>
+  return `<div class="ordcard"${o.label&&!noId?` id="cx-ord-${esc(o.label)}"`:""}><div class="ordhd"><b>Ticket ${esc(o.ticket||"?")}</b>${chOrdTags(o)}${o.type?`<span>${esc(capFirst(o.type))}</span>`:""}${src?`<span>${esc(src)}</span>`:""}<span class="num">${esc(when(o.at))}</span>${o.coupon?`<span class="ttag">Coupon ${esc(o.coupon)}</span>`:""}${o.label?`<span class="num olab">${esc(o.label)}</span>`:""}</div>
     <dl class="ordmoney">${[["Items",o.items],["Tax",o.tax],["Tip",o.tip],["Other",o.other],["Total",o.total]].map(([k,x])=>`<div${k==="Total"?' class="tot"':""}><dt>${k}</dt><dd class="num">${money(x)}</dd></div>`).join("")}</dl></div>`}
 /* Change order: Claude's ranked matches with their reasons, then every order of the chat day and the day before (newest first), then No order */
 const chSrcL=s=>titleCase(String(s||"").replace(/_/g," "));
@@ -425,7 +434,7 @@ function chPicker(a){const cur=new Set((a.orders||[]).map(o=>o.id)),cand=a.candi
     ${cand.length?`<div class="ophd"><span class="lbl-sm">Best matches</span></div>${cand.map(x=>`<button type="button" class="ocand${cur.has(x.id)?" on":""}" data-oid="${esc(x.id)}"><b>Ticket ${esc(x.ticket||"?")}</b><span class="num">${money(x.total)}</span><span class="num hint">${esc(when(x.at))}</span>${meta(x)?`<span class="hint">${esc(meta(x))}</span>`:""}<span class="owhy">${esc((x.why||[]).join(", "))}</span></button>`).join("")}`:""}
     ${day.length?`<div class="ophd"><span class="lbl-sm">${cand.length?"Other orders":"Orders"}</span><span class="hint num" id="ordN">${day.length}</span></div>
       <input type="search" id="ordQ" class="oq" placeholder="Ticket or amount" aria-label="Search orders by ticket or amount" autocomplete="off" value="${esc(chOrdQ)}">
-      <div class="olist" id="ordList">${day.map(o=>`<button type="button" class="orow${cur.has(o.id)?" on":""}" data-oid="${esc(o.id)}" data-q="${esc(chOrdKey(o))}"><b class="num otk">${o.ticket?"#"+esc(o.ticket):"No ticket"}</b><span class="num otime">${esc(when(o.at))}</span><span class="otype">${esc(meta(o))}</span><span class="num otot">${money(o.total)}</span></button>`).join("")}<div class="hint onone" id="ordNone" hidden>No order matches.</div></div>`:""}
+      <div class="olist" id="ordList">${day.map(o=>`<button type="button" class="orow${cur.has(o.id)?" on":""}" data-oid="${esc(o.id)}" data-q="${esc(chOrdKey(o))}"><b class="num otk">${o.ticket?"#"+esc(o.ticket):"No ticket"}</b><span class="num otime">${esc(when(o.at))}</span><span class="otype">${esc(meta(o))}${chOrdTags(o,true)}</span><span class="num otot">${money(o.total)}</span></button>`).join("")}<div class="hint onone" id="ordNone" hidden>No order matches.</div></div>`:""}
     ${!cand.length&&!day.length?`<div class="hint">No orders that day.</div>`:""}
     <div class="row"><button type="button" class="btn small" data-oid="">No order</button><button type="button" class="btn small" id="ordCancel">Cancel</button></div></div>`}
 /* filter the day's orders in place, so typing never re-renders the audit */
@@ -496,7 +505,7 @@ function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).l
   src.push(chFold(c,"chat","Chat",`${chPl(msgs.length,"message")}${nInt?` · ${nInt} internal`:""}`,`<ol class="bubbles" id="cs-chat">${msgs.map(m=>chBubble(m,"cm")).join("")||`<li class="hint">No messages.</li>`}</ol>`,!a));
   const fl=chFieldList(c&&c.fields);if(fl.length)src.push(chFold(c,"fields","WIRA form",fl.map(([k])=>k||"Field").join(", "),chFieldsHtml(c)));
   if(a){const canPick=!!(db&&mcp&&sampleFn)&&!chatRun,pickOpen=chatPickOpen===String(c.sid),os=a.orders||[];
-    const code=a.code||c.code||"",oLine=o=>[`Ticket ${o.ticket||"?"}`,money(o.total),String(o.type||"").toLowerCase(),o.at?chClock(o.at,chDay(c)):""].filter(Boolean).join(" · ");
+    const code=a.code||c.code||"",oLine=o=>[`Ticket ${o.ticket||"?"}`,money(o.total),String(o.type||"").toLowerCase(),o.at?chClock(o.at,chDay(c)):"",...chOrdStatus(o).map(x=>x.toLowerCase())].filter(Boolean).join(" · ");
     src.push(chFold(c,"order","Order",os.length?os.map(oLine).join(", "):"No order linked",
       `<div class="cxsec" id="cs-ord"><div class="cxhd">${a.orderPick==="reviewer"?`<span class="ttag">Your pick</span>`:""}${pickOpen?"":`<button type="button" class="btn small" id="ordChange"${canPick?"":" disabled"}>Change order</button>`}</div>
       ${os.length?os.map(chOrderCard).join(""):`<div class="cxnone">No order linked</div>${a.orderNote?`<div class="hint">${esc(a.orderNote)}</div>`:""}`}${pickOpen?chPicker(a):""}</div>`,pickOpen,
@@ -516,42 +525,48 @@ function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).l
     if((a.notFound||[]).length)src.push(chFold(c,"nf","Not found in the data",chPl(a.notFound.length,"item"),`<ul class="nf">${a.notFound.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`))}
   out.push(`<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`);
   return out.join("")}
-function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
-  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0,con=C[r.id],box=!!(B&&B.crit===r.id&&B.where==="row");
+function chScorecard(a,d){const G=a.grade||{},cl=G.scores||{},rs=G.reasons||{},runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs:null,C=d.contests||{},RF=d.reinforce||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
+  return CHAT_RUBRIC.map(r=>{const cur=d.scores[r.id],orig=cl[r.id],half=typeof cur==="number"&&cur%1!==0,con=C[r.id],rei=!con&&RF[r.id],box=!!(B&&B.crit===r.id&&B.where==="row"),bm=box?B.mode:"",canR=!con&&!chIsNot(d.findings,r.id);
     const reads=runs&&String(runs[0][r.id])!==String(runs[1][r.id])?`<span class="reads num">Reads ${chMarkL(runs[0][r.id])} · ${chMarkL(runs[1][r.id])}</span>`:"";
     const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}${half&&(v===Math.floor(cur)||v===Math.ceil(cur))?" half":""}" data-cm="${r.id}" data-v="${v}" aria-pressed="${String(cur)===String(v)}">${v}</button>`).join("")+
       (r.na?`<button type="button" class="cm na" data-cm="${r.id}" data-v="na" aria-pressed="${cur==="na"}">N/A</button>`:"");
     const mark=con?`<span class="ccon">Contested</span><span class="cfrom num"><s>${esc(chMk(orig,r.max))}</s> <b class="${chMarkCls(cur,r.max)}">${esc(chMk(cur,r.max))}</b></span>`
-      :`<span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>`;
+      :`${rei?`<span class="crei">Reinforced</span>`:""}<span class="was" id="was-${r.id}"${String(cur)===String(orig)?" hidden":""}>Claude ${esc(chMarkL(orig))}</span>`;
     return `<div class="ccrit${con?" contested":""}" id="cc-${r.id}"><div class="cchead"><span class="ttl" title="${esc(r.d||"")}">${esc(r.label)}</span><span class="wt num">${r.w}%</span>${mark}${reads}<button type="button" class="srcbtn" data-psrc="${r.id}" aria-expanded="${!!(chPanel&&chPanel.crit===r.id)}" aria-controls="chPanel">Sources</button></div>
-      <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}<button type="button" class="btn small cbtn" data-contest="${r.id}" data-where="row" aria-expanded="${box}">Contest</button></div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}
-      ${con&&!box?`<div class="cyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(chatSel,r.id,con)}</div>`:""}${box?chContestBox(a,d,r):""}</div>`}).join("")}
-/* the contest box: Claude's mark and reason, your mark, why (required) */
-function chContestBox(a,d,r){const B=chContest,orig=chClaudeMark(a,r.id),why=((a.grade||{}).reasons||{})[r.id]||"",ex=(d.contests||{})[r.id];
-  const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}" data-cv="${v}" aria-pressed="${String(B.to)===String(v)}">${v}</button>`).join("")+
-    (r.na?`<button type="button" class="cm na" data-cv="na" aria-pressed="${B.to==="na"}">N/A</button>`:"");
-  return `<div class="cbox" id="cbox" role="group" aria-label="Contest ${esc(r.label)}">
+      <div class="cmarks" role="group" aria-label="${esc(r.label)}">${opts}<button type="button" class="btn small cbtn" data-contest="${r.id}" data-where="row" aria-expanded="${bm==="contest"}">Contest</button>${canR?`<button type="button" class="btn small cbtn rbtn" data-reinforce="${r.id}" data-where="row" aria-expanded="${bm==="reinforce"}">Reinforce</button>`:""}</div>${rs[r.id]?`<div class="creason">${esc(rs[r.id])}</div>`:""}
+      ${con&&!box?`<div class="cyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(chatSel,r.id,con)}</div>`:""}${rei&&!box?`<div class="cyour crei-why"><span class="lbl-sm">Better reason</span> ${esc(rei.reason)}${chLearnedTag(chatSel,r.id,rei,"reinforce")}</div>`:""}${box?chContestBox(a,d,r):""}</div>`}).join("")}
+/* the contest box: Claude's mark and reason, your mark, why (required). Reinforce: the mark locked to Claude's, a better reason (required) */
+function chContestBox(a,d,r){const B=chContest,rei=B.mode==="reinforce",orig=chClaudeMark(a,r.id),why=((a.grade||{}).reasons||{})[r.id]||"",ex=rei?(d.reinforce||{})[r.id]:(d.contests||{})[r.id],dis=rei?" disabled":"";
+  const opts=[...Array(r.max+1).keys()].map(v=>`<button type="button" class="cm ${chMarkCls(v,r.max)}" data-cv="${v}" aria-pressed="${String(B.to)===String(v)}"${dis}>${v}</button>`).join("")+
+    (r.na?`<button type="button" class="cm na" data-cv="na" aria-pressed="${B.to==="na"}"${dis}>N/A</button>`:"");
+  return `<div class="cbox${rei?" rei":""}" id="cbox" role="group" aria-label="${rei?"Reinforce":"Contest"} ${esc(r.label)}">
     <div class="cbl"><span class="lbl-sm">Claude</span><div class="cbv"><b class="num cbclaude ${chMarkCls(orig,r.max)}">${esc(chMk(orig,r.max))}</b>${why?`<p class="cbwhy">${esc(why)}</p>`:""}</div></div>
-    <div class="cbl"><span class="lbl-sm">Your mark</span><div class="cbv cbmarks" role="group" aria-label="Your mark">${opts}</div></div>
-    <div class="field cbfield"><label for="cbWhy">Why</label><textarea id="cbWhy" rows="3">${esc(B.reason||"")}</textarea></div>
+    <div class="cbl"><span class="lbl-sm">Your mark</span><div class="cbv cbmarks${rei?" locked":""}" role="group" aria-label="Your mark">${opts}</div></div>
+    <div class="field cbfield"><label for="cbWhy">${rei?"Better reason":"Why"}</label><textarea id="cbWhy" rows="3">${esc(B.reason||"")}</textarea></div>
     <div class="row"><button type="button" class="btn primary" id="cbSave"${chContestOk()?"":" disabled"}>Submit</button><button type="button" class="btn" id="cbCancel">Cancel</button>${ex?`<button type="button" class="btn danger" id="cbWithdraw">Withdraw</button>`:""}</div></div>`}
-function chContestOk(){const B=chContest;if(!B)return false;return B.to!=null&&String(B.to)!==String(chClaudeMark(chatAud[B.sid],B.crit))&&!!String(B.reason||"").trim()}
-function chOpenContest(crit,where,to){const sid=String(chatSel||""),a=chatAud[sid],r=chRub(crit);if(!a||!r)return;
-  const d=chatDraft(sid),ex=(d.contests||{})[crit];
-  if(to===undefined&&chContest&&chContest.sid===sid&&chContest.crit===crit&&chContest.where===where){chContest=null;paintMarks();return}
-  chContest={sid,crit,where,to:to!==undefined?to:ex?ex.to:null,reason:ex?ex.reason:(chContest&&chContest.sid===sid&&chContest.crit===crit?chContest.reason:"")};chPanelOpen(crit,"contest");paintMarks();
+function chContestOk(){const B=chContest;if(!B)return false;if(B.mode==="reinforce")return !!String(B.reason||"").trim();return B.to!=null&&String(B.to)!==String(chClaudeMark(chatAud[B.sid],B.crit))&&!!String(B.reason||"").trim()}
+function chOpenContest(crit,where,to,mode){mode=mode==="reinforce"?"reinforce":"contest";const sid=String(chatSel||""),a=chatAud[sid],r=chRub(crit);if(!a||!r)return;
+  const d=chatDraft(sid),rei=mode==="reinforce",ex=rei?(d.reinforce||{})[crit]:(d.contests||{})[crit],same=chContest&&chContest.sid===sid&&chContest.crit===crit&&(chContest.mode||"contest")===mode;
+  if(to===undefined&&same&&chContest.where===where){chContest=null;paintMarks();return}
+  chContest={sid,crit,where,mode,to:rei?chClaudeMark(a,crit):to!==undefined?to:ex?ex.to:null,reason:ex?ex.reason:(same?chContest.reason:"")};chPanelOpen(crit,mode);paintMarks();
   const el=$("#cbox");if(el){if(chSheet()){const r=el.getBoundingClientRect(),P=$("#chPanel"),av=P&&!P.hidden?innerHeight-P.offsetHeight:innerHeight;window.scrollTo({top:Math.max(0,scrollY+r.bottom-av+8)})}else el.scrollIntoView({block:"nearest"});const f=chContest.to!=null?$("#cbWhy"):el.querySelector("[data-cv]");if(f)f.focus({preventScroll:true})}}
 function chSaveContest(){if(!chContestOk())return;const B=chContest,d=chatDraft(B.sid);
   (d.contests||(d.contests={}))[B.crit]={to:B.to,reason:String(B.reason).trim()};d.scores[B.crit]=B.to;
-  if(d.findings&&d.findings[B.crit])delete d.findings[B.crit];
+  if(d.findings&&d.findings[B.crit])delete d.findings[B.crit];if(d.reinforce)delete d.reinforce[B.crit];
   chContest=null;paintMarks();const b=$(`[data-contest="${B.crit}"][data-where="${B.where}"]`);if(b)b.focus({preventScroll:true})}
 /* back to Claude's mark: the contest (and a Not a mistake on that criterion) goes */
 function chWithdraw(crit){const sid=String(chatSel||""),a=chatAud[sid];if(!a)return;const d=chatDraft(sid);
   if(d.contests)delete d.contests[crit];if(chIsNot(d.findings,crit))delete d.findings[crit];
   const o=chClaudeMark(a,crit);if(o!==undefined)d.scores[crit]=o;if(chContest&&chContest.crit===crit)chContest=null;paintMarks();
   /* a submitted contest was learned right away, so withdrawing it unlearns it right away */
-  const id=`${sid}_${crit}`,ls=chLessons.find(l=>l.id===id);
-  if(db&&(chSubmitted.has(id)||(ls&&ls.kind==="contest"))){chSubmitted.delete(id);db.doc(CH_LESSONS+"/"+id).delete().catch(()=>toast("Couldn't withdraw the lesson. Try again."))}}
+  chUnlearn(sid,crit,"contest")}
+/* a submitted contest or reinforce was learned right away, so withdrawing it unlearns it right away */
+function chUnlearn(sid,crit,kind){const id=`${sid}_${crit}`,ls=chLessons.find(l=>l.id===id),s=chSubmitted.get(id);
+  if(db&&((s&&s.kind===kind)||(ls&&ls.kind===kind))){chSubmitted.delete(id);db.doc(CH_LESSONS+"/"+id).delete().catch(()=>toast("Couldn't withdraw the lesson. Try again."))}}
+/* Withdraw a reinforce: the draft entry and its lesson go; the mark never moved */
+function chWithdrawReinforce(crit){const sid=String(chatSel||""),a=chatAud[sid];if(!a)return;const d=chatDraft(sid),B=chContest;
+  if(d.reinforce)delete d.reinforce[crit];if(chContest&&chContest.crit===crit)chContest=null;paintMarks();chUnlearn(sid,crit,"reinforce");
+  if(B&&B.crit===crit){const x=$(`[data-reinforce="${crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}}
 /* 4 COACHING: what went well, one card per fix, Copy all; the note is editable only on request */
 function chNote(c,a,d){return d.coach!=null?d.coach:coachText(c,a,d.scores,d.findings,d.contests)}
 function chCoach(c,a,rv,d){const G=a.grade||{},F=chFixes(a,d.scores,d.findings,d.contests),gen=coachText(c,a,d.scores,d.findings,d.contests),edit=chNoteOpen===String(c.sid),first=chFirst(a.sa||c.sa)||"the SA";
@@ -582,7 +597,7 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
   const F=[["Restaurant",`${esc(c.restaurant||a.restaurant||"–")}${code?` <span class="num tkcode">${esc(code)}</span>`:""}`],
     ["SA",esc(a.sa||c.sa||"–")],
     ["Chat",link(url,"WIRA "+esc(c.sid))],
-    ["Order",(a.orders||[]).length?a.orders.map(o=>`<span class="tkord">${link(chGdOrder(code,o.id),"Ticket "+esc(o.ticket||"?"))}<span class="num tkmut">${money(o.total)}</span></span>`).join(""):`<span class="tkmut">No order linked</span>`],
+    ["Order",(a.orders||[]).length?a.orders.map(o=>`<span class="tkord">${link(chGdOrder(code,o.id),"Ticket "+esc(o.ticket||"?"))}<span class="num tkmut">${money(o.total)}</span>${chOrdTags(o)}</span>`).join(""):`<span class="tkmut">No order linked</span>`],
     ["Case type",A.caseType?`<span class="ctype">${esc(chCaseL(A.caseType))}</span>`:`<span class="tkmut">–</span>`],
     ["Fault",A.fault?`<span class="pill ${chFaultCls(f.who)}">${esc(CH_FAULT[f.who]||f.who||"–")}</span>`:`<span class="tkmut">–</span>`],
     ["Opened",`<span class="num">${esc(when(c.at)||"–")}</span>`],
@@ -644,18 +659,18 @@ function chSrcChip(s){const t=String(s||"").trim();let m;
 function chEvHtml(e){const mark=e.swapped?`<span class="qflag">showing the message</span>`:e.ok===true?`<span class="qok" title="Found in the source" aria-label="Found in the source">✓</span>`:e.ok===false?`<span class="qflag bad">not found in source</span>`:"";
   return `<li class="tkq${e.fact?" fact":""}"><span class="tkqs">${chSrcChip(e.src)}${e.fact?chCite(e.fact):""}</span>${e.fact?`<span class="tkqt">${esc(e.quote)}</span>`:`<q class="tkqt">${esc(e.quote)}</q>`}${mark}</li>`}
 function chFindHtml(c,a,d,f){const M=d.findings||{},st=M[f.id]||{},not=st.mark==="not",agree=st.mark==="agree",r=CHAT_RUBRIC.find(x=>x.id===f.id),first=chFirst(a.sa||c.sa)||"the SA";
-  const sys=f.id==="amt"&&!!a.grade&&a.grade.amtBy==="system",fid=esc(f.id),mk=String(c.sid)+"/"+f.id,con=r&&(d.contests||{})[f.id],B=chContest&&chContest.sid===String(c.sid)?chContest:null,box=!!(r&&B&&B.crit===f.id&&B.where==="find");
+  const sys=f.id==="amt"&&!!a.grade&&a.grade.amtBy==="system",fid=esc(f.id),mk=String(c.sid)+"/"+f.id,con=r&&(d.contests||{})[f.id],rei=r&&!con&&(d.reinforce||{})[f.id],B=chContest&&chContest.sid===String(c.sid)?chContest:null,box=!!(r&&B&&B.crit===f.id&&B.where==="find"),bm=box?B.mode:"";
   let sc="";if(r){const cur=d.scores[f.id],lab=v=>v==="na"?"N/A":`${chMarkL(v)}/${r.max}`;
     sc=(String(cur)!==String(f.score)?`<s class="num">${lab(f.score)}</s>`:"")+`<b class="num tkscore ${chMarkCls(cur,r.max)}">${lab(cur)}</b>`}
   const ev=(f.evidence||[]).filter(e=>e&&e.quote).map(chEvHtml);
   return `<article class="tkfind ${esc(String(f.priority||"").toLowerCase())}${not?" not":""}" id="tf-${fid}" data-fid="${fid}">
     <div class="tkfh">${chPrio(f.priority)}<h4 class="tkft"><b>${esc(f.label||f.id)}</b>${f.type?`<span class="tktype"> · ${esc(f.type)}</span>`:""}</h4>
-      <span class="tkfs">${sc}${sys?`<span class="tksys">set by the comp check</span>`:""}${not?`<span class="tknot">Not a mistake</span>`:""}${con?`<span class="tkcon">Contested</span>`:""}</span></div>
+      <span class="tkfs">${sc}${sys?`<span class="tksys">set by the comp check</span>`:""}${not?`<span class="tknot">Not a mistake</span>`:""}${con?`<span class="tkcon">Contested</span>`:""}${rei?`<span class="tkrei">Reinforced</span>`:""}</span></div>
     <div class="tkfb"><div class="tkcol">${f.what?`<div class="tkblk"><h5>What happened</h5><p>${esc(f.what)}</p></div>`:""}${ev.length?`<div class="tkblk"><h5>Evidence</h5><ul class="tkev">${ev.join("")}</ul></div>`:""}</div>
       <div class="tkcol">${f.why?`<div class="tkblk"><h5>Why it matters</h5><p>${esc(f.why)}</p></div>`:""}${f.should?`<div class="tkblk tkfix"><h5>What ${esc(first)} should have done</h5><p>${esc(f.should)}</p></div>`:""}
         ${f.model?`<details class="tkmodel" data-model="${esc(mk)}"${chModelOpen.has(mk)?" open":""}><summary>Model message</summary><div class="tkmsg">${esc(f.model)}</div><button type="button" class="btn small" data-mcopy="${fid}">Copy</button></details>`:""}</div></div>
-    <div class="tkact" role="group" aria-label="${esc(f.label||f.id)}"><button type="button" class="chip tkb" data-fmark="agree" data-fid="${fid}" aria-pressed="${agree}">Agree</button><button type="button" class="chip tkb tkbnot" data-fmark="not" data-fid="${fid}" aria-pressed="${not}">Not a mistake</button>${r?`<button type="button" class="chip tkb tkbcon" data-contest="${fid}" data-where="find" aria-expanded="${box}">Contest</button>`:""}</div>
-    ${con&&!box?`<div class="tkyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(c.sid,f.id,con)}</div>`:""}${box?`<div class="tkcbox">${chContestBox(a,d,r)}</div>`:""}
+    <div class="tkact" role="group" aria-label="${esc(f.label||f.id)}"><button type="button" class="chip tkb" data-fmark="agree" data-fid="${fid}" aria-pressed="${agree}">Agree</button><button type="button" class="chip tkb tkbnot" data-fmark="not" data-fid="${fid}" aria-pressed="${not}">Not a mistake</button>${r?`<button type="button" class="chip tkb tkbcon" data-contest="${fid}" data-where="find" aria-expanded="${bm==="contest"}">Contest</button>`:""}${r&&!con&&!not?`<button type="button" class="chip tkb tkbcon tkbrei" data-reinforce="${fid}" data-where="find" aria-expanded="${bm==="reinforce"}">Reinforce</button>`:""}</div>
+    ${con&&!box?`<div class="tkyour"><span class="lbl-sm">Why</span> ${esc(con.reason)}${chLearnedTag(c.sid,f.id,con)}</div>`:""}${rei&&!box?`<div class="tkyour tkrei-why"><span class="lbl-sm">Better reason</span> ${esc(rei.reason)}${chLearnedTag(c.sid,f.id,rei,"reinforce")}</div>`:""}${box?`<div class="tkcbox">${chContestBox(a,d,r)}</div>`:""}
     ${not?`<div class="field tknote"><label for="tkn-${fid}">Why it wasn't a mistake</label><textarea id="tkn-${fid}" data-fnote="${fid}" rows="2">${esc(st.note||"")}</textarea></div>`:""}</article>`}
 function chTicketCls(c,a,d){const p=chTopPrio(chFindings(c,a),d.findings,d.contests,d.scores);return "panel qticket"+(p?" "+p.toLowerCase():"")}
 /* the ticket's two tabs: Ticket (the fields, timing, comp check, findings) and Chat (the transcript). The tab is kept for the page view, across chats */
@@ -684,7 +699,7 @@ function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chatScore(
 /* a focused control's selector, so a repaint can put focus back */
 function chFocusSel(root){const f=document.activeElement;if(!f||!root||!root.contains(f))return "";const D=f.dataset||{};
   if(D.fmark)return `[data-fmark="${D.fmark}"][data-fid="${D.fid}"]`;if(D.fnote)return `[data-fnote="${D.fnote}"]`;
-  if(D.contest)return `[data-contest="${D.contest}"][data-where="${D.where}"]`;if(D.cm)return `[data-cm="${D.cm}"][data-v="${D.v}"]`;if(D.cv)return `[data-cv="${D.cv}"]`;
+  if(D.contest)return `[data-contest="${D.contest}"][data-where="${D.where}"]`;if(D.reinforce)return `[data-reinforce="${D.reinforce}"][data-where="${D.where}"]`;if(D.cm)return `[data-cm="${D.cm}"][data-v="${D.v}"]`;if(D.cv)return `[data-cv="${D.cv}"]`;
   return f.id?"#"+f.id:""}
 function chRefocus(root,key){if(!key)return;const g=root.querySelector(key);if(g)g.focus({preventScroll:true})}
 function paintTicket(){const el=$("#cTicket"),sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!el||!c||!a)return;
@@ -699,7 +714,8 @@ function chMarkFinding(fid,mark){const sid=String(chatSel||""),c=chatBy(sid),a=c
   if(st.mark===mark)delete M[fid];
   else{const n={mark,note:mark==="not"?String(st.note||""):""};
     /* Not a mistake is a shortcut contest to full marks: it stands in for any contest on that criterion (put back on un-marking). Agree withdraws one */
-    if(mark==="not"&&r){n.prev=d.scores[fid];if(C[fid]){n.prevC=C[fid];delete C[fid]}d.scores[fid]=r.max}
+    if(mark==="not"&&r){n.prev=d.scores[fid];if(C[fid]){n.prevC=C[fid];delete C[fid]}d.scores[fid]=r.max;
+      if(d.reinforce&&d.reinforce[fid]){delete d.reinforce[fid];chUnlearn(sid,fid,"reinforce")}}
     if(mark==="agree"&&r&&C[fid]){delete C[fid];const o=chClaudeMark(a,fid);if(o!==undefined)d.scores[fid]=o}
     M[fid]=n}
   if(chContest&&chContest.crit===fid)chContest=null;
@@ -707,7 +723,7 @@ function chMarkFinding(fid,mark){const sid=String(chatSel||""),c=chatBy(sid),a=c
 function chTicketText(c,a,d){const A=a.analysis||{},F=chFindings(c,a),M=d.findings||{},pct=chatScore(d.scores),v=chatVerdict(pct),pr=chTopPrio(F,M),code=a.code||c.code||"",first=chFirst(a.sa||c.sa)||"The SA";
   const L=[`QA ticket · Chat ${c.sid} · ${v?v.label:"–"} ${pct==null?"–":fmt(pct)+"%"}${pr?" · "+pr:""}`,""];
   [["Restaurant",`${c.restaurant||a.restaurant||"–"}${code?` (${code})`:""}`],["SA",a.sa||c.sa||"–"],["Chat",safeUrl(c.url||a.url)||wiraUrl(c.sid)],
-   ["Order",(a.orders||[]).map(o=>`Ticket ${o.ticket||"?"} (${money(o.total)}) ${chGdOrder(code,o.id)}`).join("; ")||"No order linked"],
+   ["Order",(a.orders||[]).map(o=>`Ticket ${o.ticket||"?"} (${[money(o.total),...chOrdStatus(o)].join(", ")}) ${chGdOrder(code,o.id)}`).join("; ")||"No order linked"],
    ["Case type",A.caseType?chCaseL(A.caseType):"–"],["Fault",A.fault?(CH_FAULT[A.fault.who]||A.fault.who||"–"):"–"],["Opened",when(c.at)||"–"],["First reply",chFrt(chFirstMin(c,a))+(chSlow(c,a)?" (slow)":"")],
    ["Closed",c.closedAt?when(c.closedAt):"Not closed"+(c.status?` (${chStatusL(c)})`:"")],["Started by",chInit(c)],["Recordings",(a.calls||[]).filter(l=>l.id).map(l=>recUrl(l.id)).join(" ")||"None linked"]].forEach(([k,x])=>L.push(`${k}: ${x}`));
   if(A.summary)L.push("","What happened",A.summary);
@@ -721,12 +737,12 @@ function chTicketText(c,a,d){const A=a.analysis||{},F=chFindings(c,a),M=d.findin
     (k.errors||[]).concat(k.flags||[]).forEach(e=>L.push(`- ${e.label||e.code}: ${e.detail||""}`));
     if(!(k.errors||[]).length&&k.summary&&k.status!=="right")L.push(k.summary)}
   L.push("","Findings");if(!F.length)L.push("None.");
-  F.forEach((f,i)=>{const st=M[f.id]||{},r=CHAT_RUBRIC.find(x=>x.id===f.id),cur=r?d.scores[f.id]:null,con=r&&(d.contests||{})[f.id];
-    L.push(`${i+1}. ${f.priority?f.priority+" · ":""}${f.label||f.id}${f.type?" · "+f.type:""}${r?` · ${chMk(cur,r.max)}`:""}${st.mark==="not"?" · Not a mistake":""}${con?` · Contested (coach ${chMk(chClaudeMark(a,f.id),r.max)})`:""}`);
+  F.forEach((f,i)=>{const st=M[f.id]||{},r=CHAT_RUBRIC.find(x=>x.id===f.id),cur=r?d.scores[f.id]:null,con=r&&(d.contests||{})[f.id],rei=r&&!con&&(d.reinforce||{})[f.id];
+    L.push(`${i+1}. ${f.priority?f.priority+" · ":""}${f.label||f.id}${f.type?" · "+f.type:""}${r?` · ${chMk(cur,r.max)}`:""}${st.mark==="not"?" · Not a mistake":""}${con?` · Contested (coach ${chMk(chClaudeMark(a,f.id),r.max)})`:""}${rei?" · Reinforced":""}`);
     if(f.what)L.push(`   What happened: ${f.what}`);
     (f.evidence||[]).filter(e=>e&&e.quote).forEach(e=>L.push(`   Evidence: ${e.src||""}${e.fact?` (${e.fact}): ${e.quote}`:` "${e.quote}"`}`));
     if(f.why)L.push(`   Why it matters: ${f.why}`);if(f.should)L.push(`   What ${first} should have done: ${f.should}`);if(f.model)L.push(`   Model message: "${f.model}"`);
-    if(st.mark==="not"&&st.note)L.push(`   Why it wasn't a mistake: ${st.note}`);if(con&&con.reason)L.push(`   Why contested: ${con.reason}`)});
+    if(st.mark==="not"&&st.note)L.push(`   Why it wasn't a mistake: ${st.note}`);if(con&&con.reason)L.push(`   Why contested: ${con.reason}`);if(rei&&rei.reason)L.push(`   Better reason: ${rei.reason}`)});
   L.push("","Filed by Swift Coach.");return L.join("\n")}
 /* copy to the clipboard, falling back to a hidden text box */
 async function chClip(text,done){try{await navigator.clipboard.writeText(text);toast(done);return}catch(e){}
@@ -782,7 +798,11 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
   const G=(a.grade&&a.grade.scores)||{},contests={};
   Object.entries(d.contests||{}).forEach(([id,x])=>{const r=chRub(id);if(!r||!x||String(d.scores[id])!==String(x.to)||String(x.to)===String(G[id]))return;
     contests[id]={from:chMk(G[id],r.max),to:chMk(x.to,r.max),reason:String(x.reason||"").trim()}});
-  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:chNote(c,a,d),findings,contests,
+  /* reinforce: {<crit>: {mark, reason}}, only while the mark is still Claude's */
+  const reinforce={};
+  Object.entries(d.reinforce||{}).forEach(([id,x])=>{const r=chRub(id),why=String((x&&x.reason)||"").trim();if(!r||!why||contests[id]||chIsNot(findings,id)||String(d.scores[id])!==String(G[id]))return;
+    reinforce[id]={mark:chMk(G[id],r.max),reason:why}});
+  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:chNote(c,a,d),findings,contests,reinforce,
     reviewer:String(d.reviewer||"").trim(),by:myId||null,at:new Date().toISOString()};
   const before=gameStats(),gained=chatXpFor(rec)-(prev?chatXpFor(prev):0),btn=$("#chatSave");if(btn)btn.disabled=true;
   try{await db.doc(chPath("reviews",rec.week,sid)).set(rec)}
@@ -798,16 +818,28 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
 function chLessonBase(c,a){const sid=String(c.sid);return Object.assign({sid,week:chWk(c),sa:c.sa||"",caseType:(a.analysis||{}).caseType||"",by:myId||null},lrnTag(c,a))}
 function chContestLesson(c,a,crit,x){const r=chRub(crit),f=chFindings(c,a).find(y=>y.id===crit),R=(a.grade&&a.grade.reasons)||{};
   return Object.assign({kind:"contest"},chLessonBase(c,a),{crit,label:r.label,type:(f&&f.type)||"",from:x.from,to:x.to,reason:x.reason,what:R[crit]||""})}
+/* reinforce: Claude's mark is right, its reason isn't. from and to are both Claude's mark */
+function chReinforceLesson(c,a,crit,reason){const r=chRub(crit),mk=chMk(chClaudeMark(a,crit),r.max);
+  return Object.assign(chContestLesson(c,a,crit,{from:mk,to:mk,reason}),{kind:"reinforce"})}
 /* Submit: the contest goes in the draft and is learned at once (chatLessons/<sid>_<crit>), not only on Save review */
-const chSubmitted=new Map();
-function chLearnedTag(sid,crit,con){const id=`${sid}_${crit}`,ls=chLessons.find(l=>l.id===id);
-  const on=chSubmitted.get(id)===String(con.reason||"")||(ls&&ls.kind==="contest"&&String(ls.reason||"")===String(con.reason||""));
+const chSubmitted=new Map();   /* <sid>_<crit> → {kind, reason} */
+function chLearnedTag(sid,crit,con,kind){kind=kind||"contest";const id=`${sid}_${crit}`,ls=chLessons.find(l=>l.id===id),s=chSubmitted.get(id),why=String(con.reason||"");
+  const on=(s&&s.kind===kind&&s.reason===why)||(ls&&ls.kind===kind&&String(ls.reason||"")===why);
   return on?`<span class="clearned">Submitted · learned</span>`:""}
-async function chSubmitContest(){if(!chContestOk())return;const B=chContest,sid=B.sid,c=chatBy(sid),a=chatAud[sid],r=chRub(B.crit);
+async function chSubmitContest(){if(!chContestOk())return;if(chContest.mode==="reinforce")return chSubmitReinforce();const B=chContest,sid=B.sid,c=chatBy(sid),a=chatAud[sid],r=chRub(B.crit);
   const x={from:chMk(chClaudeMark(a,B.crit),r.max),to:chMk(B.to,r.max),reason:String(B.reason).trim()},id=`${sid}_${B.crit}`;
-  if(db&&c&&a)chSubmitted.set(id,x.reason);
+  if(db&&c&&a)chSubmitted.set(id,{kind:"contest",reason:x.reason});
   chSaveContest();if(!db||!c||!a)return;
   const doc=Object.assign(chContestLesson(c,a,B.crit,x),{at:new Date().toISOString()});
+  try{await db.doc(CH_LESSONS+"/"+id).set(doc);toast("Submitted · learned")}
+  catch(e){chSubmitted.delete(id);paintMarks();toast("Couldn't submit. Try again.")}}
+/* Submit a reinforce: kept in the draft (d.reinforce[crit] = {reason}) and learned at once; the score doesn't move */
+async function chSubmitReinforce(){const B=chContest,sid=B.sid,c=chatBy(sid),a=chatAud[sid],reason=String(B.reason||"").trim(),id=`${sid}_${B.crit}`;if(!a||!reason)return;
+  const d=chatDraft(sid);(d.reinforce||(d.reinforce={}))[B.crit]={reason};
+  if(db&&c)chSubmitted.set(id,{kind:"reinforce",reason});
+  chContest=null;paintMarks();const b=$(`[data-reinforce="${B.crit}"][data-where="${B.where}"]`);if(b)b.focus({preventScroll:true});
+  if(!db||!c)return;
+  const doc=Object.assign(chReinforceLesson(c,a,B.crit,reason),{at:new Date().toISOString()});
   try{await db.doc(CH_LESSONS+"/"+id).set(doc);toast("Submitted · learned")}
   catch(e){chSubmitted.delete(id);paintMarks();toast("Couldn't submit. Try again.")}}
 async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFindings(c,a),M=rec.findings||{},C=rec.contests||{},now=rec.at;
@@ -815,9 +847,10 @@ async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFinding
   F.filter(f=>chIsNot(M,f.id)).forEach(f=>{const r=chRub(f.id);
     docs.set(`${sid}_${f.id}`,Object.assign({kind:"not"},base,{crit:f.id,label:f.label||f.id,type:f.type||"",what:f.what||"",note:M[f.id].note||""},r?{from:chMk(f.score,r.max),to:chMk(r.max,r.max)}:{}))});
   Object.entries(C).forEach(([id,x])=>{if(!chRub(id))return;docs.set(`${sid}_${id}`,chContestLesson(c,a,id,x))});
+  Object.entries(rec.reinforce||{}).forEach(([id,x])=>{if(!chRub(id)||docs.has(`${sid}_${id}`))return;docs.set(`${sid}_${id}`,chReinforceLesson(c,a,id,x.reason))});
   const stale=new Set(chLessons.filter(l=>String(l.sid)===sid&&!docs.has(l.id)).map(l=>l.id));
   Object.keys((prev&&prev.findings)||{}).forEach(id=>{if(chIsNot(prev.findings,id)&&!docs.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
-  Object.keys((prev&&prev.contests)||{}).forEach(id=>{if(!docs.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
+  Object.keys((prev&&prev.contests)||{}).concat(Object.keys((prev&&prev.reinforce)||{})).forEach(id=>{if(!docs.has(`${sid}_${id}`))stale.add(`${sid}_${id}`)});
   let n=0,err=false;
   for(const [id,doc] of docs){const ex=chLessons.find(l=>l.id===id),same=ex&&["kind","from","to","reason","note"].every(k=>String(ex[k]??"")===String(doc[k]??""));
     doc.at=same&&ex.at?ex.at:now;if(same&&ex.round!==undefined){doc.round=ex.round;doc.checkpoint=ex.checkpoint??doc.checkpoint}
@@ -827,7 +860,8 @@ async function chSaveLessons(c,a,rec,prev){const sid=String(rec.sid),F=chFinding
 /* ---------- the evidence panel: what Claude used for one criterion. A contest (from a scorecard row or a finding card) opens it, and so does a row's Sources link.
    A fixed side panel on desktop (the page narrows beside it), a bottom sheet on phones. Three parts: What Claude used (the reason, each cite resolved to its text),
    then the chat with the cited messages marked, or the call, order or task a cite points at. Closing the contest box closes a panel the contest opened. ---------- */
-let chPanel=null,chPanelEl=null;   /* {sid, crit, via: "contest" | "sources", view: {kind: "chat" | "call" | "ord" | "task", …}, items} */
+let chPanel=null,chPanelEl=null;   /* {sid, crit, via: "contest" | "reinforce" | "sources", view: {kind: "chat" | "call" | "ord" | "task", …}, items} */
+const chViaL=v=>v==="contest"?"Contest":v==="reinforce"?"Reinforce":"Sources";
 const chSheet=()=>matchMedia("(max-width:860px)").matches;
 const chOne=(s,n)=>{s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1)+"…":s};
 /* the cites in a text, in order: M3, F11, C8, P2, O1, Call 2, Task 1831693. "F1 to F3" and "M2–M4" are ranges */
@@ -869,7 +903,7 @@ function chPanelHtml(c,a){const P=chPanel,r=chRub(P.crit),orig=chClaudeMark(a,P.
   const li=(it,i)=>{const chips=it.chips.map(x=>`<span class="srcchip">${esc(x)}</span>`).join(""),t=it.q?`<q class="chpq">${esc(it.text)}</q>`:`<span class="chpq${it.miss?" tkmut":""}">${esc(it.text)}</span>`,
       flag=it.ok===false?`<span class="qflag bad">not found in source</span>`:"";
     return `<li>${it.tgt?`<button type="button" class="chpi" data-pgo="${i}">`:`<div class="chpi">`}<span class="chpchips">${chips}</span>${t}${flag}${it.tgt?"</button>":"</div>"}</li>`};
-  return `<header class="chphd"><div class="chpttl"><span class="lbl-sm" id="chpVia">${P.via==="contest"?"Contest":"Sources"}</span><h2 id="chpTitle" tabindex="-1">${esc(r.label)}</h2></div>
+  return `<header class="chphd"><div class="chpttl"><span class="lbl-sm" id="chpVia">${chViaL(P.via)}</span><h2 id="chpTitle" tabindex="-1">${esc(r.label)}</h2></div>
     <span class="chpmark"><span class="lbl-sm">Claude</span><b class="num cbclaude ${chMarkCls(orig,r.max)}">${esc(chMk(orig,r.max))}</b></span>
     <button type="button" class="chpx" id="chpClose" aria-label="Close sources">×</button></header>
     <section class="chpused" aria-labelledby="chpUsedH"><h3 class="chph" id="chpUsedH">What Claude used</h3>${why?`<p class="chpwhy">${whyH}</p>`:""}
@@ -917,7 +951,7 @@ function chPanelEnsure(){if(!chPanelEl){const el=document.createElement("aside")
 function chPanelRender(){const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!chPanel||!chPanelEl||!a)return;
   if(chPanel.view.kind!=="chat"&&chPanel.view.kind!=="msg")chPanel.view={kind:"chat"};chPanelEl.innerHTML=chPanelHtml(c,a);chPanelView(c,a,true)}
 function chPanelOpen(crit,via){const sid=String(chatSel||""),c=chatBy(sid),a=chatAud[sid];if(!c||!a||!chRub(crit))return;
-  if(chPanel&&chPanel.sid===sid&&chPanel.crit===crit){chPanel.via=via;const l=$("#chpVia");if(l)l.textContent=via==="contest"?"Contest":"Sources";return}
+  if(chPanel&&chPanel.sid===sid&&chPanel.crit===crit){chPanel.via=via;const l=$("#chpVia");if(l)l.textContent=chViaL(via);return}
   chPanel={sid,crit,via,view:{kind:"chat"},items:[]};const el=chPanelEnsure(),v=$("#view-chat");if(v&&el.parentNode!==v)v.append(el);
   el.hidden=false;document.body.classList.add("chp-on");chPanelRender();chPanelAria()}
 function chPanelClose(refocus){if(!chPanel)return;const P=chPanel;chPanel=null;if(chPanelEl){chPanelEl.hidden=true;chPanelEl.innerHTML=""}document.body.classList.remove("chp-on");chPanelAria();
@@ -926,12 +960,12 @@ function chPanelAria(){document.querySelectorAll("#view-chat [data-psrc]").forEa
 /* closes the panel when its chat, tab or audit is gone, or when the contest that opened it closed */
 function chPanelSync(){if(!chPanel)return;const sid=String(chatSel||"");
   if(chPanel.sid!==sid||tab!=="chat"||!chatAud[sid]||!chRub(chPanel.crit)){chPanelClose();return}
-  if(chPanel.via==="contest"&&!(chContest&&chContest.sid===sid&&chContest.crit===chPanel.crit))chPanelClose()}
+  if((chPanel.via==="contest"||chPanel.via==="reinforce")&&!(chContest&&chContest.sid===sid&&chContest.crit===chPanel.crit))chPanelClose()}
 document.addEventListener("keydown",e=>{if(e.key!=="Escape"||!chPanel||e.defaultPrevented)return;e.preventDefault();chPanelClose(!!(chPanelEl&&chPanelEl.contains(document.activeElement)))});
 $("#view-chat").addEventListener("click",e=>{
   /* the evidence panel */
   if(e.target.closest("#chpClose")){chPanelClose(true);return}
-  const ps=e.target.closest("[data-psrc]");if(ps){const k=ps.dataset.psrc;if(chPanel&&chPanel.crit===k)chPanelClose(true);else{chPanelOpen(k,chContest&&chContest.sid===String(chatSel)&&chContest.crit===k?"contest":"sources");const h=$("#chpTitle");if(h)h.focus({preventScroll:true})}return}
+  const ps=e.target.closest("[data-psrc]");if(ps){const k=ps.dataset.psrc;if(chPanel&&chPanel.crit===k)chPanelClose(true);else{chPanelOpen(k,chContest&&chContest.sid===String(chatSel)&&chContest.crit===k?chContest.mode||"contest":"sources");const h=$("#chpTitle");if(h)h.focus({preventScroll:true})}return}
   const pg=e.target.closest("[data-pgo]");if(pg){chPanelGo((chPanel&&chPanel.items||[])[Number(pg.dataset.pgo)]);return}
   const pk=e.target.closest("[data-pkey]");if(pk){chPanelGo(chPanelFind(pk.dataset.pkey));return}
   if(e.target.closest("[data-pback]")&&chPanel){const c=chatBy(chatSel),a=c&&chatAud[c.sid];chPanel.view={kind:"chat"};if(a)chPanelView(c,a,true);return}
@@ -941,7 +975,8 @@ $("#view-chat").addEventListener("click",e=>{
   const m=e.target.closest("[data-cm]");if(m){const id=m.dataset.cm,v=m.dataset.v==="na"?"na":Number(m.dataset.v);
     if(String(v)===String(chClaudeMark(chatAud[String(chatSel)],id)))chWithdraw(id);else chOpenContest(id,"row",v);return}
   const ct=e.target.closest("[data-contest]");if(ct){chOpenContest(ct.dataset.contest,ct.dataset.where);return}
-  const cvb=e.target.closest("[data-cv]");if(cvb&&chContest){chContest.to=cvb.dataset.cv==="na"?"na":Number(cvb.dataset.cv);
+  const rf=e.target.closest("[data-reinforce]");if(rf){chOpenContest(rf.dataset.reinforce,rf.dataset.where,undefined,"reinforce");return}
+  const cvb=e.target.closest("[data-cv]");if(cvb&&chContest&&chContest.mode!=="reinforce"){chContest.to=cvb.dataset.cv==="na"?"na":Number(cvb.dataset.cv);
     document.querySelectorAll("#cbox [data-cv]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.cv===String(chContest.to))));
     const sv=$("#cbSave");if(sv)sv.disabled=!chContestOk();const w=$("#cbWhy");if(w&&!w.value.trim())w.focus({preventScroll:true});return}
   const fm=e.target.closest("[data-fmark]");if(fm){chMarkFinding(fm.dataset.fid,fm.dataset.fmark);return}
@@ -951,8 +986,8 @@ $("#view-chat").addEventListener("click",e=>{
   const b=e.target.closest("button");if(!b)return;
   switch(b.id){
     case "cbSave":chSubmitContest();break;
-    case "cbCancel":{const B=chContest;chContest=null;paintMarks();if(B){const x=$(`[data-contest="${B.crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}break}
-    case "cbWithdraw":if(chContest)chWithdraw(chContest.crit);break;
+    case "cbCancel":{const B=chContest;chContest=null;paintMarks();if(B){const x=$(`[data-${B.mode==="reinforce"?"reinforce":"contest"}="${B.crit}"][data-where="${B.where}"]`);if(x)x.focus({preventScroll:true})}break}
+    case "cbWithdraw":if(chContest){if(chContest.mode==="reinforce")chWithdrawReinforce(chContest.crit);else chWithdraw(chContest.crit)}break;
     case "cvGrade":chGradeOpen();break;
     case "cvStop":if(chatRun)chatRun.ctl.abort();break;
     case "cvNext":{const nx=chNextChat(chatSel);if(nx)openChat(nx.sid);break}
@@ -1164,13 +1199,13 @@ function chCalHtml(){const L=chatCal.slice().sort((a,b)=>String(b.at||"").locale
       <b>${esc(x.agent||"")}</b><span>${esc(x.restaurant||"")}</span><span class="num hint">${esc(x.date?shortDate(x.date):"")}</span>${i<CHAT.calibMax?`<span class="ttag">In use</span>`:""}
       <span class="calact">${chatBy(x.sid)||x.date?`<button type="button" class="btn small" data-open="${esc(x.sid)}" data-week="${esc(chatBy(x.sid)?chWk(chatBy(x.sid)):chatWeek(x.date))}">Open</button>`:""}</span></div>
       ${(x.lessons||[]).length?`<ul class="lessons">${x.lessons.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`:""}</li>`).join("")}</ul>`:`<div class="hint">None yet.</div>`)}
-/* what the coach learned: contested marks and findings marked "not a mistake". The newest CHAT.lessonMax go into every grade */
+/* what the coach learned: contested marks, reinforced marks (right mark, better reason) and findings marked "not a mistake". The newest CHAT.lessonMax go into every grade */
 function chLessonsHtml(){const L=chLessonsSorted(),max=CHAT.lessonMax||20,day=at=>{const t=Date.parse(at);return isNaN(t)?"":new Date(t).toLocaleDateString("en-US",{month:"short",day:"numeric"})};
-  return `<div class="bhd"><h2>What the coach learned</h2><span class="hint num">${L.length>max?`${max} of ${L.length} in use`:L.length}</span></div>`+(L.length?`<p class="hint lsuse">Every new grade reads the newest ${max}.</p><ul class="callist">${L.map(l=>{const wk=l.week||(chatBy(l.sid)?chWk(chatBy(l.sid)):""),con=l.kind==="contest",why=con?l.reason:l.note;
-    const mk=con?`<span class="lsmk num"><s>${esc(l.from||"–")}</s><span aria-hidden="true"> → </span><span class="sr-only"> to </span><b>${esc(l.to||"–")}</b></span>`:`<span class="lsmk"><span class="tknot">Not a mistake</span></span>`;
-    return `<li class="calitem lsitem ${con?"contest":"not"}"><div class="calhd"><b>${esc(l.label||l.crit||"Finding")}</b>${l.caseType?`<span class="lsct">${esc(chCaseL(l.caseType))}</span>`:""}${mk}
+  return `<div class="bhd"><h2>What the coach learned</h2><span class="hint num">${L.length>max?`${max} of ${L.length} in use`:L.length}</span></div>`+(L.length?`<p class="hint lsuse">Every new grade reads the newest ${max}.</p><ul class="callist">${L.map(l=>{const wk=l.week||(chatBy(l.sid)?chWk(chatBy(l.sid)):""),con=l.kind==="contest",rei=l.kind==="reinforce",why=con||rei?l.reason:l.note;
+    const mk=rei?`<span class="lsmk"><span class="tkrei">Reinforced</span> <b class="num">${esc(l.to||l.from||"–")}</b></span>`:con?`<span class="lsmk num"><s>${esc(l.from||"–")}</s><span aria-hidden="true"> → </span><span class="sr-only"> to </span><b>${esc(l.to||"–")}</b></span>`:`<span class="lsmk"><span class="tknot">Not a mistake</span></span>`;
+    return `<li class="calitem lsitem ${rei?"reinforce":con?"contest":"not"}"><div class="calhd"><b>${esc(l.label||l.crit||"Finding")}</b>${l.caseType?`<span class="lsct">${esc(chCaseL(l.caseType))}</span>`:""}${mk}
       <span class="calact"><button type="button" class="btn small danger" data-lsdel="${esc(l.id)}">Delete</button></span></div>
-      ${why?`<div class="lsline lsnote"><span class="lbl-sm">Why</span> ${esc(why)}</div>`:""}${l.what?`<div class="lsline"><span class="lbl-sm">Coach said</span> ${l.type?`<span class="lstype0">${esc(l.type)}:</span> `:""}${esc(l.what)}</div>`:""}
+      ${why?`<div class="lsline lsnote"><span class="lbl-sm">${rei?"Better reason":"Why"}</span> ${esc(why)}</div>`:""}${l.what?`<div class="lsline"><span class="lbl-sm">Coach said</span> ${l.type?`<span class="lstype0">${esc(l.type)}:</span> `:""}${esc(l.what)}</div>`:""}
       <div class="lsmeta hint">${esc(l.sa||"")}${l.sa?" · ":""}<span class="num">${esc(day(l.at))}</span> · <button type="button" class="lslink" data-open="${esc(l.sid)}" data-week="${esc(wk)}">Chat ${esc(l.sid)}</button></div></li>`}).join("")}</ul>`:`<div class="hint">None yet.</div>`)}
 function chStaffRow(p,s,def){return `<div class="srow"${def?' data-def="1"':""}><input data-sp aria-label="Email prefix" autocomplete="off" value="${esc(p)}"><input data-sn aria-label="Name" autocomplete="off" value="${esc(s.name||"")}">
   <select data-sr aria-label="Role">${CH_ROLES.map(([v,l])=>`<option value="${v}"${s.role===v?" selected":""}>${l}</option>`).join("")}</select>${def?`<span></span>`:`<button type="button" class="btn small danger" data-srm aria-label="Remove">×</button>`}</div>`}

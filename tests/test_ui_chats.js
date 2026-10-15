@@ -3,10 +3,11 @@
 // case types, bot lines, request fields and the game layer's history.
 // The QA ticket (top of Audit): fields, the brain's compensation check, findings with checked quotes, Agree / Not a mistake with live re-scoring,
 // contests (a mark the QA lead disagrees with, and why) from a scorecard row or a finding card, and Not a mistake: both saved as lessons (chatLessons),
-// deleted on withdraw, listed in Brain under What the coach learned and fed to the next grade's prompt.
+// deleted on withdraw, listed in Brain under What the coach learned and fed to the next grade's prompt. Reinforce (right mark, better reason) is a lesson too;
+// order cards show Voided, Draft and Refunded.
 // No names or chat text from the real case are written here: the SA, restaurant and messages are read from the fixture at run time.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
-const { openPage, chatWorld, learnWorld, DIR } = require('./mock.js');
+const { openPage, chatWorld, learnWorld, reinforceWorld, DIR } = require('./mock.js');
 const B = require('../src/chat.js');
 const SH = path.join(DIR, 'shots'); fs.mkdirSync(SH, { recursive: true });
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; console.log('ok -', m) };
@@ -883,6 +884,90 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(await width(page) <= 390 && await page.locator('#tkRound').count() === 0, '390px audit of a chat in a finished round: no banner, no overflow');
   ok(!errors.length, 'no console errors (learning) ' + JSON.stringify(errors));
   await ctx.close();
+
+  // ===== 8. Reinforce (Claude's mark is right, its reason isn't) and order status
+  { const RW = addD(WEEK, -21), R = reinforceWorld(RW), RS = R.sid, LP = `chatLessons/${RS}_ev`, LT = `chatLessons/${RS}_tone`;
+    ({ page, ctx, errors } = await openPage(b, R.seed, { sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(400);
+    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#cTicket'); await page.waitForTimeout(250);
+    const pct0 = await txt(page, '#tkPct');
+    ok(await page.locator('.ccrit [data-reinforce][data-where="row"]').count() === 9 && await page.locator('.tkfind [data-reinforce][data-where="find"]').count() === 2, 'every scorecard row and every finding with a criterion has Reinforce');
+    ok(await page.evaluate(() => [...document.querySelectorAll('.tkfind .tkact')].every(g => { const b = [...g.querySelectorAll('button')].map(x => x.textContent); return b.indexOf('Reinforce') === b.indexOf('Contest') + 1 })), 'Reinforce sits next to Contest');
+    // open from the finding card: the mark is locked to Claude's, Submit needs a better reason
+    await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(150);
+    ok(await page.locator('#tf-ev #cbox').isVisible() && (await page.locator('#tf-ev [data-reinforce]').getAttribute('aria-expanded')) === 'true' && (await page.locator('#tf-ev [data-contest]').getAttribute('aria-expanded')) === 'false', 'Reinforce opens the box in the finding card');
+    ok(await page.evaluate(() => { const b = [...document.querySelectorAll('#cbox [data-cv]')]; return b.length === 4 && b.every(x => x.disabled) && b.filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cv).join() === '2' }), "the mark is locked to Claude's 2");
+    ok((await page.locator('#cbox label[for="cbWhy"]').textContent()) === 'Better reason' && await page.locator('#cbSave').isDisabled(), 'label Better reason; Submit off until it is filled');
+    ok((await txt(page, '#chpVia')) === 'REINFORCE' && (await txt(page, '#chpTitle')) === 'Gathered the evidence', 'the side panel opens with the header Reinforce');
+    await page.fill('#cbWhy', '   '); ok(await page.locator('#cbSave').isDisabled(), 'blank reason: Submit stays off');
+    await page.locator('#cbox [data-cv="3"]').click({ force: true }); await page.waitForTimeout(60);
+    ok(await page.evaluate(() => document.querySelector('#cbox [data-cv="2"]').getAttribute('aria-pressed')) === 'true', 'clicking another mark does nothing');
+    const WHYR = 'Two points is right, but because no pickup window was checked, not the order itself.';
+    await page.fill('#cbWhy', WHYR); ok(await page.locator('#cbSave').isEnabled(), 'a reason turns Submit on');
+    await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'reinforce-box.png') });
+    await page.locator('#tf-ev').screenshot({ path: path.join(SH, 'reinforce-finding.png') });
+    await page.click('#cbSave');
+    await page.waitForFunction(p => !!window.__data[p], LP, { timeout: 3000 });
+    const L1 = await page.evaluate(p => window.__data[p], LP);
+    ok(L1.kind === 'reinforce' && L1.from === '2/3' && L1.to === '2/3' && L1.reason === WHYR && L1.what === 'Voided O1 without checking the pickup time first (F2).' && L1.crit === 'ev' && L1.label === 'Gathered the evidence' && L1.type === 'Did not check the order' && L1.caseType === 'order_issue' && L1.sid === RS && L1.sa === 'Ivo Lark' && !isNaN(Date.parse(L1.at)),
+      'Submit writes chatLessons/<sid>_ev at once: kind reinforce, from = to = 2/3, the reason, what, crit, label, type, caseType');
+    ok((await txt(page, '#tkPct')) === pct0 && await page.evaluate(s => chatDraft(s).scores.ev, RS) === 2 && await page.locator('#cbox').count() === 0 && !(await page.evaluate(() => !!(chPanel))), 'the score does not move; the box and the panel close');
+    ok((await txt(page, '#tf-ev .tkrei')) === 'REINFORCED' && (await txt(page, '#tf-ev .tkrei-why')).includes(WHYR) && (await txt(page, '#tf-ev .tkrei-why')).includes('Submitted · learned') && (await txt(page, '#cc-ev .crei')) === 'REINFORCED' && (await txt(page, '#cc-ev .crei-why')).includes(WHYR),
+      'the finding and the row show Reinforced and the better reason');
+    ok(await page.evaluate(s => JSON.stringify(chatDraft(s).reinforce), RS) === JSON.stringify({ ev: { reason: WHYR } }), 'the draft keeps d.reinforce[crit] = {reason}');
+    ok((await page.evaluate(() => { const s = String(chatSel); return chTicketText(chatBy(s), chatAud[s], chatDraft(s)) })).includes('   Better reason: ' + WHYR), 'the copied ticket carries the better reason');
+    // from a scorecard row, then withdraw: the draft entry and the lesson go
+    await page.click('#cc-tone [data-reinforce]'); await page.waitForTimeout(120);
+    ok(await page.locator('#cc-tone #cbox.rei').isVisible() && (await txt(page, '#chpVia')) === 'REINFORCE', 'Reinforce from a row opens the box and the panel');
+    await page.fill('#cbWhy', 'Brief is fine; the miss is the refund not being named.'); await page.click('#cbSave');
+    await page.waitForFunction(p => !!window.__data[p], LT, { timeout: 3000 });
+    await page.click('#cc-tone [data-reinforce]'); await page.waitForTimeout(120);
+    ok((await page.locator('#cbWhy').inputValue()).startsWith('Brief is fine') && await page.locator('#cbWithdraw').isVisible(), 'reopening shows the reason and Withdraw');
+    await page.click('#cbWithdraw'); await page.waitForFunction(p => !window.__data[p], LT, { timeout: 3000 });
+    ok(await page.locator('#cc-tone .crei').count() === 0 && await page.locator('#cbox').count() === 0 && await page.evaluate(s => !chatDraft(s).reinforce.tone, RS) && await page.evaluate(p => !!window.__data[p], LP), 'Withdraw removes the draft entry and deletes that lesson only');
+    // Save review keeps it; a reload brings it back from the review
+    await page.click('#chatSave'); await page.waitForFunction(p => !!window.__data[p], `chatWeeks/${RW}/reviews/${RS}`, { timeout: 3000 }); await page.waitForTimeout(150);
+    const rvR = await page.evaluate(p => window.__data[p], `chatWeeks/${RW}/reviews/${RS}`), L2 = await page.evaluate(p => window.__data[p], LP);
+    ok(JSON.stringify(rvR.reinforce) === JSON.stringify({ ev: { mark: '2/3', reason: WHYR } }) && JSON.stringify(rvR.contests) === '{}' && rvR.scores.ev === 2 && L2 && L2.kind === 'reinforce' && L2.at === L1.at, 'Save review stores reinforce {mark, reason} and keeps the lesson (same date)');
+    // a reload (the mock store doesn't survive one): drop the working copy and what this session submitted, so both come back from the review and chatLessons
+    await page.evaluate(() => { chatDrafts.clear(); chSubmitted.clear(); renderChatAudit(true) }); await page.waitForTimeout(150);
+    ok((await txt(page, '#tf-ev .tkrei')) === 'REINFORCED' && (await txt(page, '#tf-ev .tkrei-why')).includes(WHYR) && (await txt(page, '#tf-ev .tkrei-why')).includes('Submitted · learned'), 'after a reload the finding is still Reinforced (from the review), and learned (from chatLessons)');
+    // Learning tab list
+    await page.click('[data-tab="brain"]'); await page.waitForTimeout(250);
+    const li = (await page.locator('#brLessons .lsitem.reinforce').allInnerTexts()).map(t => t.replace(/\s+/g, ' '));
+    ok(li.length === 1 && li[0].includes('Gathered the evidence') && /REINFORCED/i.test(li[0]) && li[0].includes('2/3') && li[0].includes(WHYR) && /Better reason/i.test(li[0]), 'What the coach learned lists it as Reinforced, the mark and the better reason');
+    // withdraw after reload: the lesson goes
+    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#tf-ev'); await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(120); await page.click('#cbWithdraw');
+    await page.waitForFunction(p => !window.__data[p], LP, { timeout: 3000 });
+    ok(await page.locator('#tf-ev .tkrei').count() === 0, 'Withdraw after a reload deletes the lesson doc');
+    // contest on a reinforced criterion replaces it
+    await page.click('#tf-tone [data-reinforce]'); await page.fill('#cbWhy', 'Right mark, wrong reason.'); await page.click('#cbSave'); await page.waitForFunction(p => (window.__data[p] || {}).kind === 'reinforce', LT, { timeout: 3000 });
+    await page.click('#tf-tone [data-contest]'); await page.locator('#cbox [data-cv="3"]').click(); await page.fill('#cbWhy', 'It was clear enough.'); await page.click('#cbSave');
+    await page.waitForFunction(p => (window.__data[p] || {}).kind === 'contest', LT, { timeout: 3000 });
+    ok(await page.locator('#tf-tone .tkrei').count() === 0 && await page.locator('#tf-tone [data-reinforce]').count() === 0 && (await txt(page, '#tf-tone .tkcon')) === 'CONTESTED', 'a contest replaces the reinforce; a contested finding has no Reinforce');
+    // ----- order status
+    const ordLine = (await page.locator('.tkgrid .tkf', { hasText: 'Order' }).first().innerText()).replace(/\s+/g, ' ');
+    ok(ordLine.includes('Voided · No pick up') && ordLine.includes('Refunded $24.50 (full)'), 'the ticket Order line: Voided · No pick up, Refunded $24.50 (full)');
+    await page.click('#src-order summary'); await page.waitForTimeout(150);
+    const cards = await page.locator('#src-order .ordcard').allInnerTexts();
+    ok(cards.length === 2 && cards[0].includes('Voided · No pick up') && !cards[0].includes('Refunded') && cards[1].includes('Refunded $24.50 (full)') && !cards[1].includes('Voided'), 'order cards: the voided one shows Voided · No pick up, the refunded one Refunded $24.50 (full)');
+    ok(await page.locator('#src-order .ordcard .ostat').count() === 2, 'nothing for a submitted order with no refund');
+    await page.locator('#src-order .ordcard').first().scrollIntoViewIfNeeded(); await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
+    await page.locator('#src-order').screenshot({ path: path.join(SH, 'order-voided.png') });
+    await page.click('#ordChange'); await page.waitForTimeout(200);
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#ordList .orow')].map(r => [r.querySelector('.otk').textContent, (r.querySelector('.ostat') || {}).textContent || '']));
+    ok(JSON.stringify(rows) === JSON.stringify([['#4472', 'Voided'], ['#4473', ''], ['#4474', '']]), 'day order rows: Voided only, no Draft tag');
+    await page.click('#ordCancel').catch(() => {}); await page.waitForTimeout(100);
+    // dark and phone
+    await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(100);
+    ok(await page.evaluate(() => getComputedStyle(document.querySelector('.ordcard .ostat')).color) === 'rgb(248, 113, 113)', 'dark: the status tag takes the dark tokens');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(150);
+    await page.click('#tf-ev [data-reinforce]'); await page.waitForTimeout(250);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbox').getBoundingClientRect().right <= 390), `390px: the reinforce box and order tags fit (${await width(page)})`);
+    await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'reinforce-390.png') });
+    ok(!errors.length, 'no console errors (reinforce, orders) ' + JSON.stringify(errors));
+    await ctx.close() }
   ok(!allErrors.length, 'no console errors (routes) ' + JSON.stringify(allErrors));
   await b.close(); console.log(`ui chats: ${n} checks passed`);
 })().catch(e => { console.error('TEST FAILED', e); process.exit(1) });

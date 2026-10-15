@@ -714,3 +714,18 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 @media (max-width:1000px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr))}.dm.dmain{grid-column:span 1}.dm.dmix{grid-column:span 2}}
 @media (max-width:560px){.dmet{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dm.dmain,.dm.dmix{grid-column:1/-1}.dm{padding:10px 10px 11px}.dm .lbl-sm{font-size:10px;letter-spacing:.05em}.dmv{font-size:18px}.dm.dmain .dmv{font-size:28px}.dms{font-size:11.5px}
   .sascore{font-size:24px}}
+
+/* reinforce: Claude's mark is right, the reason isn't. Green family, beside the violet contests */
+.crei,.tkrei{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:4px;background:var(--s3-soft);color:var(--s3);white-space:nowrap}
+.cyour.crei-why,.tkyour.tkrei-why{border-left-color:var(--s3)}
+.cyour.crei-why .lbl-sm,.tkyour.tkrei-why .lbl-sm{color:var(--s3)}
+.rbtn[aria-expanded="true"],.tkbrei[aria-expanded="true"]{border-color:var(--s3);color:var(--s3);background:var(--s3-soft)}
+.cbox.rei{border-color:var(--s3)}
+.cbmarks.locked .cm{cursor:default;opacity:.45}
+.cbmarks.locked .cm[aria-pressed="true"]{opacity:1}
+.lsitem.reinforce{border-left:3px solid var(--s3)}
+
+/* order status: Voided (and why), Draft, Refunded */
+.ostat{display:inline-block;font-size:11.5px;font-weight:600;line-height:1.5;padding:0 7px;border-radius:4px;background:var(--s1-soft);color:var(--s1);white-space:nowrap}
+.tkord .ostat{margin-left:2px}
+.otype .ostat{margin-left:6px}

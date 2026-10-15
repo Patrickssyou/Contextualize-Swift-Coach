@@ -262,4 +262,33 @@ function learnWorld(lw) {
   seed.push(['brainRuns/cp0', cp0], ['learning/state', { week: lw, target: { verdicts: 8, pts: 5, streak: 2 }, marked: [marked.sid], rounds: [] }]);
   return { seed, list, reviewed, marked, SAS, cp0 };
 }
-module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld, learnWorld };
+/* Reinforce and order status (all invented): one graded chat in week rw with two findings (ev 2/3, tone 2/3), a voided order (no pick up),
+   a fully refunded order, and that day's orders with one voided and one draft. */
+function reinforceWorld(rw) {
+  const P = k => `chatWeeks/${rw}/${k}`, sid = '9940001', at = `${rw}T18:10:00.000Z`, em = 'ivo.lark@wondersco.com', wid = `Wid(0,1,1,0,${sid})`, url = `https://wira.example.test/tasks/${sid}`;
+  const m = (n, role, name, text, author) => ({ n, author, role, name, text, internal: false, inferred: false });
+  const msgs = [m(1, 'client', 'Jo', 'Hi, a customer never picked up order 4471 and we want it off our books. This is Jo at Quarry Hill Pizza.', 'client-+15550401'),
+    m(2, 'sa', 'Ivo Lark', 'Hi Jo, I voided 4471 and refunded 4470 in full as you asked.', em),
+    m(3, 'client', 'Jo', 'Thanks.', 'client-+15550401')];
+  const chat = { v: 'chat-1', week: rw, picked: true, gradable: true, wid, sid, url, at, closedAt: '', status: 'closed', sub: '', title: msgs[0].text.slice(0, 80), direction: 'inbound', createdBy: '', createdByTitle: '',
+    sa: 'Ivo Lark', saEmail: em, clientId: 'client-+15550401', frt: 2, firstClientAt: at, firstReplyAt: at, intent: 'order', rating: '', code: 'R94001', restaurant: 'Quarry Hill Pizza', initiator: 'client', msgs, clientName: 'Jo' };
+  const orders = [
+    { id: 'ord-4471', label: 'O1', ticket: '4471', type: 'PICKUP', source: 'online_ordering', at: `${rw}T17:05:00.000Z`, items: 21.5, tax: 1.83, tip: 0, other: 0, total: 23.33, status: 'voided', voidWhy: 'NO_PICK_UP', pay: 'unpaid', refunded: 0, refundType: '' },
+    { id: 'ord-4470', label: 'O2', ticket: '4470', type: 'PICKUP', source: 'phone', at: `${rw}T16:40:00.000Z`, items: 22.5, tax: 2, tip: 0, other: 0, total: 24.5, status: 'submitted', voidWhy: '', pay: 'fully_refunded', refunded: 24.5, refundType: 'full' }];
+  const dayOrders = [{ id: 'ord-4472', ticket: '4472', type: 'DELIVERY', source: 'online_ordering', at: `${rw}T17:20:00.000Z`, total: 31.1, items: 27, status: 'voided' },
+    { id: 'ord-4473', ticket: '4473', type: 'PICKUP', source: 'phone', at: `${rw}T17:30:00.000Z`, total: 12.4, items: 11, status: 'draft' },
+    { id: 'ord-4474', ticket: '4474', type: 'PICKUP', source: 'phone', at: `${rw}T17:45:00.000Z`, total: 18.75, items: 17, status: 'submitted' }];
+  const scores = { fr: 3, ev: 2, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 2 };
+  const reasons = { fr: 'Replied at once (F2).', ev: 'Voided O1 without checking the pickup time first (F2).', rs: 'Restated the order number (F2).', fa: '', path: 'Void and refund were right (F2).', amt: '', expl: '', esc: '', tone: 'Short but clear (F2).' };
+  const findings = [
+    { id: 'ev', priority: 'P2', label: 'Gathered the evidence', type: 'Did not check the order', score: 2, what: 'Voided the order without opening it.', why: 'A wrong void loses a sale.', should: 'Open the order and check the pickup time first.', model: 'Checking 4471 now.', evidence: [{ src: 'M2', quote: 'I voided 4471', ok: true }] },
+    { id: 'tone', priority: 'P3', label: 'Reply quality', type: 'Too brief', score: 2, what: 'One line for two actions.', why: 'The client may miss the refund.', should: 'Name both actions on their own lines.', model: '', evidence: [{ src: 'M2', quote: 'refunded 4470 in full', ok: true }] }];
+  const audit = { v: 'chat-1', sid, wid, url, week: rw, at, sa: chat.sa, restaurant: chat.restaurant, code: chat.code, initiator: 'client', title: chat.title, frt: 2, clientName: 'Jo',
+    tasks: [], orders, candidates: [], dayOrders, orderNote: '', orderPick: 'auto', refs: {}, calls: [], slack: [], notFound: [],
+    facts: { calls: {}, timeline: [{ id: 'F1', src: 'M1', when: '', who: 'Jo (client)', kind: 'said', what: 'Asks to void order 4471, never picked up' }, { id: 'F2', src: 'M2', when: '', who: 'Ivo Lark', kind: 'did', what: 'Voided 4471 and refunded 4470 in full' }], claims: [], promises: [] },
+    analysis: { caseType: 'order_issue', request: 'Void an order that was never picked up', summary: 'The client asked to void an unpicked order; the SA voided it and refunded another.', fault: { who: 'none', why: 'The customer did not pick up.', cites: ['F1'] } },
+    grade: { scores, reasons, findings, route: { facts: { mark: 'partly', why: 'Did not open the order.' }, analysis: { mark: 'right', why: 'Plain request.' }, solution: { mark: 'right', why: 'Voided.' }, escalation: { mark: 'right', why: 'Not needed.' } }, wentWell: ['Fast'], nextTime: [], verdictWhy: 'Fine.' },
+    pct: 87.9, verdict: 'good', gradedAt: `${rw}T19:00:00.000Z`, by: 'main' };
+  return { sid, findings, seed: [[P('chats/' + sid), chat], [P('audits/' + sid), audit], [`chatWeeks/${rw}`, { week: rw, chats: 1, picked: 1 }]] };
+}
+module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld, learnWorld, reinforceWorld };
