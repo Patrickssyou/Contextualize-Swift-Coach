@@ -191,7 +191,7 @@ async function outbound() {
     eq(ids(r).sort(), ['ph', 'rest'], 'the only chat whose window holds the call keeps it (other days, restaurants and SAs do not count)');
     r = link(A, rows, { siblings: [A, Bc], closedAt: '2026-10-10T18:35:00' }); ok(ids(r).includes('ph') && !ids(r).includes('rest'), 'a call after this chat closed + 60 min still counts, but the other chat holds it'); }
   /* window edges: 5 min before the chat opened to 60 min after it closed */
-  { const t = (hh, mm, ss) => `2026-10-10T${hh}:${mm}:${ss}`, R = (id, at) => row(id, at, { code: 'R1' });
+  { const t = (hh, mm, ss) => `2026-10-10T${hh}:${mm}:${ss}`, R = (id, at) => row(id, at, { phone: '5551231234' });
     let r = link(chat(), [R('e1', t('18', '14', '00')), R('e2', t('18', '13', '59')), R('e3', t('20', '00', '00')), R('e4', t('20', '00', '01'))]);
     eq(ids(r), ['e1', 'e3'], 'inclusive at opened - 5 min and closed + 60 min, nothing a second outside');
     r = link(chat(), [R('o1', '2026-10-11T18:19:00'), R('o2', '2026-10-11T18:19:01')], { closedAt: '' });
@@ -200,6 +200,12 @@ async function outbound() {
     eq(ids(r), ['u1'], 'an open chat\'s window stops at the pull\'s end');
     r = link(chat(), [R('u3', t('22', '00', '00'))], { closedAt: '', until: '2026-10-12T00:00:00' }); eq(ids(r), ['u3'], 'the cap only applies when it is earlier than 24 h');
     const w = B.chatWindow(chat(), '2026-10-10T19:00:00', ''); eq([w.lo, w.hi, w.open], [Date.parse('2026-10-10T18:14:00Z'), Date.parse('2026-10-10T20:00:00Z'), false], 'chatWindow'); }
+  /* a restaurant-only match: within 3 h of the opening, or in the 60 min after the close; a phone match keeps the whole window */
+  { const R = (id, at, o) => row(id, at, Object.assign({ code: 'R1' }, o || {})), cl = { closedAt: '2026-10-11T10:00:00' };
+    let r = link(chat(), [R('h1', '2026-10-10T21:19:00'), R('h2', '2026-10-10T21:19:01'), R('hp', '2026-10-10T22:00:00', { phone: '5551231234' })], cl);
+    eq(ids(r), ['h1', 'hp'], 'restaurant-only: 3 h after the opening is the edge; the phone match 3.7 h in stays'); eq(r.stats.late, 1, 'counted as late');
+    r = link(chat(), [R('c1', '2026-10-10T23:30:00'), R('c2', '2026-10-10T22:00:00'), R('c3', '2026-10-11T00:00:01')], { closedAt: '2026-10-10T23:00:00' });
+    eq(ids(r), ['c1'], 'restaurant-only: kept in the 60 min after the close, not between 3 h and the close, not after the hour'); }
   ok(B.linkSaOutbound(chat({ at: '' }), [row('x', '2026-10-10T18:40:00', { code: 'R1' })], {}).kept.length === 0, 'a chat with no opened time keeps nothing');
 
   /* the query config */
@@ -312,7 +318,7 @@ function part2() {
     eq(poolQuery.misses().length, 0, 'all 85 chats answered with no misses');
     const sao = k => k.calls.filter(l => l.link === 'sa_outbound'), gain = chats.filter(c => sao(K[c.sid]).length);
     const ph = gain.filter(c => sao(K[c.sid]).some(l => l.match === 'phone')), ro = gain.filter(c => !sao(K[c.sid]).some(l => l.match === 'phone'));
-    eq([gain.length, ph.length, ro.length], [20, 14, 6], 'chats that gain outbound calls: 20 (14 with a phone match, 6 restaurant only)');
+    eq([gain.length, ph.length, ro.length], [18, 14, 4], 'chats that gain outbound calls: 18 (14 with a phone match, 4 restaurant only)');
     ok(chats.every(c => K[c.sid].calls.every(l => l.link === 'order' || l.link === 'same_caller' || l.link === 'sa_outbound')), 'every call says how it was linked');
     ok(gain.every(c => sao(K[c.sid]).every(l => l.agent.toLowerCase().replace(/\s+/g, ' ').startsWith(c.sa.toLowerCase().split(' ')[0]) && l.dir === 'out' && l.why && l.text !== undefined)), 'only the chat\'s own SA, outbound, with a why');
     ok(chats.every(c => new Set(K[c.sid].calls.map(l => l.id)).size === K[c.sid].calls.length), 'no call twice');

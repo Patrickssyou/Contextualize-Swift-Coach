@@ -3,7 +3,7 @@
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
 const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15,
-  outBeforeMin:5, outAfterMin:60, outOpenH:24, outLimit:80, maxOutCalls:4, quietOut:2};
+  outBeforeMin:5, outAfterMin:60, outRestH:3, outOpenH:24, outLimit:80, maxOutCalls:4, quietOut:2};
 const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
@@ -313,7 +313,7 @@ function relMin(ms,c,closedAt){const o=ldTs(c.at),cl=ldTs(closedAt),fmt=m=>m<120
    A call is kept when (a) the dialed number is one the chat, its tasks or its orders mention (match "phone"), else (b) the call's restaurant code is the chat's (match "restaurant"), else dropped.
    A restaurant-only match is also dropped when another chat of the same SA and restaurant has the call inside its window (the SA may have been working that one).
    out: {kept:[call with link/match/why], stats:{rows,inWindow,phone,restaurant,other,ambiguous}} */
-function linkSaOutbound(c,rows,o){o=o||{};const W=chatWindow(c,o.closedAt,o.until),st={rows:(rows||[]).length,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,deduped:0},kept=[];
+function linkSaOutbound(c,rows,o){o=o||{};const W=chatWindow(c,o.closedAt,o.until),st={rows:(rows||[]).length,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,late:0,deduped:0},kept=[];
   if(!W)return {kept,stats:st};
   const cust=new Set(((o.phones||{}).customer||[]).map(last10).filter(x=>x.length===10)),rest=new Set(((o.phones||{}).restaurant||[]).map(last10).filter(x=>x.length===10));
   const logins=new Set((o.logins||[]).map(x=>String(x).toLowerCase())),code=String(c.code||"").toUpperCase(),first=String(c.sa||"The SA").split(/\s+/)[0];
@@ -330,6 +330,9 @@ function linkSaOutbound(c,rows,o){o=o||{};const W=chatWindow(c,o.closedAt,o.unti
     else if(code&&lc&&lc===code)match="restaurant";
     if(!match){st.other++;return}
     const shared=sibs.some(s=>t>=s.w.lo&&t<=s.w.hi);
+    /* a restaurant-only match must be close to the chat: within 3 h of its opening, or in the 60 min after it closed. A phone match keeps the whole window */
+    if(match==="restaurant"){const cl=ldTs(o.closedAt);
+      if(!(t<=ldTs(c.at)+CHAT.outRestH*36e5||(!isNaN(cl)&&t>=cl&&t<=cl+CHAT.outAfterMin*6e4))){st.late++;return}}
     if(match==="restaurant"&&shared){st.ambiguous++;return}
     st[match]++;
     const rel=relMin(t,c,o.closedAt);
@@ -730,7 +733,7 @@ function repairJson(text){const t=String(text||""),a=t.indexOf("{");if(a<0)retur
 async function askPass(deps,prompt,pass,opts){try{return await deps.ask(prompt,pass,opts)}
   catch(e){if(e&&e.code==="invalid_json"&&e.text){const v=repairJson(e.text);if(v&&typeof v==="object")return v}throw e}}
 /* the outbound-call pull for chatContext: the query, the linking, then transcripts for the kept calls the context does not already hold */
-async function saOutbound(c,k,deps,x){const stats={rows:0,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,deduped:0},none={stats};
+async function saOutbound(c,k,deps,x){const stats={rows:0,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,late:0,deduped:0},none={stats};
   const {calls,own10,T,q,step}=x;
   const W=chatWindow(c,(k.timing&&k.timing.closedAt)||c.closedAt||"",deps.until);if(!W||!c.sa)return none;
   const ro=rosterOf(c.sa,deps.roster&&deps.roster.length?deps.roster:typeof ROSTER_DEFAULT!=="undefined"?ROSTER_DEFAULT:[]);
