@@ -14,6 +14,8 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); n++; };
   const chats = base.map(x => B.chatRow(x, { roster: C.ROSTER_DEFAULT })).filter(c => c.wid && B.isBaseChat(c));
   eq(chats.length, 85, '85 base chats');
   const chat = sid => chats.find(c => c.sid === sid);
+  /* the page passes the pull's other chats (to tell two open chats of one SA and restaurant apart) and the pull's end (an open chat's window stops there) */
+  const D0 = { query: poolQuery, ask: async () => ({}), until: '2026-10-11T23:59:59', siblings: chats };
 
   /* parseFilters: AND split, equals lists, quoted commas, inBetween */
   const f = parseFilters('a_day inBetween=2026-10-01,2026-10-05 AND b equals=x,"y,z" AND c equals=R1');
@@ -39,11 +41,23 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); n++; };
   eq(poolQuery(B.orderConfig(c1.code, '2026-01-01', '2026-01-02'), 'outside window'), [], 'uncovered days are a miss');
   eq(poolQuery.misses().length, 2, 'second miss recorded');
 
+  /* the SA-outbound query: the SA's logins, outbound only, a day range; a login or day the pool never fetched is a miss */
+  poolQuery.reset();
+  const scfg = B.saOutboundConfig(['bestropegd', 'zzbestrope'], '2026-10-05', '2026-10-06'), sr = poolQuery(scfg, 'sa outbound');
+  ok(sr.length > 0 && sr.length <= scfg.limit, 'SA outbound rows');
+  sr.forEach(r => eq(Object.keys(r).sort(), scfg.dimensions.slice().sort(), 'SA outbound row keys are the config fields'));
+  ok(sr.every(r => r.calls_call_type === 'outbound_call' && ['bestropegd', 'zzbestrope'].includes(r.internal_users_user_login_name) && r.calls_call_started_at_est >= '2026-10-05' && r.calls_call_started_at_est < '2026-10-07'), 'only the SA\'s outbound calls in the days asked');
+  ok(sr.every((r, i) => !i || sr[i - 1].calls_call_started_at_est <= r.calls_call_started_at_est), 'sorted by start time');
+  eq(poolQuery.misses().length, 0, 'SA outbound answered');
+  eq(poolQuery(B.saOutboundConfig(['nobody'], '2026-10-05', '2026-10-06'), 'unknown login'), [], 'a login the pool never fetched is a miss');
+  eq(poolQuery(B.saOutboundConfig(['bestropegd'], '2026-10-01', '2026-10-06'), 'outside days'), [], 'days the pool never fetched are a miss');
+  eq(poolQuery.misses().length, 2, 'both recorded');
+
   /* chatContext through the pool: pinned chats */
-  const pins = [['1813176', '112', 2], ['1813792', '57', 3], ['1812153', '1', 2]];
+  const pins = [['1813176', '112', 4], ['1813792', '57', 5], ['1812153', '1', 2]];
   for (const [sid, ticket, calls] of pins) {
     poolQuery.reset();
-    const k = await B.chatContext(chat(sid), { query: poolQuery, ask: async () => ({}) });
+    const k = await B.chatContext(chat(sid), D0);
     eq(k.orders.map(o => String(o.ticket)), [ticket], sid + ' linked ticket');
     eq(k.calls.length, calls, sid + ' calls');
     eq(poolQuery.misses().length, 0, sid + ' no misses');
@@ -51,13 +65,13 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); n++; };
 
   /* older WIRA-tied order (outside the pool window) answered from the by-id fetch */
   poolQuery.reset();
-  const k = await B.chatContext(chat('1815772'), { query: poolQuery, ask: async () => ({}) });
+  const k = await B.chatContext(chat('1815772'), D0);
   ok(k.orders.length >= 1, '1815772 linked an older order');
   eq(poolQuery.misses().length, 0, '1815772 no misses');
 
   /* every base chat, no misses */
   poolQuery.reset();
-  for (const c of chats) await B.chatContext(c, { query: poolQuery, ask: async () => ({}) });
+  for (const c of chats) await B.chatContext(c, D0);
   eq(poolQuery.misses().length, 0, 'all 85 chats answered with no misses');
   console.log(`test_week_pool: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });

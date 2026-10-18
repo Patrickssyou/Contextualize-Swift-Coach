@@ -148,8 +148,111 @@ ok(B.linkedOrders([{ score: 5, order: { id: 'a' } }, { score: 4, order: { id: 'b
     ok(k.calls.indexOf(quiet[0]) >= talk.length && k.calls.slice(0, talk.length).every(l => l.talk === 'talk'), 'quiet legs are listed after the talked ones');
     ok(k.calls.some(l => l.id === 'c0' && l.orders), 'the order\'s own call is kept and labelled');
     ok(k.orders[0].tie === 'ticket', 'the order says how it was linked');
-    part2();
+    ok(k.calls.every(l => l.link), 'every call says how it was linked');
+    outbound().then(part2);
   }).catch(e => { console.error(e); process.exit(1); });
+}
+
+
+/* ---------- 10. Outbound calls the chat's SA made while working the chat (invented rows) ---------- */
+async function outbound() {
+  const SA = 'Ivo Test', LG = ['ivotest'];
+  const chat = (o) => Object.assign({ sid: '1', sa: SA, code: 'R1', at: '2026-10-10T18:19:00', msgs: [] }, o || {});
+  const row = (id, at, o) => Object.assign({ id, at, sec: 60, agent: SA, login: 'ivotest', dir: 'out', phone: '5550009999', code: 'R9', text: '' }, o || {});
+  const link = (c, rows, o) => B.linkSaOutbound(c, rows, Object.assign({ logins: LG, closedAt: '2026-10-10T19:00:00', phones: { customer: ['5551231234'], restaurant: ['5550001111'] } }, o || {}));
+  const ids = r => r.kept.map(l => l.id);
+
+  /* phone match: the dialed number is the customer's, whatever restaurant the call is logged to */
+  { const r = link(chat(), [row('p', '2026-10-10T18:31:00', { phone: '5551231234', code: 'R2' })]);
+    eq(ids(r), ['p'], 'a dialed customer number is kept even at another restaurant code');
+    eq([r.kept[0].link, r.kept[0].match], ['sa_outbound', 'phone'], 'link and match');
+    eq(r.kept[0].why, 'Ivo called the customer\'s number …1234 at 6:31 PM, 12 min after the chat opened', 'the why line');
+    ok(r.stats.phone === 1 && r.stats.other === 0, 'stats count it'); }
+  { const r = link(chat(), [row('r', '2026-10-10T18:25:00', { phone: '(555) 000-1111'.replace(/\D/g, '') })]);
+    eq([ids(r), r.kept[0].match, /the restaurant's number …1111/.test(r.kept[0].why)], [['r'], 'phone', true], 'the restaurant\'s own number counts: calling the restaurant back is working the chat'); }
+  /* restaurant match: unknown number, this chat's restaurant code */
+  { const r = link(chat(), [row('a', '2026-10-10T18:40:00', { code: 'R1' })]);
+    eq([ids(r), r.kept[0].match], [['a'], 'restaurant'], 'restaurant code match');
+    ok(/logged to this chat's restaurant R1 and the number is not in the chat/.test(r.kept[0].why) && /21 min after the chat opened/.test(r.kept[0].why), 'restaurant why line: ' + r.kept[0].why); }
+  /* another restaurant, no code: dropped */
+  { const r = link(chat(), [row('o', '2026-10-10T18:40:00', { code: 'R2' }), row('n', '2026-10-10T18:41:00', { code: '' })]);
+    eq(ids(r), [], 'a call at another restaurant, or with no restaurant, is dropped'); eq(r.stats.other, 2, 'counted as other'); }
+  /* inbound, another agent's login, repeated id */
+  { const r = link(chat(), [row('i', '2026-10-10T18:40:00', { code: 'R1', dir: 'in' }), row('w', '2026-10-10T18:40:00', { code: 'R1', login: 'someoneelse' }), row('d', '2026-10-10T18:41:00', { code: 'R1' }), row('d', '2026-10-10T18:41:00', { code: 'R1' })]);
+    eq(ids(r), ['d'], 'only outbound calls of the SA\'s logins; an id once'); }
+  /* two chats of one SA at one restaurant */
+  { const A = chat({ sid: '1' }), Bc = chat({ sid: '2', at: '2026-10-10T18:30:00' }), far = chat({ sid: '3', at: '2026-10-11T18:30:00' }), other = chat({ sid: '4', code: 'R7' }), who = chat({ sid: '5', sa: 'Tomas Reyes' });
+    const rows = [row('rest', '2026-10-10T18:40:00', { code: 'R1' }), row('ph', '2026-10-10T18:41:00', { phone: '5551231234', code: 'R1' })];
+    let r = link(A, rows, { siblings: [A, Bc] });
+    eq(ids(r), ['ph'], 'a restaurant-only match inside another open chat\'s window is dropped; a phone match stays');
+    eq([r.stats.ambiguous, r.kept[0].shared, /another chat open for this restaurant/.test(r.kept[0].why)], [1, true, true], 'ambiguity counted; the shared phone match says so');
+    r = link(Bc, rows, { siblings: [A, Bc] }); eq(ids(r), ['ph'], 'the same from the other chat\'s side');
+    r = link(A, rows, { siblings: [A, far, other, who] });
+    eq(ids(r).sort(), ['ph', 'rest'], 'the only chat whose window holds the call keeps it (other days, restaurants and SAs do not count)');
+    r = link(A, rows, { siblings: [A, Bc], closedAt: '2026-10-10T18:35:00' }); ok(ids(r).includes('ph') && !ids(r).includes('rest'), 'a call after this chat closed + 60 min still counts, but the other chat holds it'); }
+  /* window edges: 5 min before the chat opened to 60 min after it closed */
+  { const t = (hh, mm, ss) => `2026-10-10T${hh}:${mm}:${ss}`, R = (id, at) => row(id, at, { code: 'R1' });
+    let r = link(chat(), [R('e1', t('18', '14', '00')), R('e2', t('18', '13', '59')), R('e3', t('20', '00', '00')), R('e4', t('20', '00', '01'))]);
+    eq(ids(r), ['e1', 'e3'], 'inclusive at opened - 5 min and closed + 60 min, nothing a second outside');
+    r = link(chat(), [R('o1', '2026-10-11T18:19:00'), R('o2', '2026-10-11T18:19:01')], { closedAt: '' });
+    eq(ids(r), ['o1'], 'an open chat gets 24 h');
+    r = link(chat(), [R('u1', t('20', '19', '00')), R('u2', t('20', '19', '01'))], { closedAt: '', until: t('20', '19', '00') });
+    eq(ids(r), ['u1'], 'an open chat\'s window stops at the pull\'s end');
+    r = link(chat(), [R('u3', t('22', '00', '00'))], { closedAt: '', until: '2026-10-12T00:00:00' }); eq(ids(r), ['u3'], 'the cap only applies when it is earlier than 24 h');
+    const w = B.chatWindow(chat(), '2026-10-10T19:00:00', ''); eq([w.lo, w.hi, w.open], [Date.parse('2026-10-10T18:14:00Z'), Date.parse('2026-10-10T20:00:00Z'), false], 'chatWindow'); }
+  ok(B.linkSaOutbound(chat({ at: '' }), [row('x', '2026-10-10T18:40:00', { code: 'R1' })], {}).kept.length === 0, 'a chat with no opened time keeps nothing');
+
+  /* the query config */
+  { const cfg = B.saOutboundConfig(['a', 'b c'], '2026-10-10', '2026-10-11');
+    eq(cfg.exploreName, 'calls', 'calls explore'); ok(cfg.limit <= 100, 'small limit');
+    ok(cfg.dimensions.includes('restaurants_unique_code') && cfg.dimensions.includes('calls_call_phone_detail') && !cfg.dimensions.includes('asr_transcript_call_transcript'), 'dims: restaurant code and dialed phone, no transcripts');
+    eq(cfg.filters.dimensions, 'calls_call_started_at_est_day inBetween=2026-10-10,2026-10-11 AND calls_call_type equals=outbound_call AND internal_users_user_login_name equals=a,"b c"', 'filter'); }
+
+  /* chatContext end to end: the roster SA (Brix Estrope), an order with its own recording, SA outbound merged and deduplicated */
+  { const OC = 'RX', mk = (id, at, o) => Object.assign({ calls_conversation_id: id, calls_call_started_at_est: at + '.000Z', calls_call_duration_in_seconds: 90, internal_users_full_name: 'Brix Estrope Gd', internal_users_user_login_name: 'bestropegd',
+      calls_call_type: 'outbound_call', calls_call_phone_detail: '5557770001', restaurants_unique_code: OC, asr_transcript_call_transcript: '' }, o || {});
+    const T = 'Hi, this is the restaurant calling about the order. ' + 'we spoke about the delivery and the refund '.repeat(3), VM = 'please leave a message after the tone. the person you are calling is not available. ' + 'x'.repeat(20);
+    const orderRow = { [OA + 'order_id']: 'O1', [OA + 'order_ticket_number']: 7, [OA + 'order_created_at_est']: '2026-10-10T17:30:00', [OA + 'order_type']: 'delivery', [OA + 'call_id']: 'ord-call', [OA + 'list_call_ids']: '',
+      [OA + 'total_sub_total_sales']: 10, [OA + 'total_tax_amount']: 1, [OA + 'total_tip_amount']: 0, [OA + 'total_sales_amount']: 11 };
+    const outRows = [mk('ord-call', '2026-10-10T18:25:00', { calls_call_phone_detail: '5551234567' }), mk('ph', '2026-10-10T18:30:00', { calls_call_phone_detail: '5551234567', restaurants_unique_code: 'ROTHER' }), mk('rest', '2026-10-10T18:35:00'), mk('vm', '2026-10-10T18:36:00'),
+      mk('drop', '2026-10-10T18:37:00', { restaurants_unique_code: 'ROTHER', calls_call_phone_detail: '5550000000' }), mk('late', '2026-10-10T21:00:00')];
+    const tx = { 'ord-call': T, ph: T, rest: T, vm: VM };
+    const seen = []; const query = async (cfg, title) => { seen.push({ title, cfg });
+      if (/ · orders$/.test(title)) return [orderRow]; if (/ · tasks$/.test(title) || / · states$/.test(title)) return [];
+      if (/ · order recordings$/.test(title)) return [mk('ord-call', '2026-10-10T18:25:00', { calls_call_phone_detail: '5551234567', asr_transcript_call_transcript: T })];
+      if (/ · same caller$/.test(title)) return [];
+      if (/ · SA outbound$/.test(title)) return outRows;
+      if (/ · SA outbound recordings$/.test(title)) return outRows.filter(r => cfg.filters.dimensions.includes(r.calls_conversation_id)).map(r => Object.assign({}, r, { asr_transcript_call_transcript: tx[r.calls_conversation_id] || '' }));
+      return []; };
+    const c = B.chatRow({ wira_project_tasks_wira_id: 'Wid(9)', wira_project_tasks_short_wira_id: '9', wira_project_tasks_created_at_est: '2026-10-10T18:19:00', wira_project_tasks_closed_at_est: '2026-10-10T19:00:00', wira_project_tasks_assigned_user: 'Brix Estrope',
+      wira_project_tasks_task_comments: 'Where is order #7, customer 555-123-4567 ## Calling the customer', wira_project_tasks_task_commentors: 'client-+15559998888 ## brix.estrope@x.test', restaurants_unique_code: OC }, { roster: C.ROSTER_DEFAULT });
+    const k = await B.chatContext(c, { query, ask: async () => ({}) });
+    const by = Object.fromEntries(k.calls.map(l => [l.id, l])), qo = seen.find(s => / · SA outbound$/.test(s.title)), qr = seen.find(s => / · SA outbound recordings$/.test(s.title));
+    ok(qo && /equals=bestropegd,zzbestrope,bestrope,zzbestropecb$/.test(qo.cfg.filters.dimensions) && /inBetween=2026-10-10,2026-10-10 /.test(qo.cfg.filters.dimensions), 'the SA is matched by every roster login, over the days of the window');
+    eq(k.calls.filter(l => l.id === 'ord-call').length, 1, 'the order\'s own recording is there once (deduplicated)');
+    eq([by['ord-call'].link, by['ord-call'].match], ['order', undefined], 'it stays an order call');
+    eq([by.ph && by.ph.link, by.ph && by.ph.match], ['sa_outbound', 'phone'], 'phone match at another restaurant code');
+    eq([by.rest && by.rest.link, by.rest && by.rest.match], ['sa_outbound', 'restaurant'], 'restaurant match');
+    ok(by.vm && by.vm.link === 'sa_outbound' && by.vm.talk === 'voicemail', 'a voicemail leg is flagged');
+    ok(!by.drop && !by.late, 'other restaurant and outside the window are dropped');
+    ok(/Brix called the customer's number …4567 at 6:30 PM, 11 min after the chat opened/.test(by.ph.why), 'why: ' + by.ph.why);
+    ok(!/ord-call/.test(qr.cfg.filters.dimensions) && /ph/.test(qr.cfg.filters.dimensions), 'recordings are fetched only for the new calls');
+    ok(by.ph.text.length > 40 && by.rest.text === T, 'transcripts attached');
+    ok(k.calls.findIndex(l => l.talk !== 'talk') >= k.calls.filter(l => l.talk === 'talk').length, 'quiet legs come after the talked ones');
+    eq([k.outbound.phone, k.outbound.restaurant, k.outbound.other, k.outbound.deduped, k.outbound.shown], [2, 2, 1, 1, 3], 'k.outbound counts: ' + JSON.stringify(k.outbound));
+    /* slots: more outbound calls than fit */
+    const many = Array.from({ length: 9 }, (_, i) => mk('m' + i, `2026-10-10T18:${String(30 + i)}:00`)), manyTx = Object.fromEntries(many.map(r => [r.calls_conversation_id, T]));
+    const q2 = async (cfg, title) => / · SA outbound$/.test(title) ? many : / · SA outbound recordings$/.test(title) ? many.map(r => Object.assign({}, r, { asr_transcript_call_transcript: manyTx[r.calls_conversation_id] })) : [];
+    const k2 = await B.chatContext(c, { query: q2, ask: async () => ({}) });
+    eq(k2.calls.filter(l => l.link === 'sa_outbound').length, B.CHAT.maxOutCalls, 'outbound calls have their own slots'); eq(k2.outbound.cut, 9 - B.CHAT.maxOutCalls, 'the rest are counted as cut');
+    ok(k2.calls.slice(0, B.CHAT.maxOutCalls).every(l => ['m0', 'm1', 'm2', 'm3'].includes(l.id)), 'nearest the chat\'s opening first');
+    /* an SA not in the roster, a failing query, siblings */
+    const k3 = await B.chatContext(Object.assign({}, c, { sa: 'Nobody Known' }), { query, ask: async () => ({}) });
+    ok(!k3.calls.some(l => l.link === 'sa_outbound') && /roster/.test(k3.outbound.error), 'an SA with no roster login makes no outbound query: ' + k3.outbound.error);
+    const k4 = await B.chatContext(c, { query: async (cfg, title) => { if (/ · SA outbound$/.test(title)) throw { code: 'tool_error' }; return query(cfg, title); }, ask: async () => ({}) });
+    ok(k4.calls.length === 1 && k4.outbound.error && !k4.notFound.some(x => /outbound/.test(x)), 'a failed outbound query leaves the order calls and says so on k.outbound');
+    let stopped = false; try { await B.chatContext(c, { query: async (cfg, title) => { if (/ · SA outbound$/.test(title)) throw { code: 'cancelled' }; return query(cfg, title); }, ask: async () => ({}), isStop: e => e.code === 'cancelled' }); } catch (e) { stopped = e.code === 'cancelled'; }
+    ok(stopped, 'a stop is passed up'); }
 }
 
 /* ---------- Part 2: real fixtures ---------- */
@@ -193,8 +296,31 @@ function part2() {
       if (sid === '1813744') { ok(k.orders.length === 1 && k.orders[0].tie === 'wira', 'the associated order is linked'); ok(kids(k, chat), 'the SA\'s other tasks about another chat are dropped'); ok(!k.orders.some(o => o.ticket === k.refs.tickets[0] && !chat.orderWids.includes(o.id)), 'the ticket in the text is not preferred over WIRA\'s tie'); }
       if (sid === '1815293') { ok(k.orders.length === 0 && kids(k, chat), 'a menu chat links no order and no other task'); }
     }
+    await poolCounts();
     console.log(`chat linking: ${n} checks passed`);
   })();
   tail.catch(e => { console.error(e); process.exit(1); });
+
+  /* the week's real pool: how many of the 85 chats gain outbound calls (git-ignored data; skipped without the pool) */
+  async function poolCounts() {
+    const PD = path.join(D, 'week_2026-10-05');
+    if (!fs.existsSync(path.join(PD, 'pool/saout.json')) || !fs.existsSync(path.join(PD, 'pool/orders.json'))) return;
+    const { poolQuery } = require('../eval/week_pool.js'); poolQuery.use('2026-10-05'); poolQuery.reset();
+    const chats = rj('week_2026-10-05/base_full.json').map(r => B.chatRow(r, { roster: RO })).filter(c => c.wid && B.isBaseChat(c));
+    ok(chats.length === 85, '85 chats'); const K = {};
+    for (const c of chats) K[c.sid] = await B.chatContext(c, { query: poolQuery, ask: async () => ({}), until: '2026-10-11T23:59:59', siblings: chats });
+    eq(poolQuery.misses().length, 0, 'all 85 chats answered with no misses');
+    const sao = k => k.calls.filter(l => l.link === 'sa_outbound'), gain = chats.filter(c => sao(K[c.sid]).length);
+    const ph = gain.filter(c => sao(K[c.sid]).some(l => l.match === 'phone')), ro = gain.filter(c => !sao(K[c.sid]).some(l => l.match === 'phone'));
+    eq([gain.length, ph.length, ro.length], [20, 14, 6], 'chats that gain outbound calls: 20 (14 with a phone match, 6 restaurant only)');
+    ok(chats.every(c => K[c.sid].calls.every(l => l.link === 'order' || l.link === 'same_caller' || l.link === 'sa_outbound')), 'every call says how it was linked');
+    ok(gain.every(c => sao(K[c.sid]).every(l => l.agent.toLowerCase().replace(/\s+/g, ' ').startsWith(c.sa.toLowerCase().split(' ')[0]) && l.dir === 'out' && l.why && l.text !== undefined)), 'only the chat\'s own SA, outbound, with a why');
+    ok(chats.every(c => new Set(K[c.sid].calls.map(l => l.id)).size === K[c.sid].calls.length), 'no call twice');
+    const x = sid => sao(K[sid]);
+    ok(x('1815772').length === 2 && x('1815772').every(l => l.match === 'phone' && /^Brix called the customer's number …/.test(l.why)), '1815772: Brix called the customer twice');
+    ok(x('1816533').some(l => l.match === 'phone' && /Christ called the customer's number …0689 at 11:14 PM, 2 min after the chat opened/.test(l.why)), '1816533: Christ');
+    ok(x('1823741').length === 1 && x('1823741')[0].match === 'restaurant', '1823741: Cherry, restaurant match');
+    ok(chats.every(c => K[c.sid].calls.filter(l => l.link === 'sa_outbound' && l.talk === 'talk').length <= B.CHAT.maxOutCalls), 'outbound slots respected');
+  }
   function POS(a) { return !/@/.test(a) && B.POS_RE.test(a); } function BOT(a) { return !/@/.test(a) && B.BOT_RE.test(a); }
 }

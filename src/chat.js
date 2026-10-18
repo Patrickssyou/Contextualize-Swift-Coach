@@ -2,7 +2,8 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15};
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15,
+  outBeforeMin:5, outAfterMin:60, outOpenH:24, outLimit:80, maxOutCalls:4, quietOut:2};
 const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
   "wira_project_tasks_status","wira_project_tasks_sub_status","wira_project_tasks_task_title","wira_project_tasks_task_comments","wira_project_tasks_task_commentors",
@@ -290,7 +291,51 @@ function phoneCallsConfig(phones,from,to,code){return {exploreName:PULL.explore,
   filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_call_phone_detail equals=${phones.map(ldVal).join(",")}`+(code?` AND restaurants_unique_code equals=${ldVal(code)}`:"")}}}
 function callRow(x){return {id:String(x.calls_conversation_id||""),at:String(x.calls_call_started_at_est||"").slice(0,19),sec:Number(x.calls_call_duration_in_seconds)||0,
   agent:cleanAgent(x.internal_users_full_name||""),login:String(x.internal_users_user_login_name||""),dir:x.calls_call_type==="outbound_call"?"out":"in",
-  phone:String(x.calls_call_phone_detail||""),text:String(x.asr_transcript_call_transcript||"")}}
+  phone:String(x.calls_call_phone_detail||""),code:String(x.restaurants_unique_code||""),text:String(x.asr_transcript_call_transcript||"")}}
+
+/* ---------- 2b. Outbound calls the chat's SA made while working the chat ---------- */
+/* one query per chat: the SA's outbound calls over the days the chat's window touches (no transcripts; those are fetched only for the calls that are kept).
+   The agent is matched by login, the way the roster matches the SA (every login the SA has used) */
+const SAOUT_DIMS = CALL_DIMS.filter(d=>d!=="asr_transcript_call_transcript").concat(["restaurants_unique_code"]);
+function saOutboundConfig(logins,from,to){return {exploreName:PULL.explore,dimensions:SAOUT_DIMS,metrics:[],sorts:[{fieldId:"calls_call_started_at_est",descending:false}],limit:CHAT.outLimit,
+  filters:{dimensions:`calls_call_started_at_est_day inBetween=${from},${to} AND calls_call_type equals=outbound_call AND internal_users_user_login_name equals=${logins.map(ldVal).join(",")}`}}}
+const last10 = p => String(p||"").replace(/\D/g,"").slice(-10);
+/* the window a chat is worked in: from 5 min before it opened to 60 min after it closed; an open chat gets 24 h, cut at the pull's end (until) */
+function chatWindow(c,closedAt,until){const o=ldTs(c.at);if(isNaN(o))return null;
+  const lo=o-CHAT.outBeforeMin*6e4,cl=ldTs(closedAt);let hi=!isNaN(cl)?cl+CHAT.outAfterMin*6e4:o+CHAT.outOpenH*36e5;
+  if(isNaN(cl)){const u=ldTs(until);if(!isNaN(u))hi=Math.min(hi,u)}
+  return {lo,hi:Math.max(lo,hi),open:isNaN(cl)}}
+function relMin(ms,c,closedAt){const o=ldTs(c.at),cl=ldTs(closedAt),fmt=m=>m<120?`${m} min`:`${Math.round(m/6)/10} h`;
+  if(!isNaN(cl)&&ms>cl){return `${fmt(Math.round((ms-cl)/6e4))} after the chat closed`}
+  const d=Math.round((ms-o)/6e4);return d>=0?`${fmt(d)} after the chat opened`:`${fmt(-d)} before the chat opened`}
+/* Which of the SA's outbound rows belong to this chat.
+   in:  c (chat row), rows (callRow objects), phones {customer:[..],restaurant:[..]} (10-digit), closedAt, until, logins, siblings (the pull's other chats; optional)
+   A call is kept when (a) the dialed number is one the chat, its tasks or its orders mention (match "phone"), else (b) the call's restaurant code is the chat's (match "restaurant"), else dropped.
+   A restaurant-only match is also dropped when another chat of the same SA and restaurant has the call inside its window (the SA may have been working that one).
+   out: {kept:[call with link/match/why], stats:{rows,inWindow,phone,restaurant,other,ambiguous}} */
+function linkSaOutbound(c,rows,o){o=o||{};const W=chatWindow(c,o.closedAt,o.until),st={rows:(rows||[]).length,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,deduped:0},kept=[];
+  if(!W)return {kept,stats:st};
+  const cust=new Set(((o.phones||{}).customer||[]).map(last10).filter(x=>x.length===10)),rest=new Set(((o.phones||{}).restaurant||[]).map(last10).filter(x=>x.length===10));
+  const logins=new Set((o.logins||[]).map(x=>String(x).toLowerCase())),code=String(c.code||"").toUpperCase(),first=String(c.sa||"The SA").split(/\s+/)[0];
+  const sibs=(o.siblings||[]).filter(s=>s&&String(s.sid)!==String(c.sid)&&s.sa===c.sa&&code&&String(s.code||"").toUpperCase()===code).map(s=>({w:chatWindow(s,(s.timing&&s.timing.closedAt)||s.closedAt||"",o.until)})).filter(s=>s.w);
+  const clock=ms=>clock12u(ms);
+  const seen=new Set();
+  (rows||[]).forEach(l=>{if(!l.id||seen.has(l.id))return;seen.add(l.id);
+    const t=ldTs(l.at);if(isNaN(t)||t<W.lo||t>W.hi||l.dir!=="out")return;
+    if(logins.size&&!logins.has(String(l.login||"").toLowerCase()))return;
+    st.inWindow++;const ph=last10(l.phone),lc=String(l.code||"").toUpperCase();
+    let match="",whose="";
+    if(ph.length===10&&cust.has(ph)){match="phone";whose="the customer's number"}
+    else if(ph.length===10&&rest.has(ph)){match="phone";whose="the restaurant's number"}
+    else if(code&&lc&&lc===code)match="restaurant";
+    if(!match){st.other++;return}
+    const shared=sibs.some(s=>t>=s.w.lo&&t<=s.w.hi);
+    if(match==="restaurant"&&shared){st.ambiguous++;return}
+    st[match]++;
+    const rel=relMin(t,c,o.closedAt);
+    const why=(match==="phone"?`${first} called ${whose} …${ph.slice(-4)} at ${clock(t)}, ${rel}`:`${first} made an outbound call at ${clock(t)}, ${rel}; it is logged to this chat's restaurant ${code} and the number is not in the chat`)+(shared?`; ${first} had another chat open for this restaurant`:"");
+    kept.push(Object.assign({},l,{link:"sa_outbound",match,why,shared}))});
+  return {kept,stats:st}}
 
 /* ---------- 3. Money: always computed here, never by Claude ---------- */
 const CHAT_POLICY_EMPTY = {version:"",text:"",comp:{base:"items",approvalLimit:25,approver:"",buckets:[]}};
@@ -696,6 +741,29 @@ function repairJson(text){const t=String(text||""),a=t.indexOf("{");if(a<0)retur
 /* one Claude pass: a reply that isn't valid JSON is repaired from its text when possible */
 async function askPass(deps,prompt,pass,opts){try{return await deps.ask(prompt,pass,opts)}
   catch(e){if(e&&e.code==="invalid_json"&&e.text){const v=repairJson(e.text);if(v&&typeof v==="object")return v}throw e}}
+/* the outbound-call pull for chatContext: the query, the linking, then transcripts for the kept calls the context does not already hold */
+async function saOutbound(c,k,deps,x){const stats={rows:0,inWindow:0,phone:0,restaurant:0,other:0,ambiguous:0,deduped:0},none={stats};
+  const {calls,own10,T,q,step}=x;
+  const W=chatWindow(c,(k.timing&&k.timing.closedAt)||c.closedAt||"",deps.until);if(!W||!c.sa)return none;
+  const ro=rosterOf(c.sa,deps.roster&&deps.roster.length?deps.roster:typeof ROSTER_DEFAULT!=="undefined"?ROSTER_DEFAULT:[]);
+  const dflt=typeof ROSTER_DEFAULT!=="undefined"?ROSTER_DEFAULT.find(d=>ro&&d.name===ro.name):null,logins=[...new Set([].concat((ro&&ro.logins)||[],(dflt&&dflt.logins)||[]).map(l=>String(l).toLowerCase()).filter(Boolean))];
+  if(!logins.length){stats.error="no login for the SA in the roster";return none}
+  let rows=[];
+  try{rows=(await q(saOutboundConfig(logins,etDay(W.lo),etDay(W.hi)),T+" · SA outbound")).map(callRow)}
+  catch(e){if(deps.isStop&&deps.isStop(e))throw e;stats.error="the SA's outbound-call query didn't run";return none}
+  /* the numbers this chat mentions: its text, shape fields, child tasks and the callers on the order's own recordings. The restaurant's own number (the client author id) counts too: calling the restaurant back is working the chat */
+  const customer=[].concat(k.refs.phones||[],calls.filter(l=>l.link==="order"&&l.dir==="in").map(l=>l.phone)).map(last10).filter(p=>p.length===10&&!own10.has(p));
+  const res=linkSaOutbound(c,rows,{closedAt:(k.timing&&k.timing.closedAt)||c.closedAt||"",until:deps.until,logins,siblings:deps.siblings,phones:{customer,restaurant:[...own10]}});
+  const have=new Map(calls.map(l=>[l.id,l])),fresh=[];
+  res.kept.forEach(l=>{const h=have.get(l.id);
+    if(!h)fresh.push(l);
+    else{res.stats.deduped++;if(h.link!=="order")Object.assign(h,{link:l.link,match:l.match,why:l.why,shared:l.shared})}});  /* an order's own recording stays "order" */
+  if(fresh.length){const days=fresh.map(l=>String(l.at).slice(0,10)).sort();
+    let tx=new Map();
+    try{(await q(callsByIdsConfig(fresh.map(l=>l.id),days[0],days[days.length-1]),T+" · SA outbound recordings")).map(callRow).forEach(r=>tx.set(r.id,r.text))}
+    catch(e){if(deps.isStop&&deps.isStop(e))throw e;res.stats.error="the recordings query for the SA's outbound calls didn't run"}
+    fresh.forEach(l=>{l.text=tx.get(l.id)||"";calls.push(l)})}
+  return res}
 /* everything tied to the chat: linked tasks, the order, its recordings and the same caller's other calls, Slack.
    deps: {query(cfg,title) -> rows, ask(prompt,pass) -> parsed JSON, slack(chat,k) -> threads (optional), orderIds (reviewer's pick, optional), step(id,state,note)} */
 async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),day=String(c.at).slice(0,10),from=addDaysU(day,-1),T=`QA Desk · chat ${c.sid}`;
@@ -736,18 +804,26 @@ async function chatContext(c,deps){const q=deps.query,step=deps.step||(()=>{}),d
   /* a linked order can be older than the chat's day window (a WIRA tie or a named date): look for its calls from its own day */
   const cFrom=k.orders.map(o=>String(o.at).slice(0,10)).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<from).sort()[0]||from;
   if(ids.length)calls=(await q(callsByIdsConfig(ids,cFrom,day),T+" · order recordings")).map(callRow);
+  calls.forEach(l=>{l.link="order"});
   /* the caller is the order's customer. A phone in the chat text can be the restaurant's own (the client's WIRA author id carries it), and a regular customer's earlier orders are other cases:
      calls from the same number count from 2 hours before the linked order (12 hours before the chat when no order is linked) */
   const own10=new Set(c.msgs.filter(m=>m.role==="client").map(m=>String(m.author||"").replace(/\D/g,"").slice(-10)).filter(x=>x.length===10));
   const phones=[...new Set(calls.filter(l=>l.dir==="in").map(l=>l.phone).concat(k.refs.phones).filter(isPhone).filter(ph=>!own10.has(String(ph).replace(/\D/g,"").slice(-10))))];
   const lo=k.orders.length?ldTs(k.orders[0].at)-2*36e5:ldTs(c.at)-12*36e5;
-  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,cFrom,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(l)});
+  if(phones.length&&c.code)(await q(phoneCallsConfig(phones,cFrom,day,c.code),T+" · same caller")).map(callRow).forEach(l=>{if(!calls.some(x=>x.id===l.id)&&!(ldTs(l.at)<lo))calls.push(Object.assign(l,{link:"same_caller"}))});
+  /* the chat's SA called someone while working the chat: their outbound calls in the chat's window, kept when the dialed number or the restaurant ties to this chat */
+  const out=await saOutbound(c,k,deps,{calls,own10,T,q,step});
   const t0=k.orders.length?ldTs(k.orders[0].at):ldTs(c.at);
   /* silent and voicemail legs never take one of the slots for calls with talk: they follow the talked ones, at most CHAT.quietCalls of them */
   const near=ls=>ls.filter(l=>l.id).map(l=>({l,own:ids.includes(l.id)?1:0,d:Math.abs(ldTs(l.at)-t0)||0})).sort((a,b)=>b.own-a.own||a.d-b.d),byTime=ls=>ls.sort((a,b)=>a.at.localeCompare(b.at));
   calls.forEach(l=>{l.talk=legTalk(l.text)});
-  const talk=byTime(near(calls.filter(l=>l.talk==="talk")).slice(0,CHAT.maxCalls).map(x=>x.l)),quiet=byTime(near(calls.filter(l=>l.talk!=="talk")).slice(0,CHAT.quietCalls).map(x=>x.l));
-  k.calls=talk.concat(quiet);
+  const mine=l=>l.link==="sa_outbound",reg=calls.filter(l=>!mine(l)),sao=calls.filter(mine);
+  const talk=byTime(near(reg.filter(l=>l.talk==="talk")).slice(0,CHAT.maxCalls).map(x=>x.l)),quiet=byTime(near(reg.filter(l=>l.talk!=="talk")).slice(0,CHAT.quietCalls).map(x=>x.l));
+  /* the SA's own outbound calls have their own slots, nearest the chat's opening first (a phone match before a restaurant match), so they never push out the order's recordings */
+  const o0=ldTs(c.at),nearOut=ls=>ls.slice().sort((a,b)=>(a.match==="phone"?0:1)-(b.match==="phone"?0:1)||Math.abs(ldTs(a.at)-o0)-Math.abs(ldTs(b.at)-o0)),
+    outTalk=nearOut(sao.filter(l=>l.talk==="talk")).slice(0,CHAT.maxOutCalls),outQuiet=nearOut(sao.filter(l=>l.talk!=="talk")).slice(0,CHAT.quietOut);
+  k.outbound=Object.assign({},out.stats,{shown:outTalk.length+outQuiet.length,cut:sao.length-outTalk.length-outQuiet.length});
+  k.calls=byTime(talk.concat(outTalk)).concat(byTime(quiet.concat(outQuiet)));
   k.calls.forEach(l=>{const o=k.orders.find(x=>x.callIds.includes(l.id));if(o)l.orders=`${o.label} (ticket ${o.ticket||"?"})`});
   step("calls","done",k.calls.length?`${k.calls.length} call${k.calls.length===1?"":"s"}`:"none");
   if(deps.slack){step("slack","run");try{k.slack=(await deps.slack(c,k))||[];step("slack","done",k.slack.length?`${k.slack.length} thread${k.slack.length===1?"":"s"}`:"none")}
@@ -796,7 +872,7 @@ function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:
 /* CHAT-CORE END */
 if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(globalThis,core);
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,orderState,
-    textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
+    textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,saOutboundConfig,SAOUT_DIMS,chatWindow,linkSaOutbound,saOutbound,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
     chatFactLines,calibLines,CASE_TYPES,CASE_ALIAS,CASE_PICK,caseTypeId,caseTypeLabel,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
     chatStatesConfig,stateRow,stateOn,chatTiming,aeFirstReply,chatTimingLines,minBetween,rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}

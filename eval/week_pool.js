@@ -5,7 +5,8 @@
 //   poolQuery.reset()       -> clear the misses and the query log
 //   poolQuery.log()         -> [{title, kind, rows}] every query answered so far
 //   poolQuery.strict = true -> throw on a miss instead of answering []
-//   node eval/week_pool.js build [monday]   -> merge pool/raw/*.json into pool/{tasks,orders,calls,states}.json
+//   node eval/week_pool.js build [monday]   -> merge pool/raw/*.json into pool/{tasks,orders,calls,saout,states}.json
+//   saout: the 6 SAs' outbound calls (no transcripts), raw files saout_*.json = {logins, from, to, rows}; answers the SA-outbound query (login list + outbound + day range)
 //
 // How a config is answered: the config's own filter string is parsed (`field op=values` clauses joined by AND; values may be quoted),
 // the pool rows are filtered the way Lightdash would (restaurant code equals-list, day inBetween, id/phone/wid equals-lists), sorted by
@@ -61,6 +62,15 @@ function build(monday) {
       for (const c of j.codes) { ph[c] = ph[c] || {}; for (const p of j.phones) ph[c][p] = { from: j.from, to: j.to }; } }
     out.calls.rows.sort((a, b) => String(a[DAY.calls]).localeCompare(String(b[DAY.calls])));
     out.calls.phonesFetched = ph; }
+  /* the SAs' outbound calls (no transcripts), fetched per SA over a day range: a login is covered for every day of its raw file */
+  { const rows = [], seen = new Set(), cover = {};
+    for (const f of files.filter(f => f.startsWith('saout_'))) {
+      const j = rj(path.join(raw, f));
+      if (j.capped) { out.calls.skipped.push(f + ' (hit the 1000-row cap, not counted)'); continue; }
+      for (const r of j.rows) if (!seen.has(r.calls_conversation_id)) { seen.add(r.calls_conversation_id); rows.push(r); }
+      for (const l of j.logins) { cover[l] = cover[l] || new Set(); dayList(j.from, j.to).forEach(d => cover[l].add(d)); } }
+    rows.sort((a, b) => String(a[DAY.calls]).localeCompare(String(b[DAY.calls])));
+    if (rows.length) out.saout = { kind: 'saout', fields: Object.keys(rows[0]), coverage: Object.fromEntries(Object.entries(cover).map(([l, s]) => [l, [...s].sort()])), rows }; }
   /* states: the week's states.json (status changes of every chat of the week, keyed by wid) */
   const st = rj(path.join(ROOT, 'data/chats', 'week_' + monday, 'states.json'));
   const wids = new Set(st.map(r => r.wira_tasks_state_task_id));
@@ -88,7 +98,10 @@ const cache = {};
 function load(monday) { if (cache[monday]) return cache[monday];
   const dir = poolDir(monday); if (!fs.existsSync(path.join(dir, 'orders.json'))) build(monday);
   const P = {}; for (const k of ['tasks', 'orders', 'calls', 'states']) P[k] = rj(path.join(dir, k + '.json'));
+  if (!fs.existsSync(path.join(dir, 'saout.json')) && fs.existsSync(path.join(dir, 'raw')) && fs.readdirSync(path.join(dir, 'raw')).some(f => f.startsWith('saout_'))) build(monday);
+  if (fs.existsSync(path.join(dir, 'saout.json'))) P.saout = rj(path.join(dir, 'saout.json'));
   P.cover = {}; for (const k of ['tasks', 'orders', 'calls']) P.cover[k] = Object.fromEntries(Object.entries(P[k].coverage).map(([c, d]) => [c, new Set(d)]));
+  if (P.saout) P.saoutCover = Object.fromEntries(Object.entries(P.saout.coverage).map(([l, d]) => [l, new Set(d)]));
   P.stateWids = new Set(P.states.coverage);
   P.byWid = new Map(); P.states.rows.forEach(r => { const w = r.wira_tasks_state_task_id; if (!P.byWid.has(w)) P.byWid.set(w, []); P.byWid.get(w).push(r); });
   P.callIdx = new Map(P.calls.rows.map(r => [r.calls_conversation_id, r]));
@@ -108,11 +121,30 @@ function shape(cfg, rows, kind) {
 function miss(title, kind, reason, cfg) { const m = { title, kind, reason, filters: cfg && cfg.filters && (cfg.filters.dimensions || cfg.filters) }; state.misses.push(m);
   console.warn(`[week_pool] MISS ${kind} · ${title || ''} · ${reason}`); if (state.strict) throw new Error('week_pool miss: ' + reason); return []; }
 
+function saoutQuery(P, cfg, f, title) {
+  const kind = 'saout', D = P.saout;
+  if (!D) return miss(title, kind, 'no saout dataset in the pool (raw/saout_*.json)', cfg);
+  const want = (cfg.dimensions || []).concat(cfg.metrics || []), absent = want.filter(k => !D.fields.includes(k));
+  if (absent.length) return miss(title, kind, 'pool lacks fields ' + absent.join(','), cfg);
+  const extra = Object.keys(f).filter(k => !['internal_users_user_login_name equals', 'calls_call_type equals', DAY.calls + '_day inBetween'].includes(k));
+  if (extra.length) return miss(title, kind, 'filter the pool does not model: ' + extra.join(', '), cfg);
+  const types = f['calls_call_type equals'], rg = f[DAY.calls + '_day inBetween'], logins = f['internal_users_user_login_name equals'];
+  if (!types || types.length !== 1 || types[0] !== 'outbound_call') return miss(title, kind, 'SA query without call type outbound_call', cfg);
+  if (!rg || rg.length !== 2) return miss(title, kind, 'no day range', cfg);
+  const [a, b] = rg;
+  for (const l of logins) { const c = P.saoutCover[l]; if (!c || !dayList(a, b).every(d => c.has(d))) return miss(title, kind, `pool does not cover logins ${l} for ${a}..${b}`, cfg); }
+  const rows = D.rows.filter(r => logins.includes(r.internal_users_user_login_name) && day(r[DAY.calls]) >= a && day(r[DAY.calls]) <= b && r.calls_call_type === 'outbound_call');
+  const res = shape(cfg, rows, kind);
+  state.log.push({ title, kind, rows: res.length });
+  return res;
+}
+
 function poolQuery(cfg, title) {
   const P = load(state.monday), ex = cfg.exploreName, { f, bad } = parseFilters(cfg.filters);
   const kind = ex === 'wira_project_tasks' ? 'tasks' : ex === 'greendot_orders_analytics_aggregate' ? 'orders' : ex === 'calls' ? 'calls' : ex === 'wira_tasks_state' ? 'states' : '';
   if (!kind) return miss(title, ex, 'no pool for explore ' + ex, cfg);
   if (bad.length) return miss(title, kind, 'filter not understood: ' + bad.join('; '), cfg);
+  if (kind === 'calls' && f['internal_users_user_login_name equals']) return saoutQuery(P, cfg, f, title);
   const D = P[kind], want = (cfg.dimensions || []).concat(cfg.metrics || []);
   const absent = want.filter(k => !D.fields.includes(k)); if (absent.length) return miss(title, kind, 'pool lacks fields ' + absent.join(','), cfg);
   const eq = k => f[k + ' equals'], bt = k => f[k + ' inBetween'];
