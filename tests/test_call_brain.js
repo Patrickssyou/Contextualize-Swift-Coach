@@ -92,6 +92,20 @@ ok(/customer or restaurant acting on a Tarro agent's instruction/.test(p) && /ex
 const pc = C.callGradePrompt(Object.assign({}, q, { type: 'call', team: [] }), F, null, items, []);
 ok(/Grade only what Dana Test said or did on the GRADED calls/.test(pc) && /credit Dana Test for a clean handoff/.test(pc) && pc.includes('No analysis'), 'a call (from a queue doc): graded on own legs, handoff credited');
 
+// case type: the grade asks for it and keeps a known id (old ids read through the alias), else "other"
+ok(p.includes('"caseType": "compensation | order_investigation | contact_customer') && p.includes('"caseWhy"') && p.includes('order_investigation (Order-taking investigation)'), 'grade prompt asks for caseType and caseWhy');
+const gc = C.cleanCallGrade({ caseType: 'Order_Issue', caseWhy: 'Store asks to check the recording (F2).', criteria: { '1a': { why: 'F1', score: 3 } } }, items, F);
+ok(gc.caseType === 'order_investigation' && gc.caseWhy === 'Store asks to check the recording (F2).', 'grade keeps caseType (alias applied) and caseWhy');
+ok(C.cleanCallGrade({ caseType: 'refund_stuff', criteria: { '1a': { score: 3 } } }, items, F).caseType === 'other' && C.cleanCallGrade({ criteria: { '1a': { score: 3 } } }, items, F).caseType === 'other', 'unknown or missing caseType -> other');
+ok(C.CALL_CASE_TYPES.every(t => t.id && t.label && t.desc) && C.callCaseId('device_printer') === 'device_printer' && C.callCaseId('') === '', 'call case list and id reader');
+// the standalone case pass: facts and task titles only, no transcripts
+const cp = C.callCasePrompt(inp, F);
+ok(cp.includes('F2 · 1:01 PM · Call 1 · the store [said]: Store says ticket C12 printed twice') && cp.includes('"caseType": "compensation |') && !cp.includes('leave a message') && !/SCORECARD/.test(cp), 'case prompt: facts, the reply shape, no transcripts, no scorecard');
+ok(C.callCasePrompt(q, F).includes('Audited agent: Dana Test'), 'case prompt takes a queue doc too');
+const cc = C.cleanCallCase({ caseType: 'contact_customer', caseWhy: 'x'.repeat(400) });
+ok(cc.caseType === 'contact_customer' && cc.caseWhy.length <= 301 && C.cleanCallCase({ case: { type: 'menu_setup', why: 'Price change (F1).' } }).caseType === 'menu_setup', 'cleanCallCase: id kept, why capped, nested shape read');
+ok(C.cleanCallCase(null) === null && C.cleanCallCase([]) === null && C.cleanCallCase({}).caseType === 'other', 'cleanCallCase: not an object -> null; empty -> other');
+
 // the runner: facts and analysis reused from aiFacts, invalid JSON repaired, items required
 (async () => {
   const passes = [];
