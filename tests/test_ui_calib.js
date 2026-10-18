@@ -465,6 +465,98 @@ const tab = page => page.evaluate(() => tab);
     ok(!errors.length, 'no console errors (Claude on calls) ' + JSON.stringify(errors));
     await ctx.close();
   }
+
+  // ===== 11. World E: case types on every round item (all invented). Chats take the audit's caseType (one old order_issue, aliased), calls their
+  // callGrades doc's caseType (+ caseWhy). Howard has corrected two (calibItems/<ik>.caseType); one chat and one call are agreed (locked)
+  {
+    const AT = '2026-10-14T09:30:00.000Z', ALI = chatItems[1].key, LK = chatItems[2].key, WHY1 = 'The caller asked for money back on a late order.';
+    const g = (s, ct, why) => ({ v: 1, at: '2026-10-13T20:00:00.000Z', by: 'claude-checkpoint', items: V2I.map(x => x.id), scores: s, reasons: {}, cites: {}, wentWell: [], fixes: [], summary: 'Graded.', F: null, A: { caseType: 'call' }, caseType: ct, caseWhy: why || '' });
+    const s1 = Object.assign(callMarks(3), { '2b': 2 }), lk1 = Object.assign({}, s1, { '2b': 1 }), full3 = callMarks(3);
+    const lkChat = Object.assign({}, aud(LK).scores, { ev: aud(LK).scores.ev === 3 ? 2 : 3 }), lkChatPct = B.chatScore(lkChat);
+    const seedE = base0.map(([p, d]) => [p, p === `chatWeeks/${LW}/audits/${ALI}` ? Object.assign(JSON.parse(JSON.stringify(d)), { analysis: Object.assign({}, d.analysis, { caseType: 'order_issue' }) }) : d])
+      .concat([['learning/state', stateA], prevRound, roundA], joined, [
+        ['callGrades/qana1', g(s1, 'compensation', WHY1)], ['callGrades/qana2', g(full3, 'order_investigation', 'The store asked us to check what was ordered.')],
+        ['callGrades/qben1', g(full3, 'order_issue')], ['callGrades/qben2', g(full3, 'menu_setup')],
+        ['calibItems/call_qana2', { kind: 'call', key: 'qana2', caseType: { id: 'device_printer', by: HOW, at: AT } }],
+        ['calibItems/chat_' + S0, { kind: 'chat', key: S0, caseType: { id: 'how_to', by: HOW, at: AT } }],
+        ['calibItems/call_qana1', { kind: 'call', key: 'qana1', round: LW, locked: { by: PAT, at: AT, pct: callPct(lk1), verdict: B.chatVerdict(callPct(lk1)).id, marks: lk1 } }],
+        ['calibItems/chat_' + LK, { kind: 'chat', key: LK, round: LW, locked: { by: PAT, at: AT, pct: lkChatPct, verdict: B.chatVerdict(lkChatPct).id, marks: lkChat } }]]);
+    ({ page, ctx, errors } = await openPage(b, seedE, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW, tx: TXI }));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(800);
+    const LB = await page.evaluate(() => Object.fromEntries(ctTypes().map(t => [t.id, t.label])));
+    ok(LB.order_investigation === 'Order-taking investigation' && LB.contact_customer === 'Call the customer' && !LB.order_issue && Object.keys(LB).length === 11, 'eleven case types; order_issue is gone, Order-taking investigation and Call the customer are in');
+    // tags on Round rows
+    const tagOf = ik => page.locator(`#cbItems .cbirow[data-ik="${ik}"] .cttag`);
+    ok((await tagOf('chat_' + chatItems[0].key).innerText()) === LB.hours_service && (await tagOf('chat_' + ALI).innerText()) === LB.order_investigation && (await tagOf('call_qben1').innerText()) === LB.order_investigation,
+      "Round rows: a chat's tag from its audit; old order_issue (chat and call) shows as Order-taking investigation");
+    ok((await tagOf('call_qana1').innerText()) === LB.compensation && (await tagOf('call_qana1').getAttribute('title')) === WHY1 && await page.locator('#cbItems .cbirow[data-ik="call_qana3"] .cttag').count() === 0, "a call's tag from callGrades, caseWhy as its tooltip; an ungraded call has none");
+    ok((await tagOf('call_qana2').innerText()) === LB.device_printer && /\bset\b/.test(await tagOf('call_qana2').getAttribute('class')) && (await tagOf('call_qana2').getAttribute('title')) === 'Set by Howard'
+      && (await tagOf('chat_' + S0).innerText()) === LB.how_to, "Howard's correction wins over Claude's (call and chat), titled Set by Howard");
+    // the filter chips: counts per type over what's shown
+    const chips = async () => (await page.locator('#cbCtFilt .ctchip').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+    const want = ['All 22', `${LB.hours_service} 11`, 'No type 5', `${LB.order_investigation} 2`, `${LB.compensation} 1`, `${LB.menu_setup} 1`, `${LB.device_printer} 1`, `${LB.how_to} 1`];
+    ok(JSON.stringify(await chips()) === JSON.stringify(want), 'Case type chips with counts: ' + (await chips()).join(' | '));
+    await page.click('#cbCtFilt [data-v="order_investigation"]'); await page.waitForTimeout(120);
+    ok(await page.locator('#cbItems .cbirow').count() === 2 && await page.locator(`#cbItems .cbirow[data-ik="chat_${ALI}"]`).count() === 1 && await page.locator('#cbItems .cbirow[data-ik="call_qben1"]').count() === 1
+      && (await page.locator('#cbCtFilt [data-v="order_investigation"]').getAttribute('aria-pressed')) === 'true', 'picking a chip shows only that type (a chat and a call)');
+    await page.click('[data-cb="filt"][data-v="call"]'); await page.waitForTimeout(120);
+    ok((await chips())[0] === 'All 9' && (await chips()).includes(`${LB.order_investigation} 1`) && !(await chips()).some(t => t.startsWith(LB.hours_service)) && await page.locator('#cbItems .cbirow').count() === 1, 'with Calls: the counts are the calls\' (All 9, Order-taking investigation 1)');
+    await page.click('#cbCtFilt [data-v="none"]'); await page.waitForTimeout(100);
+    ok(await page.locator('#cbItems .cbirow').count() === 5 && await page.locator('#cbItems .cbirow .cttag').count() === 0, 'No type: the 5 ungraded calls');
+    await page.click('[data-cb="filt"][data-v="all"]'); await page.click('#cbCtFilt [data-v="all"]'); await page.waitForTimeout(120);
+    ok(await page.locator('#cbItems .cbirow').count() === 22, 'All: back to 22');
+    await shot(page, 'case-types-round.png', true);
+    // the ticket: a call Howard corrected
+    await page.evaluate(() => openCall('qana2')); await page.waitForTimeout(400);
+    ok(await page.locator('#ctPick').inputValue() === 'device_printer' && (await txt(page, '#ctBy')) === 'Set by Howard' && (await page.locator('#ctPick option').first().innerText()) === 'Claude: ' + LB.order_investigation
+      && (await page.locator('.tkgrid .tkf', { hasText: 'Case type' }).innerText()).toLowerCase().includes(LB.device_printer.toLowerCase()), "call ticket: the picker shows Howard's pick, Set by Howard; Claude's type is the first option; the Case type field follows");
+    ok(await page.locator('#cbRailBox .cbrct').count() === 17 && (await page.locator('#cbRailBox [data-ik="call_qana2"] .cbrct').innerText()) === LB.device_printer, 'the checklist rail tags the 17 typed items');
+    // Pat corrects qana1: the override is written, wins, and keeps the lock
+    await page.evaluate(() => openCall('qana1')); await page.waitForTimeout(400);
+    ok(await page.locator('#ctPick').inputValue() === '' && (await txt(page, '#ctWhy')) === WHY1 && await page.locator('#ctBy').count() === 0, "Claude's type: the picker on Claude's, its why beside it");
+    await page.selectOption('#ctPick', 'menu_setup');
+    await waitDoc(page, 'calibItems/call_qana1', 'd.caseType && d.caseType.id === "menu_setup"'); await page.waitForTimeout(250);
+    const ov = await D(page, 'calibItems/call_qana1');
+    ok(ov.caseType.by === PAT && !isNaN(Date.parse(ov.caseType.at)) && ov.locked && ov.locked.pct === callPct(lk1) && ov.kind === 'call' && ov.key === 'qana1', 'the pick writes calibItems/call_qana1.caseType {id, by, at}; the lock is kept');
+    ok((await txt(page, '#ctBy')) === 'Set by you' && await page.locator('#ctPick').inputValue() === 'menu_setup' && await page.locator('#ctWhy').count() === 0, 'then "Set by you"');
+    await page.click('[data-tab="calib"]'); await page.waitForTimeout(300);
+    ok((await tagOf('call_qana1').innerText()) === LB.menu_setup && (await chips()).includes(`${LB.menu_setup} 2`) && !(await chips()).some(t => t.startsWith(LB.compensation)), 'the Round follows the override: Menu setup 2, no Compensation');
+    await page.evaluate(() => openCall('qana1')); await page.waitForTimeout(400);
+    await page.selectOption('#ctPick', '');
+    await waitDoc(page, 'calibItems/call_qana1', 'd.caseType === null && d.locked'); await page.waitForTimeout(250);
+    ok((await txt(page, '#ctWhy')) === WHY1 && await page.locator('#ctPick').inputValue() === '', "Claude's option clears the pick: back to Compensation");
+    // a chat ticket: Howard's pick, the board and the ticket field follow; the aliased chat
+    await page.evaluate(([s, w]) => openChat(s, w), [S0, LW]); await page.waitForTimeout(400);
+    ok(await page.locator('#ctPick').inputValue() === 'how_to' && (await txt(page, '#ctBy')) === 'Set by Howard' && (await txt(page, '#cvCase')).toLowerCase().includes(LB.how_to.toLowerCase())
+      && (await page.locator('.tkgrid .tkf', { hasText: 'Case type' }).innerText()).toLowerCase().includes(LB.how_to.toLowerCase()), "chat ticket: Howard's How-to wins on the ticket, its field and the board");
+    await page.evaluate(([s, w]) => openChat(s, w), [ALI, LW]); await page.waitForTimeout(400);
+    ok((await page.locator('#ctPick option').first().innerText()) === 'Claude: ' + LB.order_investigation && (await page.locator('.tkgrid .tkf', { hasText: 'Case type' }).innerText()).toLowerCase().includes('order-taking investigation'), 'an old order_issue chat: Claude: Order-taking investigation');
+    await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('tkCase').getBoundingClientRect().right <= 391), '390px: the case type picker fits the ticket');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // the Dashboard: by case type, chats (the week's graded chats) and calls (the round's)
+    await page.click('[data-tab="chats"]'); await page.waitForTimeout(400);
+    const rowsOf = id => page.locator(`#${id} tbody tr`).evaluateAll(x => x.map(r => [r.dataset.ct, ...[...r.children].map(c => c.textContent.replace(/\s+/g, ' ').trim())]));
+    const ch = await rowsOf('ctChats'), kc = await rowsOf('ctCalls');
+    const hrs = L.list.filter(x => x.sid !== ALI && x.sid !== S0).map(x => x.sid === LK ? lkChatPct : x.pct), hAvg = hrs.reduce((t, v) => t + v, 0) / hrs.length;
+    ok(ch.length === 3 && ch[0][0] === 'hours_service' && ch[0][2] === '12' && ch[0][3] === fmt(hAvg) + '%' && ch[0][4] === `${Math.round(8 / 9 * 100)}% · 1 agreed`, `chats: Hours / service n 12, team avg ${fmt(hAvg)}% (the agreed score where agreed), Claude vs agreed 89% · 1 agreed`);
+    ok(ch.slice(1).map(r => r[0]).sort().join() === 'how_to,order_investigation' && ch.slice(1).every(r => r[2] === '1' && r[4] === '–'), 'chats: How-to and Order-taking investigation 1 each, nothing agreed');
+    const kr = Object.fromEntries(kc.map(r => [r[0], r]));
+    ok(kc.length === 5 && kc[0][0] === 'none' && kr.none[1] === 'No type' && kr.none[2] === '5' && kr.none[3] === '–' && kr.compensation[3] === fmt(callPct(lk1)) + '%' && kr.compensation[4] === '92% · 1 agreed'
+      && kr.device_printer[3] === '100.0%' && kr.order_investigation[2] === '1' && kr.menu_setup[4] === '–', 'calls: No type 5; Compensation at its agreed score, Claude vs agreed 92% (11 of 12 rows); Howard\'s Printer / device');
+    await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true });
+    await page.locator('#ctDash').screenshot({ path: path.join(SH, 'case-types-dashboard.png') });
+    // 390px and dark: the Round and the Dashboard
+    await page.emulateMedia({ colorScheme: 'dark' }); await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('ctDash').getBoundingClientRect().right <= 391) && await page.evaluate(() => getComputedStyle(document.getElementById('ctDash')).backgroundColor) !== 'rgb(255, 255, 255)', '390px dark: the Dashboard table fits');
+    await page.click('[data-tab="calib"]'); await page.waitForTimeout(300);
+    ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cbItems .cttag, #cbCtFilt')].every(e => e.getBoundingClientRect().right <= 391)), '390px dark: Round tags and chips fit');
+    ok(await page.evaluate(() => getComputedStyle(document.querySelector('#cbItems .cttag')).color) === 'rgb(165, 149, 230)', 'dark: the tags take the dark tokens');
+    await shot(page, 'case-types-round-390-dark.png', true);
+    await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 });
+    ok(!errors.length, 'no console errors (case types) ' + JSON.stringify(errors));
+    await ctx.close();
+  }
   await b.close();
   console.log(`\nui calib: ${n} checks passed`);
 })().catch(e => { console.error('TEST FAILED', e); process.exit(1) });

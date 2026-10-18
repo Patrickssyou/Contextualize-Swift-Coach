@@ -164,7 +164,9 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbsa{border:1px solid var(--line);border-radius:12px;background:var(--bg);min-width:0}
 .cbsa h3{margin:0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px}
 .cbilist{list-style:none;margin:0;padding:4px 6px}
-.cbirow{display:grid;grid-template-columns:16px minmax(0,1fr) 56px minmax(84px,auto) auto auto;gap:8px 10px;align-items:center;padding:6px;border-radius:8px;font-size:13.5px}
+/* the case type tag sits on a second line under the title, so the title keeps its width */
+.cbirow{display:grid;grid-template-columns:16px minmax(0,1fr) 56px minmax(84px,auto) auto auto;grid-template-areas:"ic t d m dots st" ". ct ct ct dots st";gap:2px 10px;align-items:center;padding:6px;border-radius:8px;font-size:13.5px}
+.cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t}.cbirow>.cbidate{grid-area:d}.cbirow>.cbimeta{grid-area:m}.cbirow>.cbict{grid-area:ct}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st}
 .cbirow+.cbirow{border-top:1px solid var(--line)}
 .cbirow .cblink{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbidate{color:var(--muted);font-size:12.5px}
@@ -172,7 +174,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbkic{display:inline-grid;place-items:center;color:var(--muted)}
 .cbkic.call{color:var(--tp)}
 .cbsub{margin:8px 0 6px;font-size:12px;color:var(--muted);font-weight:700}
-@media (max-width:560px){.cbirow{grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:"ic t t" ". d m" ". dots st"}
+@media (max-width:560px){.cbirow{grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:"ic t t" ". d m" ". ct ct" ". dots st";gap:6px 10px}.cbirow>.cbict:empty{display:none}
   .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t;white-space:normal}.cbirow>.cbidate{grid-area:d}.cbirow>.cbimeta{grid-area:m;text-align:right}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:end}}
 /* the checklist, grouped by SA */
 .cbrgrp>ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
@@ -203,3 +205,15 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbshould{margin:0;font-size:13.5px}
 @media (max-width:560px){.qticket[data-call] .tkverd{justify-content:flex-start}.tkcl{padding-left:0;border-left:0}}
 .cbfacts li.cited{box-shadow:inset 3px 0 0 var(--accent);padding-left:8px}
+
+/* case types: the tag on Round rows and the checklist, the filter chips */
+.cbict{min-width:0;display:flex}
+.cttag{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--tp-soft);color:var(--tp);border:1px solid transparent}
+.cttag.set{border-color:var(--tp)}
+.cbrct{font-style:normal;color:var(--tp)}
+.ctfilt{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.ctchip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:600;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctchip .num{color:var(--ink);margin-left:2px}
+.ctchip[aria-pressed="true"]{background:var(--tp);border-color:var(--tp);color:var(--on-fill)}
+.ctchip[aria-pressed="true"] .num{color:inherit}
+@media (prefers-reduced-motion:no-preference){.ctchip{transition:background .15s,border-color .15s}}

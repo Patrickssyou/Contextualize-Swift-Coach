@@ -964,8 +964,8 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     await page.click('#cbSave');
     await page.waitForFunction(p => !!window.__data[p], LP, { timeout: 3000 });
     const L1 = await page.evaluate(p => window.__data[p], LP);
-    ok(L1.kind === 'reinforce' && L1.from === '2/3' && L1.to === '2/3' && L1.reason === WHYR && L1.what === 'Voided O1 without checking the pickup time first (F2).' && L1.crit === 'ev' && L1.label === 'Gathered the evidence' && L1.type === 'Did not check the order' && L1.caseType === 'order_issue' && L1.sid === RS && L1.sa === 'Ivo Lark' && !isNaN(Date.parse(L1.at)),
-      'Submit writes chatLessons/<sid>_ev at once: kind reinforce, from = to = 2/3, the reason, what, crit, label, type, caseType');
+    ok(L1.kind === 'reinforce' && L1.from === '2/3' && L1.to === '2/3' && L1.reason === WHYR && L1.what === 'Voided O1 without checking the pickup time first (F2).' && L1.crit === 'ev' && L1.label === 'Gathered the evidence' && L1.type === 'Did not check the order' && L1.caseType === 'order_investigation' && L1.sid === RS && L1.sa === 'Ivo Lark' && !isNaN(Date.parse(L1.at)),
+      'Submit writes chatLessons/<sid>_ev at once: kind reinforce, from = to = 2/3, the reason, what, crit, label, type, caseType (order_issue aliased)');
     ok((await txt(page, '#tkPct')) === pct0 && await page.evaluate(s => chatDraft(s).scores.ev, RS) === 2 && await page.locator('#cbox').count() === 0 && !(await page.evaluate(() => !!(chPanel))), 'the score does not move; the box and the panel close');
     ok((await txt(page, '#cc-ev .crei')) === 'REINFORCED' && (await txt(page, '#cc-ev .crei-why')).includes(WHYR) && (await txt(page, '#cc-ev .crei-why')).includes('Submitted · learned'),
       'the row shows Reinforced and the better reason');
@@ -1030,6 +1030,70 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
     ok(await width(page) <= 390 && await page.evaluate(() => document.getElementById('cbox').getBoundingClientRect().right <= 390), `390px: the reinforce box and order tags fit (${await width(page)})`);
     await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true }); await page.screenshot({ path: path.join(SH, 'reinforce-390.png') });
     ok(!errors.length, 'no console errors (reinforce, orders) ' + JSON.stringify(errors));
+    await ctx.close() }
+
+  // ===== 9. Outbound calls on a chat (all invented): the evidence pass tags each call link "order" | "sa_outbound", match "phone" | "restaurant", and why.
+  // Call 2 is Ivo's outbound call to the store, made after Call 3 in time; an older audit's calls (no fields) render as before. Its case type order_issue is aliased.
+  { const RW = addD(WEEK, -28), R = reinforceWorld(RW), RS = R.sid, OLD = '9940002', day = RW;
+    const audP = `chatWeeks/${RW}/audits/${RS}`, chatP = `chatWeeks/${RW}/chats/${RS}`;
+    const base = R.seed.map(([p, d]) => [p, JSON.parse(JSON.stringify(d))]), aud = base.find(([p]) => p === audP)[1], chat = base.find(([p]) => p === chatP)[1];
+    const WHYO = 'Ivo called the store to confirm the void after the chat.';
+    const c1 = { id: 'c0ffee00-0000-4000-8000-00000000a001', at: `${day}T17:10:00`, sec: 150, agent: 'Jo Park', dir: 'in', phone4: '0401', orders: 'O1', link: 'order', match: 'phone', why: 'The customer called about O1.' };
+    const c2 = { id: 'c0ffee00-0000-4000-8000-00000000a002', at: `${day}T18:20:00`, sec: 252, agent: 'Ivo Lark', dir: 'out', phone4: '0499', link: 'sa_outbound', match: 'restaurant', why: WHYO };
+    const c3 = { id: 'c0ffee00-0000-4000-8000-00000000a003', at: `${day}T17:30:00`, sec: 95, agent: 'Jo Park', dir: 'in', phone4: '0401', orders: 'O2', link: 'order', match: 'phone', why: 'The customer called about O2.' };
+    aud.calls = [c1, c2, c3];
+    aud.facts.calls = { [c2.id]: ['Ivo asked the store to confirm 4471 was never picked up'] };
+    aud.facts.timeline = aud.facts.timeline.concat([{ id: 'F3', src: 'Call 3', when: '0:20', who: 'Jo Park', kind: 'said', what: 'Asks about order 4470' }, { id: 'F4', src: 'Call 2', when: '1:05', who: 'Ivo Lark', kind: 'did', what: 'Asks the store to confirm 4471 was never picked up' }]);
+    // the older audit: same chat under another id, calls with neither field
+    const oldA = Object.assign(JSON.parse(JSON.stringify(aud)), { sid: OLD, calls: [{ id: c1.id, at: c1.at, sec: c1.sec, agent: c1.agent, dir: 'in', phone4: '0401', orders: 'O1' }, { id: c2.id, at: c2.at, sec: c2.sec, agent: c2.agent, dir: 'out', phone4: '0499' }] });
+    oldA.facts.timeline = aud.facts.timeline.slice(0, 2); oldA.facts.calls = {};
+    const oldC = Object.assign(JSON.parse(JSON.stringify(chat)), { sid: OLD, wid: `Wid(0,1,1,0,${OLD})`, url: `https://wira.example.test/tasks/${OLD}` });
+    const seedO = base.concat([[`chatWeeks/${RW}/audits/${OLD}`, oldA], [`chatWeeks/${RW}/chats/${OLD}`, oldC]]);
+    ({ page, ctx, errors } = await openPage(b, seedO, { sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOW }));
+    await page.goto('http://qa.test/#chats'); await page.waitForTimeout(400);
+    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForSelector('#cTicket'); await page.waitForTimeout(250);
+    // Sources: the order-linked calls as before (Call 1, Call 3), then the outbound call on its own row with its why
+    const srcs = await page.locator('#evSrcs .evrow[data-ek="call"]').evaluateAll(x => x.map(r => ({ link: r.dataset.link || '', t: r.querySelector('.evt b').textContent, s: r.querySelector('.evs').textContent, why: (r.querySelector('.evwhyl') || {}).textContent || '', rec: (r.querySelector('a.evlink') || {}).textContent || '' })));
+    ok(srcs.length === 3 && srcs[0].t === 'Call 1' && srcs[1].t === 'Call 3' && !srcs[0].link && !srcs[0].why, 'Sources: the order-linked calls stay as they were (Call 1, Call 3, no why line)');
+    ok(srcs[2].link === 'sa_outbound' && srcs[2].t === 'Outbound call by Ivo' && /^4:12 · 6:20 PM$/.test(srcs[2].s) && srcs[2].why === WHYO && srcs[2].rec === '▶ Recording', 'Sources: "Outbound call by Ivo · 4:12 · ▶ Recording" with the why line');
+    ok((await page.locator('#evSrcs .evrow[data-link="sa_outbound"] a.evlink').getAttribute('href')).includes(c2.id), 'the outbound row links its recording');
+    // the ticket: Recordings in time order, the outbound one marked; the alias of order_issue
+    const recs = await page.locator('.tkgrid .tkf', { hasText: 'Recordings' }).locator('a.tkrec').evaluateAll(x => x.map(a => ({ t: a.textContent.replace(/\s+/g, ' ').trim(), out: a.dataset.link || '', title: a.title })));
+    ok(recs.length === 3 && recs.map(r => r.t.split(' (')[0]).join('|') === '▶ Call 1|▶ Call 3|▶ Call 2 · outbound' && recs[2].out === 'sa_outbound' && recs[2].title.includes(WHYO) && recs[2].t.includes('(6:20 PM)'), 'Recordings: in time order, the outbound call as "▶ Call 2 · outbound (6:20 PM)", its why in the tooltip');
+    ok((await page.locator('.tkgrid .tkf', { hasText: 'Case type' }).innerText()).includes('ORDER-TAKING INVESTIGATION') && (await txt(page, '#ctTag')) === 'Order-taking investigation', 'an old order_issue case type shows as Order-taking investigation');
+    // full sources: the Calls fold in time order with the outbound tag and why; the Timeline with the calls in it
+    await full(page);
+    ok((await txt(page, '#src-calls .srcs')) === '3 calls · 1 outbound', 'the Calls fold counts the outbound call');
+    const foldRows = await page.locator('#src-calls .srcx .srcrow').evaluateAll(x => x.map(r => r.id));
+    ok(foldRows.join() === 'srcrow-call-1,srcrow-call-3,srcrow-call-2', 'the fold rows are in time order, numbers kept');
+    await page.click('#src-calls summary'); await page.waitForTimeout(120);
+    const cards = await page.locator('#src-calls .txcall').evaluateAll(x => x.map(r => ({ id: r.id, out: r.dataset.link || '', why: (r.querySelector('.txwhy') || {}).textContent || '', tag: [...r.querySelectorAll('.ttag')].map(t => t.textContent).join() })));
+    ok(cards.map(c => c.id).join() === 'cx-call-1,cx-call-3,cx-call-2' && cards[2].out === 'sa_outbound' && cards[2].why === WHYO && cards[2].tag.includes('SA outbound') && !cards[0].why, 'the call cards in time order; the outbound card has its tag and why');
+    await page.click('#src-facts summary'); await page.waitForTimeout(120);
+    const tl = await page.locator('#cfTimeline > li').evaluateAll(x => x.map(li => li.id));
+    ok(tl.join() === 'cf-F1,cf-F2,cf-call-1,cf-call-3,cf-F3,cf-call-2,cf-F4', 'Timeline: each call before its first fact, all calls in time order (Call 1 had no fact, so it sits with the next call)');
+    ok((await txt(page, '#cf-call-2')).replace(/\s+/g, ' ').includes('Outbound call by Ivo') && (await txt(page, '#cf-call-2')).includes(WHYO) && (await txt(page, '#cf-call-2')).includes('6:20 PM'), 'the outbound call in the Timeline: who, when and why');
+    // the panel's call view (Call 2 cited by F4) shows the why
+    await page.evaluate(() => { chPanelOpen('ev', 'sources'); chPanel.view = { kind: 'call', n: 2, quote: [] }; chPanelView(chatBy(chatSel), chatAud[chatSel]) }); await page.waitForTimeout(120);
+    ok((await txt(page, '#chpCall')).includes('Outbound') && (await txt(page, '#chpCallWhy')) === WHYO, 'the call view in the side panel: Outbound and the why');
+    await page.evaluate(() => chPanelClose()); await page.waitForTimeout(80);
+    // the older audit renders as before: no outbound rows, no Timeline call rows, numbering by position
+    await page.evaluate(([s, w]) => openChat(s, w), [OLD, RW]); await page.waitForTimeout(300); await full(page);
+    const os = await page.locator('#evSrcs .evrow[data-ek="call"]').evaluateAll(x => x.map(r => [r.dataset.link || '', r.querySelector('.evt b').textContent, !!r.querySelector('.evwhyl')]));
+    ok(JSON.stringify(os) === JSON.stringify([['', 'Call 1', false], ['', 'Call 2', false]]), 'no fields: Sources show Call 1 and Call 2 as before');
+    const orecs = await page.locator('.tkgrid .tkf', { hasText: 'Recordings' }).locator('a.tkrec').allInnerTexts();
+    ok(orecs.map(t => t.replace(/\s+/g, ' ').split(' (')[0]).join('|') === '▶ Call 1|▶ Call 2' && await page.locator('#cfTimeline .callmk').count() === 0 && (await txt(page, '#src-calls .srcs')) === '2 calls', 'no fields: Recordings, the Calls fold and the Timeline as before');
+    // dark, 390px
+    await page.evaluate(([s, w]) => openChat(s, w), [RS, RW]); await page.waitForTimeout(300); await full(page);
+    await page.emulateMedia({ colorScheme: 'dark' }); await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+    ok(await width(page) <= 390 && await page.evaluate(() => document.querySelector('#evSrcs .evrow[data-link="sa_outbound"]').getBoundingClientRect().right <= 391), `390px dark: the outbound row fits (${await width(page)})`);
+    ok(await page.evaluate(() => getComputedStyle(document.querySelector('#evSrcs .evrow[data-link="sa_outbound"] .evwhyl')).color) !== 'rgb(107, 104, 120)', 'dark: the why line takes the dark tokens');
+    await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('evSrcs').scrollIntoView() });
+    await page.screenshot({ path: path.join(SH, 'chat-outbound-calls-390-dark.png') });
+    await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(150);
+    await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.hidden = true; document.getElementById('cs-ev').scrollIntoView() }); await page.waitForTimeout(100);
+    await page.locator('#cs-ev').screenshot({ path: path.join(SH, 'chat-outbound-calls.png') });
+    ok(!errors.length, 'no console errors (outbound calls) ' + JSON.stringify(errors));
     await ctx.close() }
   ok(!allErrors.length, 'no console errors (routes) ' + JSON.stringify(allErrors));
   await b.close(); console.log(`ui chats: ${n} checks passed`);

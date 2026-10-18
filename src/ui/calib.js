@@ -10,7 +10,7 @@ let cbRowsSub={ik:"",off:null,rows:{}};
 const cbDrafts=new Map(),cbW=new Map(),cbNames=new Map();let cbNameRun=null;
 /* local view state: who I revealed (per item), Compare all, open rows, my open note, editing my submitted marks, the settle box */
 const cbPeek=new Set(),cbCompare=new Set(),cbOpen=new Set(),cbEdit=new Set();let cbNoteOpen="",cbSettle=null;
-let cbFilt="all",cbMineOnly=false,cbRedraw=false,cbTkTab="ticket",cbEvMore=false,cbBusy=false,cbNote="",cbPeers=[],cbPresSig="",cbSeenAt=0,cbPanel=null,cbPanelEl=null,cbLockRun=false;
+let cbFilt="all",cbCtFilt="all",cbMineOnly=false,cbRedraw=false,cbTkTab="ticket",cbEvMore=false,cbBusy=false,cbNote="",cbPeers=[],cbPresSig="",cbSeenAt=0,cbPanel=null,cbPanelEl=null,cbLockRun=false;
 /* short names for the call rubric rows (the live rubric, CUR); MGR / DE and cases change a few */
 const CB_CALL_SHORT={"1a":"Opening spiel","1b":"Tone and dead air","1c":"Empathy and composure","1d":"Clear communication","2a":"Listened and gathered info","2b":"Root cause and fault",
   "2c":"Immediate resolution","2d":"Long-term solution","2e":"Ticket documented","3a":"Ownership","3b":"Self-serve coaching","3c":"Next steps"};
@@ -45,7 +45,7 @@ function cbWatchRows(ik){if(!db||cbRowsSub.ik===ik)return;if(cbRowsSub.off)try{c
   S.off=db.collection("calibItems/"+ik+"/rows").onSnapshot(s=>{if(cbRowsSub!==S)return;S.rows=Object.fromEntries(s.docs.map(d=>[d.id,d.data()||{}]));cbRender()},()=>{})}
 const cbRowsOf=ik=>cbRowsSub.ik===ik?cbRowsSub.rows:{};
 /* a snapshot repaints the open view; a lock change re-renders the chat audit (score, ticket, coaching) */
-function cbRender(lockChange){if(tab==="calib")renderCalib();
+function cbRender(lockChange){if(tab==="calib")renderCalib();if(tab==="chats"&&typeof renderChatQueue==="function")renderChatQueue();
   if(tab==="chat"){if(lockChange)renderChats();else renderChatAudit();cbPaint();cbRailPaint()}renderCalibTab()}
 
 /* ---------- people ---------- */
@@ -338,7 +338,7 @@ const cbStatusHtml=(st,lk)=>`<span class="cbrst ${st}">${st==="agreed"?`Agreed <
 function cbRailHtml(cur){const L=cbRoundItems();if(!L.length)return "";
   const mine=L.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,sum=`<span class="num">${mine} of ${L.length}</span> done (you)`;
   const groups=cbBySa(L).map(([sa,l])=>`<li class="cbrgrp"><span class="cbrsa">${esc(sa)}</span><ol>${l.map(it=>{const st=cbRailState(it),lk=(cbItems[it.ik]||{}).locked,on=it.ik===cur;
-    return `<li><button type="button" class="cbrrow${on?" cur":""}" data-cb="go" data-ik="${esc(it.ik)}" data-st="${st}" data-kind="${it.kind}"${on?' aria-current="true"':""}><span class="cbrmk ${st}" aria-hidden="true">${st==="agreed"?"✓":""}</span><span class="cbrt"><b>${cbKic(it.kind)}${esc(it.title)}</b><span>${esc(it.kind==="call"?cbKindL(it.q)+" call":"Chat")}${cbDay(it.at)?" · "+esc(cbDay(it.at)):""}</span></span>${cbStatusHtml(st,lk)}</button></li>`}).join("")}</ol></li>`).join("");
+    return `<li><button type="button" class="cbrrow${on?" cur":""}" data-cb="go" data-ik="${esc(it.ik)}" data-st="${st}" data-kind="${it.kind}"${on?' aria-current="true"':""}><span class="cbrmk ${st}" aria-hidden="true">${st==="agreed"?"✓":""}</span><span class="cbrt"><b>${cbKic(it.kind)}${esc(it.title)}</b><span>${esc(it.kind==="call"?cbKindL(it.q)+" call":"Chat")}${cbDay(it.at)?" · "+esc(cbDay(it.at)):""}${(T=>T?` · <i class="cbrct" data-ct="${esc(T.id)}">${esc(chCaseL(T.id))}</i>`:"")(ctOf(it.kind,it.key))}</span></span>${cbStatusHtml(st,lk)}</button></li>`}).join("")}</ol></li>`).join("");
   return `<section class="cbrail" id="cbRail" data-open="${cbRailOpen?1:0}" aria-label="Round checklist"><button type="button" class="cbrtog" data-cb="railtog" aria-expanded="${cbRailOpen}" aria-controls="cbRailBody"><b>Round checklist</b><span class="cbrsum">${sum}</span><span class="cbrchev" aria-hidden="true">▾</span></button>
     <div class="cbrbody" id="cbRailBody"><header class="cbrhd"><b>Week ${esc(weekLabel(L[0].week))}</b><span id="cbRailDone">${sum}</span></header><ol class="cbrlist">${groups}</ol></div></section>`}
 const cbRailBox=ik=>`<div class="cbrailbox" id="cbRailBox" data-ik="${esc(ik)}">${cbRailHtml(ik)}</div>`;
@@ -367,7 +367,7 @@ const cbP=p=>p==null?"–":Math.round(p)+"%";
 const cbStageHtml=s=>s==="agreed"?`<span class="pill good">Agreed</span>`:s==="settle"?`<span class="pill ok">To settle</span>`:`<span class="pill none">Scoring</span>`;
 function cbIRow(it,G){const st=cbStage(it);
   return `<li class="cbirow" data-ik="${esc(it.ik)}" data-kind="${it.kind}">${cbKic(it.kind)}<button type="button" class="cblink" data-cb="open" data-ik="${esc(it.ik)}">${esc(it.title)}</button>
-    <span class="cbidate num">${esc(cbDay(it.at)||"–")}</span><span class="cbimeta">${cbItemMeta(it)}</span>
+    <span class="cbidate num">${esc(cbDay(it.at)||"–")}</span><span class="cbimeta">${cbItemMeta(it)}</span><span class="cbict">${ctTag(ctOf(it.kind,it.key))}</span>
     <span class="cbdots">${G.map(u=>`<span class="cbdot ${cbColor(u)}${cbSub(u,it.ik)?" done":""}" title="${esc(cbName(u))}${cbSub(u,it.ik)?" · submitted":cbPend(u)?" · hasn't opened it":""}">${esc(cbIni(u))}</span>`).join("")}</span>${cbStageHtml(st)}</li>`}
 function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),started=cbRoundStarted(items);cbCGLoadRound();
   const mine=items.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,nx=cbNextItem(items);
@@ -388,7 +388,12 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
     if(c<CB_PER)p.push(`${c} of ${CB_PER} chats`);if(k<CB_PER)p.push(`${k} of ${CB_PER} calls`);return p.length?`<span data-sa="${esc(sa)}"><b>${esc(chFirst(sa))}</b> ${p.join(", ")}</span>`:""}).filter(Boolean);
   const filt=`<div class="cbfilt"><div class="cbseg" role="group" aria-label="Show">${[["all","All"],["chat","Chats"],["call","Calls"]].map(([v,l])=>`<button type="button" data-cb="filt" data-v="${v}" aria-pressed="${cbFilt===v}">${l}</button>`).join("")}</div>
     <button type="button" class="btn small cbmine" data-cb="mine" aria-pressed="${cbMineOnly}">Mine to do</button></div>`;
-  const vis=it=>(cbFilt==="all"||it.kind===cbFilt)&&(!cbMineOnly||(!cbSub(myId,it.ik)&&!(cbItems[it.ik]||{}).locked));
+  const vis0=it=>(cbFilt==="all"||it.kind===cbFilt)&&(!cbMineOnly||(!cbSub(myId,it.ik)&&!(cbItems[it.ik]||{}).locked)),ctId=it=>(ctOf(it.kind,it.key)||{}).id||"";
+  const vis=it=>vis0(it)&&(cbCtFilt==="all"||ctId(it)===cbCtFilt);
+  /* the case type chips: counts over what the kind and Mine filters show; the picked chip stays at 0 */
+  const ctN=new Map();items.filter(vis0).forEach(it=>{const k=ctId(it);ctN.set(k,(ctN.get(k)||0)+1)});if(cbCtFilt!=="all"&&!ctN.has(cbCtFilt))ctN.set(cbCtFilt,0);
+  const ctOrd=ctTypes().map(t=>t.id),ctL=[...ctN.entries()].sort((a,b)=>b[1]-a[1]||(a[0]?ctOrd.indexOf(a[0]):99)-(b[0]?ctOrd.indexOf(b[0]):99));
+  const ctf=`<div class="ctfilt" id="cbCtFilt" role="group" aria-label="Case type"><button type="button" class="ctchip" data-cb="ctf" data-v="all" aria-pressed="${cbCtFilt==="all"}">All <span class="num">${items.filter(vis0).length}</span></button>${ctL.map(([k,n])=>`<button type="button" class="ctchip" data-cb="ctf" data-v="${esc(k||"none")}" aria-pressed="${cbCtFilt===k}">${esc(k?chCaseL(k):"No type")} <span class="num">${n}</span></button>`).join("")}</div>`;
   const groups=cbBySa(items).map(([sa,l])=>{const v=l.filter(vis);if(!v.length)return "";const d=l.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length;
     return `<section class="cbsa" data-sa="${esc(sa)}"><h3><span>${esc(sa)}</span><span class="hint num">${d} of ${l.length} done (you)</span></h3><ol class="cbilist">${v.map(it=>cbIRow(it,G)).join("")}</ol></section>`}).join("");
   const S=cbStats(items),SC=cbStats(items.filter(x=>x.kind==="chat")),SK=cbStats(items.filter(x=>x.kind==="call"));
@@ -401,7 +406,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const gl=any?S.G.filter(u=>S.per.get(u)||cbPend(u)).map(u=>{const p=S.per.get(u);return cbBar(`<span class="cbcolh">${cbAv(u)}${u===myId?"You":esc(cbName(u))}</span>`,p?p.m/p.n*100:null,"lo",u)}):[];
   if(S.claude!=null)gl.push(cbBar(`<span class="cbcolh">${cbAv("claude")}Claude</span>`,S.claude,"lo","claude"));
   const each=`<div><h3 class="evh">Each grader vs the agreed mark</h3>${gl.length?`<div class="cbbars" id="cbEach">${gl.join("")}</div>`:`<p class="hint">Nothing agreed yet.</p>`}</div>`;
-  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}
+  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}${ctf}
     <div class="cbgroups" id="cbItems">${groups||`<p class="hint">Nothing to do here.</p>`}</div>${kpis}<div class="cbtwo">${dis}${each}</div></div></section>`}
 
 /* ---------- a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching, like a chat ---------- */
@@ -416,12 +421,12 @@ async function cbLoadTx(it){const legs=cbLegs(it.q).filter(l=>l.id).map(l=>({id:
 function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=lk?chatVerdict(lk.pct):null,legs=cbLegs(q),lc=liveChain(q.chain),team=cbTeam(q),T=validTasks(q.tasks)||[];
   const tab=(id,l,x)=>{const on=cbTkTab===id;return `<button type="button" role="tab" class="tktab" id="cbTkTab-${id}" data-cb="tk" data-v="${id}" aria-selected="${on}" aria-controls="cbTkPan-${id}" tabindex="${on?0:-1}">${l}${x||""}</button>`};
   const F=[["SA",esc(q.agent||it.sa||"–")],["Restaurant",`${esc(q.restaurantName||it.title||"–")}${q.restaurantId?` <span class="num tkcode">${esc(q.restaurantId)}</span>`:""}`],
-    ["Called",`<span class="num">${esc([shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" · ")||"–")}</span>`],["Call type",`<span class="pill tp">${esc(cbKindL(q))}</span>`],
+    ["Called",`<span class="num">${esc([shortDate(q.callDate),clock12(q.callTime)].filter(Boolean).join(" · ")||"–")}</span>`],["Call type",`<span class="pill tp">${esc(cbKindL(q))}</span>`],["Case type",(T=>T?`<span class="ctype">${esc(chCaseL(T.id))}</span>`:`<span class="tkmut">–</span>`)(ctOf("call",it.key))],
     ["Talk time",`<span class="num">${esc(dur(cbTalk(q)))}</span>`],["Linked calls",legs.length>1?`<span class="num">${legs.length} calls</span>${lc&&lc.hidden?` <span class="tkmut">+ ${lc.hidden} voicemail / no answer</span>`:""}`:`<span class="tkmut">Single call</span>`],
     ["Team",team.length?`Case with ${esc(team.join(", "))}`:`<span class="tkmut">Solo</span>`],["WIRA tasks",T.length?`<span class="num">${T.length}</span> linked`:`<span class="tkmut">None linked</span>`],
     ["Recordings",legs.filter(l=>l.id).length?`<span class="tkrecs">${legs.filter(l=>l.id).map((l,i)=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec">▶ Call ${i+1}${l.sec?` <span class="num tkmut">(${esc(dur(l.sec))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
   const band=cbInRound(it.ik)?`<div class="lrband" id="tkRound"><b>Week ${esc(weekLabel(it.week))}</b><span>Round call · ${esc(chFirst(it.sa))}</span></div>`:"";
-  return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span></div>
+  return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span>${ctTicketHtml("call",it.key,true)}</div>
     <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
     <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></div>
@@ -469,7 +474,7 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   const lk=(cbItems[it?it.ik:""]||{}).locked,inR=it&&cbInRound(it.ik);
   if(it)cbCGWatch(it.key);const ck=String(callSel||"");
   const sig=JSON.stringify([callSel,week,!!it,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
-    cbCG.has(ck),cbCGSig(cbCG.get(ck)),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun)]);
+    cbCG.has(ck),cbCGSig(cbCG.get(ck)),ctSig("call",ck),cbGraders.has(myId),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun)]);
   if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();cbGRPaint();return}
   cbAuditSig=sig;const nav=`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
   if(!it){if(cbPanel)cbPanelClose();v.innerHTML=nav+`<div class="panel empty">${queueReady||!db?`Call ${esc(callSel)} isn't in the queue.`:"Loading…"} <button type="button" class="btn small" data-go="calib">Open the round</button></div>`;return}
@@ -582,7 +587,7 @@ const cbUngraded=()=>cbCallItems().filter(it=>cbCG.has(String(it.key))&&!cbCG.ge
 async function cbCallLocked(it,R,marks,A,subd,at){const C=cbClaude(it);if(!C||!db)return "";const q=it.q||{};let n=0;
   for(const r of R){const cl=C.marks[r.id],ag=marks[r.id];if(cl===undefined)continue;
     const an=String((A[r.id]&&A[r.id].note)||"").trim(),why=cbReason(it.ik,r.id,A[r.id],subd);
-    const base={item:"call",queueId:String(it.key),week:it.week||q.week||"",sa:it.sa||q.agent||"",caseType:String(((C.g.A||{}).caseType)||cbCallType(it)),round:it.round??null,
+    const base={item:"call",queueId:String(it.key),week:it.week||q.week||"",sa:it.sa||q.agent||"",caseType:String((ctOf("call",it.key)||{}).id||((C.g.A||{}).caseType)||cbCallType(it)),round:it.round??null,
       crit:r.id,label:r.label,type:"",what:String((C.why||{})[r.id]||""),by:"panel",at};let doc=null;
     if(String(cl)!==String(ag))doc=Object.assign({kind:"contest"},base,{from:chMk(cl,r.max),to:chMk(ag,r.max),reason:why||"All matched"});
     else if(an&&an!=="All matched")doc=Object.assign({kind:"reinforce"},base,{from:chMk(cl,r.max),to:chMk(cl,r.max),reason:an});
@@ -620,6 +625,7 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
   switch(A){
     case "filt":cbFilt=["chat","call"].includes(el.dataset.v)?el.dataset.v:"all";renderCalib();return;
     case "mine":cbMineOnly=!cbMineOnly;renderCalib();return;
+    case "ctf":{const v=el.dataset.v;cbCtFilt=v==="all"?"all":v==="none"?"":ctAlias(v);renderCalib();const b=$(`#cbCtFilt [data-v="${v}"]`);if(b)b.focus();return}
     case "draw":cbDraw(false);return;
     case "redraw":cbRedraw=!cbRedraw;renderCalib();if(cbRedraw){const b=$("#cbRdGo");if(b)b.focus()}return;
     case "redrawgo":cbDraw(true);return;
