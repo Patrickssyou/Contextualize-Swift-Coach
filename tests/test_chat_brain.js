@@ -68,7 +68,15 @@ const isComp = B.cleanChatAnalysis({ caseType: 'compensation', bucket: { id: 'ma
 ok(isComp.bucket.id === 'made_twice_one_paid' && isComp.affectedOrder === 'O1' && isComp.saOffer.amount === 17.73, 'comp case keeps bucket, order and offer');
 ok(isComp.ideal.escalation.needed === true && isComp.ideal.escalation.to === 'Lead', 'flat escalation key lands in ideal.escalation');
 ok(B.cleanChatAnalysis({ bucket: { id: 'unpaid' } }, Fx, policy).bucket.id === 'unpaid' && B.cleanChatAnalysis({ caseType: 'weird' }, Fx, policy).caseType === 'other', 'no caseType keeps the old behaviour; unknown type -> other');
-ok(B.CASE_TYPES.some(c => c[0] === 'compensation') && B.CASE_TYPES.length >= 8, 'case types listed');
+ok(B.CASE_TYPES.some(c => c.id === 'compensation') && B.CASE_TYPES.every(c => c.id && c.label && c.desc) && B.CASE_TYPES.length >= 8, 'case types listed with id, label, desc');
+// the renamed type: order_issue is read as order_investigation everywhere
+ok(B.CASE_ALIAS.order_issue === 'order_investigation' && B.caseTypeId('order_issue') === 'order_investigation' && B.caseTypeId('Order-Investigation') === 'order_investigation', 'old order_issue reads as order_investigation');
+ok(B.caseTypeId('') === '' && B.caseTypeId(null) === '' && B.caseTypeId('weird') === 'other' && B.caseTypeLabel('order_issue') === 'Order-taking investigation' && B.caseTypeLabel('contact_customer') === 'Call the customer', 'caseTypeId and labels');
+ok(B.cleanChatAnalysis({ caseType: 'order_issue' }, Fx, policy).caseType === 'order_investigation', 'an old order_issue reply cleans to order_investigation');
+const ap = B.chatAnalysisPrompt({ chat: { sa: 'Ivo Lark', msgs: [] }, orders: [], calls: [] }, Fx, policy, [], []);
+ok(/order_investigation \(Order-taking investigation\)/.test(ap) && !/order_issue/.test(ap) && /contact_customer \(Call the customer\)/.test(ap), 'analysis prompt lists the new ids with labels');
+// the call brain mirrors the list: same ids and labels, in order
+ok(JSON.stringify(B.CASE_TYPES.map(t => [t.id, t.label])) === JSON.stringify(C.CALL_CASE_TYPES.map(t => [t.id, t.label])) && JSON.stringify(B.CASE_ALIAS) === JSON.stringify(C.CALL_CASE_ALIAS), 'chat and call case types: identical ids, labels and aliases');
 // N/A rows: fault and amount can be N/A, with the condition printed in the grade prompt
 ok(['fa', 'amt', 'fr', 'expl', 'esc'].every(id => B.CHAT_RUBRIC.find(r => r.id === id).na && B.CHAT_RUBRIC.find(r => r.id === id).naWhen), 'na rows carry naWhen');
 const gp = B.chatGradePrompt({ chat }, { timeline: [], claims: [], promises: [] }, Object.assign({}, nonComp), B.compFor(nonComp, [], policy), { amount: null }, []);

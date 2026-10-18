@@ -403,7 +403,7 @@ function followUpLine(doc,list,hours=24){
 /* ---- Pass 3 (grade): the call or case scored on the live call rubric, from the pass-1 facts and pass-2 analysis.
    Every score cites fact ids. A call is one SA; a case (another SA, a pool seat or CRT talked) is graded once as a team.
    items: the live form's flat items for the type, [{id, label, w, lv:[0..3] or {0..3:text}, na (the N/A condition; absent = no N/A)}] ---- */
-const CALL_GRADE_V = "call-grade-1";
+const CALL_GRADE_V = "call-grade-2";   /* 2: caseType and caseWhy */
 /* the QA lead's standing decisions (from the chat brain's leadRules, worded for calls) */
 const CALL_RULES = (sa,team) => [
   team?`- This is a CASE: several agents worked it (${team.join(", ")}). Grade it once, as a team, on how the case was run end to end. ${sa} is the audited agent; credit a clean handoff (the next agent had what was needed and the caller wasn't left waiting) and mark down the gaps where they happened.`
@@ -413,6 +413,33 @@ const CALL_RULES = (sa,team) => [
   `- Check the decision AND the handling: whether ${sa} chose the right action (including keeping or reasonably declining an earlier agent's promise: the restaurant's decision, the policy or a lead's call) counts under the action or resolution criterion; how ${sa} explained it, owned it and closed it with the caller counts under the communication or close criterion.`,
   `- The close: a read-back of the outcome that the caller agreed to, or the outcome stated and the caller saying it's all they need, is a confirmed understanding. A close where who does what next is left muddled or contradicts itself leaves the caller unsure of the outcome.`,
   `- Score each flaw once, in the one criterion it belongs to. A wrong account of fault given to the caller is the fault criterion; the wrong next step is the action criterion; an unclear or missing close is the close criterion.`];
+/* the case type: one list shared with the chat brain (same ids and labels as CASE_TYPES in chat.js; a test holds them equal).
+   desc is how each case looks on a call. CALL_CASE_ALIAS reads old ids (order_issue was renamed order_investigation). */
+const CALL_CASE_TYPES = [
+  {id:"compensation",label:"Compensation",desc:"an order went wrong and it may be Tarro's mistake (a Tarro agent took an item, note, address or total wrong, an order wasn't sent or cancelled, a Tarro-dispatched driver failed) and money is at stake: the store or customer asked for a refund, credit, remake or compensation, or one was offered or promised. The compensation policy applies"},
+  {id:"order_investigation",label:"Order-taking investigation",desc:"the store or a customer questions how a Tarro agent took an order or what was said on an earlier call: asks for the recording to be checked, says an item, address, price, payment or order type was taken wrong, or complains about how the order was taken; the call checks or explains it and no money is settled. A complaint about the food itself or the kitchen is not order-taking"},
+  {id:"contact_customer",label:"Call the customer",desc:"the store asks Tarro to call or update a customer (a delay, a cancellation, an item out of stock), or calling a customer or the store back is the main work of the call"},
+  {id:"customer_recovery",label:"Customer credit",desc:"a customer's complaint about the food or the store (cold, wrong or missing items from the kitchen, quality) that isn't Tarro's mistake, settled or answered for the store: the store's own refund, credit or remake, which the agent carries out or, on the manager line, offers as the store"},
+  {id:"menu_setup",label:"Menu setup",desc:"the store asks to change menu items, prices, modifiers, specials or promos"},
+  {id:"hours_service",label:"Hours and service",desc:"the store asks to change opening hours, close early, or pause or resume phone ordering, online ordering or delivery"},
+  {id:"device_printer",label:"Device or printer",desc:"the store calls about its tablet, printer, card terminal, POS app or receipts behaving wrong (tickets not printing or printing twice, the tablet offline, wrong tips or items not showing on the POS), including when the agent escalates it to the tech team"},
+  {id:"billing_payment",label:"Billing and payments",desc:"Tarro's charges to the store, card fees, payouts, statements, or a card payment that failed"},
+  {id:"order_admin",label:"Order admin",desc:"void, cancel or adjust an order, mark it paid or unpaid, reprint a ticket, change its type, or a delivery status or driver problem (where the order is, a driver who can't find the address, marked delivered but not received, a new driver needed) with no money settled"},
+  {id:"how_to",label:"How-to",desc:"the store asks how to do something in Tarro's tools (CMA, the tablet, reports)"},
+  {id:"other",label:"Other",desc:"anything else, including a wrong number or a call with no request"}];
+const CALL_CASE_ALIAS = {order_issue:"order_investigation"};
+function callCaseId(v){if(v==null||String(v).trim()==="")return "";const k=String(v).trim().toLowerCase().replace(/[\s-]+/g,"_"),id=CALL_CASE_ALIAS[k]||k;
+  return CALL_CASE_TYPES.some(t=>t.id===id)?id:"other"}
+const CALL_CASE_RULES = () => [
+  `- Case type: what kind of case this is, from what the caller needed (the facts, not the scorecard):`,
+  ...CALL_CASE_TYPES.map(t=>`  ${t.id} (${t.label}): ${t.desc}.`),
+  `  Pick by the main request. Money asked for, offered or promised over a possible Tarro mistake makes it compensation, even when it began as an investigation; a store giving its own customer a refund or remake is customer_recovery.`,
+  `  On the manager line (MGR) the agent answers as the restaurant: a customer's complaint there is about the store's food or delivery unless the facts point at how a Tarro agent took the order.`,
+  `  A callback that is only the agent's next step on another request doesn't make it contact_customer. A store calling about its tablet or printer is device_printer even when an order was affected, unless money is asked for.`,
+  `  "caseWhy" is one sentence on why, citing the fact ids it rests on (F#).`];
+/* caseType and caseWhy from a reply (the grade or the standalone case pass): a known id (aliases read), else "other" */
+function cleanCaseFields(x){x=x&&typeof x==="object"?x:{};const c=x.case&&typeof x.case==="object"?x.case:{};
+  return {caseType:callCaseId(x.caseType??c.type??c.caseType)||"other",caseWhy:capText(typeof (x.caseWhy??c.why)==="string"?(x.caseWhy??c.why):"",300)}}
 function callLessonLines(ls){return (ls||[]).slice(0,20).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.crit&&l.label?` (${l.crit})`:""}`,why=l.note||l.reason;
   if(l.kind==="reinforce")return `- ${c}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
   if(l.kind==="contest")return `- ${c}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
@@ -461,8 +488,10 @@ function callGradePrompt(c,F,A,items,lessons){
     `- WIRA categories: "live-support-cos-self-resolved" is the right category for a request Support resolved on the call; an escalation goes to the owning team's project. A ticket whose title names the ticket or order and the request, and whose notes say what the caller asked and what was done, is complete: don't ask for amounts, phone numbers or addresses the order already holds.`,
     `- Use the QA lead's corrections below where they apply: they are how the QA lead grades.`,
     `- Refer to people by name or role, never as he or she. Plain, direct, specific; no praise padding.`,
+    ...CALL_CASE_RULES(),
     ``,`Reply with only a JSON object:`,
-    `{"criteria": {${(items||[]).map(it=>`"${it.id}": {"why": "one sentence", "cites": ["F1"], "score": ${it.na?'"0-3 or na':'"0-3'}${noTask&&it===tk?' or unknown"':'"'}}`).join(", ")}},`,
+    `{"caseType": "${CALL_CASE_TYPES.map(t=>t.id).join(" | ")}", "caseWhy": "one sentence citing F#",`,
+    ` "criteria": {${(items||[]).map(it=>`"${it.id}": {"why": "one sentence", "cites": ["F1"], "score": ${it.na?'"0-3 or na':'"0-3'}${noTask&&it===tk?' or unknown"':'"'}}`).join(", ")}},`,
     ` "wentWell": ["up to 3 things ${first} did well, each under 20 words, each tied to a fact"],`,
     ` "fixes": [{"id": "criterion id scored below 3", "what": "what ${first} did, under 25 words", "should": "what ${first} should do next time, under 30 words, with the words to say when it helps"}],`,
     ` "summary": "1-2 sentences on the overall handling"}`,
@@ -492,8 +521,23 @@ function cleanCallGrade(x,items,F){if(!x||typeof x!=="object"||Array.isArray(x))
   const known=new Set((items||[]).map(it=>String(it.id))),sv=v=>capText(typeof v==="string"?v:v==null?"":String(v),300);
   const fixes=(Array.isArray(x.fixes)?x.fixes:[]).filter(f=>f&&typeof f==="object"&&known.has(String(f.id||f.criterion||"").trim())).slice(0,6)
     .map(f=>({id:String(f.id||f.criterion).trim(),what:sv(f.what),should:sv(f.should)})).filter(f=>f.what||f.should);
-  return {scores,reasons,cites,wentWell:(Array.isArray(x.wentWell)?x.wentWell:[]).map(t=>capText(typeof t==="string"?t:"",200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,3),
+  return {...cleanCaseFields(x),scores,reasons,cites,wentWell:(Array.isArray(x.wentWell)?x.wentWell:[]).map(t=>capText(typeof t==="string"?t:"",200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,3),
     fixes,summary:capText(typeof x.summary==="string"?x.summary:"",400)}}
+/* the case type alone, from the pass-1 facts, so calls graded before caseType existed can be classified without a regrade.
+   c: a queue doc or callInput; F: the facts. Reply {caseType, caseWhy}. */
+function callCasePrompt(c,F){
+  if(c&&!Array.isArray(c.legs)&&c.chain)c=callInput(c);c=c||{};
+  const legs=c.legs||[],team=c.team&&c.team.length>1?c.team:null,tasks=c.tasks||[];
+  const tk=tasks.length?tasks.map(k=>`- Task ${k.id||""}: ${capText(k.title||"",160)}${k.cat?` · category ${k.cat}`:""}${k.intent?` · intent ${k.intent}`:""}`).join("\n"):"None linked.";
+  return [`You sort support cases for a QA lead at Tarro. ${CTX}`,
+    `Below are the facts recorded from one ${team?"case":"call"} (F#, promises P#). Say what kind of case it is. Use only the facts and the task titles; do not grade anyone.`,
+    ``,`Rules:`,...CALL_CASE_RULES(),
+    ``,`Reply with only a JSON object:`,
+    `{"caseType": "${CALL_CASE_TYPES.map(t=>t.id).join(" | ")}", "caseWhy": "one sentence citing F#"}`,
+    ``,`${team?"CASE":"CALL"}`,`Audited agent: ${c.agent||"unknown"}`,`${c.kind?`${c.kind} (${KIND_TEXT[c.kind]||c.kind}) · `:""}${caseLine(c)}`,
+    `Linked calls with talk: ${legs.length}`].concat(team?[`Agents who worked it: ${team.join(", ")}`]:[]).join("\n")+
+    `\n\nWIRA TASKS\n${tk}\n\nFACTS\n${factLines(F)}\n`}
+function cleanCallCase(x){if(!x||typeof x!=="object"||Array.isArray(x))return null;return cleanCaseFields(x)}
 /* the live form's total: score ÷ 3 of the weight, N/A left out (v2) */
 function callScore(scores,items){let got=0,den=0;(items||[]).forEach(it=>{const v=scores&&scores[it.id];if(v==null||v===""||v==="na")return;const {hi}=itemScale(it),w=Number(it.w)||0;den+=w;got+=w*Math.min(hi,Number(v))/hi});
   return den?Math.round(got/den*1000)/10:null}
@@ -515,4 +559,4 @@ async function gradeCall(c,deps){deps=deps||{};const step=deps.step||(()=>{}),it
 /* PULL-CORE END */
 if(typeof module!=="undefined")module.exports={capText,dur,clock12u,CTX,PULL,GD,ROSTER_DEFAULT,SCOPE_DEFAULT,LD_DIMS,ldTs,etDay,etClock,addDaysU,isPhone,cleanName,cleanAgent,ldVal,fnv,kindOf,normRows,makeRoster,groupOf,scopeRows,whoOf,buildChain,eligibleFor,linkedNumbers,candidatesFor,choosePicks,partyOf,queueDoc,populationOf,ldConfig,
   legTalk,talked,caseTeam,groupCases,VM_RE,TASKS,TASK_SCAN_DIMS,TASK_DIMS,normWho,isAgentWho,validCode,caseCoded,taskScanConfig,taskDetailConfig,taskRows,legsOfDoc,caseSpan,taskDays,linkTasks,taskDoc,mdPlain,wiraUrl,FACTS_V,cleanAiFacts,casePrompt,caseEvidence,factsPrompt,cleanFacts,factLines,analysisPrompt,cleanAnalysis,FACTS2_V,transcriptConfig,whenTask,FOLLOW_DIMS,followUpConfig,followUps,followUpLine,
-  CALL_GRADE_V,CALL_RULES,callLessonLines,itemLevels,itemScale,callInput,callGradePrompt,cleanCallGrade,callScore,callAsk,gradeCall};
+  CALL_GRADE_V,CALL_RULES,CALL_CASE_TYPES,CALL_CASE_ALIAS,callCaseId,CALL_CASE_RULES,cleanCaseFields,callCasePrompt,cleanCallCase,callLessonLines,itemLevels,itemScale,callInput,callGradePrompt,cleanCallGrade,callScore,callAsk,gradeCall};

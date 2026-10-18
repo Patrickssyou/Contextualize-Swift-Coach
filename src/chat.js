@@ -448,29 +448,41 @@ function chatFactLines(F){return F.timeline.map(t=>`${t.id} · ${[t.when,t.src].
 function calibLines(cal){return (cal||[]).slice(0,CHAT.calibMax).map((c,i)=>`CASE ${i+1} · ${c.agent||"SA"} · ${c.restaurant||""} · ${c.date||""} · QA lead's verdict: ${String(c.verdict||"").toUpperCase()}\n`+(c.lessons||[]).map(l=>"- "+l).join("\n")).join("\n\n")}
 /* the QA lead's corrections: findings marked "not a mistake" (newest first) */
 function lessonLines(ls){return (ls||[]).slice(0,CHAT.lessonMax).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.type?` · ${l.type}`:""}`,why=l.note||l.reason;
-  if(l.kind==="reinforce")return `- ${c}${l.caseType?` (${l.caseType} case)`:""}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
-  if(l.kind==="contest")return `- ${c}${l.caseType?` (${l.caseType} case)`:""}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
+  if(l.kind==="reinforce")return `- ${c}${l.caseType?` (${caseTypeId(l.caseType)} case)`:""}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
+  if(l.kind==="contest")return `- ${c}${l.caseType?` (${caseTypeId(l.caseType)} case)`:""}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
   return `- ${c}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${why?`: ${capText(why,200)}`:"."}`}).join("\n")}
-/* what the client asked for; only "compensation" uses the policy buckets and the money */
+/* what the client asked for; only "compensation" uses the policy buckets and the money.
+   One list for calls and chats: same ids and labels as CALL_CASE_TYPES in core.js (a test holds them equal); desc is how the case looks in a chat.
+   CASE_ALIAS reads old ids saved on earlier audits (order_issue was renamed order_investigation). */
 const CASE_TYPES = [
-  ["compensation","the client reports an order problem that may be Tarro's mistake, or compensation was asked for, offered or promised"],
-  ["order_issue","check or correct an order or a call (what the customer ordered, a recording request, a complaint) with no money at stake"],
-  ["customer_recovery","the restaurant decides a credit, refund or remake for its own customer and the SA carries it out"],
-  ["contact_customer","the restaurant asks Tarro to call or update a customer"],
-  ["menu_setup","menu items, prices, modifiers or promos"],
-  ["hours_service","opening hours, closures, turning call service or delivery on or off"],
-  ["device_printer","printers, tablets, the POS app, receipts"],
-  ["billing_payment","charges, card fees, payouts, statements"],
-  ["order_admin","void an order, mark it paid or unpaid, change its type, dispatch or driver problems"],
-  ["how_to","how to use Tarro's tools"],
-  ["other","anything else"]];
+  {id:"compensation",label:"Compensation",desc:"the client reports an order problem that may be Tarro's mistake, or compensation was asked for, offered or promised; the compensation policy applies"},
+  {id:"order_investigation",label:"Order-taking investigation",desc:"check what was ordered or said on a call: a recording request, a wrong item, address or price taken, a complaint about how the order was taken; no money settled"},
+  {id:"contact_customer",label:"Call the customer",desc:"the restaurant asks Tarro to call or update a customer, or the SA has to call someone back as the main work of the chat"},
+  {id:"customer_recovery",label:"Customer credit",desc:"the restaurant decides a credit, refund or remake for its own customer and the SA carries it out"},
+  {id:"menu_setup",label:"Menu setup",desc:"menu items, prices, modifiers or promos"},
+  {id:"hours_service",label:"Hours and service",desc:"opening hours, closures, turning call service or delivery on or off"},
+  {id:"device_printer",label:"Device or printer",desc:"printers, tablets, the POS app, receipts"},
+  {id:"billing_payment",label:"Billing and payments",desc:"charges, card fees, payouts, statements"},
+  {id:"order_admin",label:"Order admin",desc:"void an order, mark it paid or unpaid, change its type, dispatch or driver problems"},
+  {id:"how_to",label:"How-to",desc:"how to use Tarro's tools"},
+  {id:"other",label:"Other",desc:"anything else"}];
+const CASE_ALIAS = {order_issue:"order_investigation"};
+/* a saved or replied case type as a current id: aliases applied; "" when there is none, "other" when it isn't on the list */
+function caseTypeId(v){if(v==null||String(v).trim()==="")return "";const k=String(v).trim().toLowerCase().replace(/[\s-]+/g,"_"),id=CASE_ALIAS[k]||k;
+  return CASE_TYPES.some(t=>t.id===id)?id:"other"}
+const caseTypeLabel=v=>{const id=caseTypeId(v),t=CASE_TYPES.find(x=>x.id===id);return t?t.label:""};
+/* how to pick one when two fit (chats and calls share these) */
+const CASE_PICK = [
+  `  Pick by the main request. Money asked for, offered or promised over a possible Tarro mistake makes it compensation, even when it began as an investigation; a restaurant giving its own customer a credit is customer_recovery.`,
+  `  A callback that is only the SA's next step on another request doesn't make it contact_customer.`];
 function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA",P=(policy&&policy.comp)||CHAT_POLICY_EMPTY.comp;
   const buckets=(P.buckets||[]).map(b=>`${b.id} (${b.label}: ${b.pct}%${b.deliveryFee?", + delivery fee on self-delivery":""})`).join("; ")||"none loaded";
   return [`You are the analyst for a QA lead at Tarro. ${CHAT_CTX}`,
     `Below is the record of one support chat (facts F#, SA claims C#, promises P#) and the orders it was tied to (O#). Analyze it the way the QA lead does: FIRST the facts, THEN fault, THEN the right solution, THEN how the SA's solution compares. Use only the record and the policy; cite fact ids.`,
     ``,`Rules:`,
     `- Case type first, from what the client asked for in the chat (not from linked data):`,
-    ...CASE_TYPES.map(([id,d])=>`  ${id}: ${d}`),
+    ...CASE_TYPES.map(t=>`  ${t.id} (${t.label}): ${t.desc}`),
+    ...CASE_PICK,
     `- Fault, by who caused the problem the client brought to the chat (not how the SA handled the chat):`,
     `  "tarro": a Tarro agent's or system's own action or omission caused it (a wrong instruction or quote, an item or note not entered, an order not confirmed or not cancelled), confirmed by the recording.`,
     `  "restaurant" or "customer": they caused it and Tarro followed process.`,
@@ -489,7 +501,7 @@ function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA"
     ...EVIDENCE_RULES,
     NO_PRONOUNS,
     ``,`Reply with only a JSON object:`,
-    `{"caseType": "${CASE_TYPES.map(c=>c[0]).join(" | ")}", "request": "what the client asked for, under 20 words",`,
+    `{"caseType": "${CASE_TYPES.map(t=>t.id).join(" | ")}", "request": "what the client asked for, under 20 words",`,
     ` "summary": "what happened, 2-3 sentences",`,
     ` "fault": {"who": "tarro | restaurant | customer | shared_tarro | shared_other | unclear | none", "why": "one sentence", "cites": ["F2"]},`,
     ` "bucket": {"id": "one of: ${(P.buckets||[]).map(b=>b.id).join(" | ")||"none"}", "why": "one sentence", "cites": []},`,
@@ -575,7 +587,7 @@ function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray
   const cites=a=>arr(a).map(v=>String(v).trim().toUpperCase()).filter(v=>ids.has(v)).slice(0,8),o=v=>v&&typeof v==="object"?v:{},low=v=>String(v||"").trim().toLowerCase().replace(/[\s-]+/g,"_");
   const bucketIds=((policy&&policy.comp&&policy.comp.buckets)||[]).map(b=>b.id),f=o(x.fault),b=o(x.bucket),id=o(x.ideal),es=o(x.escalation&&typeof x.escalation==="object"?x.escalation:id.escalation),so=o(x.saOffer),sp=o(x.saPath),ae=o(x.aeInvolvement),fr=o(x.firstResponse);
   const amt=so.amount==null||so.amount===""?null:Number(String(so.amount).replace(/[$,]/g,""));
-  const caseType=CASE_TYPES.some(c=>c[0]===low(x.caseType))?low(x.caseType):x.caseType==null||x.caseType===""?"":"other",comp=!caseType||caseType==="compensation";
+  const caseType=caseTypeId(x.caseType),comp=!caseType||caseType==="compensation";
   /* added fields: caseType (one of CASE_TYPES, "" when the reply has none) and request. Buckets, the affected order and the SA's offer only count on a compensation case */
   return {caseType,request:chS(x.request,200),summary:chS(x.summary,700),fault:{who:FAULTS.includes(low(f.who))?low(f.who):"unclear",why:chS(f.why,300),cites:cites(f.cites)},
     bucket:{id:comp&&bucketIds.includes(low(b.id))?low(b.id):"",why:chS(b.why,300),cites:cites(b.cites)},
@@ -785,6 +797,6 @@ function chatTxDoc(k){return {v:CHAT_V,sid:k.chat.sid,calls:k.calls.map(l=>({id:
 if(typeof module!=="undefined"){const core=require("./core.js");Object.assign(globalThis,core);
   module.exports={CHAT,CHAT_V,CHAT_DIMS,STAFF_DEFAULT,ROLE_L,chatBaseConfig,isBaseChat,chatRow,chatMessages,chatTranscript,relatedTasksConfig,relTask,pickRelated,orderConfig,orderRow,orderState,
     textRefs,mergeRefs,rankOrders,linkedOrders,callsByIdsConfig,phoneCallsConfig,callRow,CHAT_POLICY_EMPTY,compFor,offerCheck,chatEvidence,chatRefsPrompt,chatFactsPrompt,
-    chatFactLines,calibLines,CASE_TYPES,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
+    chatFactLines,calibLines,CASE_TYPES,CASE_ALIAS,CASE_PICK,caseTypeId,caseTypeLabel,chatAnalysisPrompt,CHAT_RUBRIC,VERDICTS,chatGradePrompt,cleanChatRefs,cleanChatFacts,cleanChatAnalysis,cleanChatGrade,chatScore,chatVerdict,money,r2,
     CHAT_STEPS,CHAT_PATHS,PRIO,findingPriority,quoteCheck,buildFindings,finishGrade,lessonLines,mergeGrades,leadRules,muUsd,COMP_ERR,compDiagnose,compCheck,chatWeek,pullChatWeek,chatGradable,chatPicks,repairJson,askPass,chatContext,gradeChat,chatQueueDoc,chatAuditDoc,chatTxDoc,
     chatStatesConfig,stateRow,stateOn,chatTiming,aeFirstReply,chatTimingLines,minBetween,rosterOf,editDist,parseFields,parseWids,fieldClues,POS_RE,BOT_RE,pairComments,personNames,refersToChat,datesIn,ordersByIdsConfig,MIN_AMT}}

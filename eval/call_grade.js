@@ -52,7 +52,7 @@ function asker(logFile) {
   };
 }
 const gradeDoc = (R, items) => ({ v: C.CALL_GRADE_V, at: new Date().toISOString(), by: 'claude-checkpoint', items: items.map(i => i.id),
-  scores: R.G.scores, reasons: R.G.reasons, cites: R.G.cites, wentWell: R.G.wentWell, fixes: R.G.fixes, summary: R.G.summary, F: R.F, A: R.A });
+  caseType: R.G.caseType, caseWhy: R.G.caseWhy, scores: R.G.scores, reasons: R.G.reasons, cites: R.G.cites, wentWell: R.G.wentWell, fixes: R.G.fixes, summary: R.G.summary, F: R.F, A: R.A });
 
 async function pool(list, fn) {
   let i = 0; const fail = [];
