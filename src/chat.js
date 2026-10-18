@@ -854,7 +854,7 @@ function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
     /* every order the restaurant had on the chat day and the day before, newest first, for the reviewer's "Change order" */
     dayOrders:(k.allOrders||[]).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,150).map(o=>({id:o.id,ticket:o.ticket,at:o.at,type:o.type,source:o.source,items:o.items,total:o.total,status:o.status})),
     orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
-    calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk"})),
+    calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk",link:l.link||"",match:l.match||"",why:l.why||"",shared:!!l.shared,code:l.code||""})),
     slack:k.slack,notFound:k.notFound,
     facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,check:R.check||null,grade:R.G,pct:R.pct,verdict:R.verdict?R.verdict.id:null,
     priority:((R.G&&R.G.findings)||[]).map(f=>f.priority).sort()[0]||null,

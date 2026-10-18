@@ -18,6 +18,7 @@ const OUT = path.join(ROOT, 'data/checkpoints', cp), REFS = path.join(ROOT, 'dat
 const rj = f => JSON.parse(fs.readFileSync(f, 'utf8')), wj = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 1));
 const inputs = rj(path.join(OUT, 'inputs.json'));
 const { poolQuery } = require('./week_pool.js');
+let SIBS = [], UNTIL = '';
 
 /* one Claude pass, blind: no tools, no project files. A reply that isn't JSON is passed back as invalid_json so the brain's askPass can repair it, like the page */
 function claude(prompt) {
@@ -49,6 +50,7 @@ async function gradeOne(c) {
       return ask(prompt, pass, c.sid);
     },
     policy: inputs.policy, cal: inputs.cal || [], lessons: inputs.lessons || [], gradeRuns: 1,
+    siblings: SIBS, until: UNTIL,
   };
   const k = await B.chatContext(JSON.parse(JSON.stringify(c)), deps);
   const R = await B.gradeChat(k, deps);
@@ -67,6 +69,7 @@ async function gradeOne(c) {
   let chats = B.pullChatWeekRows ? B.pullChatWeekRows(rows) : rows.map(x => B.chatRow(x, { roster: C.ROSTER_DEFAULT, staff })).filter(B.isBaseChat);
   const seen = new Set(); chats = chats.filter(c => c.wid && !seen.has(c.wid) && seen.add(c.wid));
   const gradable = chats.filter(B.chatGradable);
+  SIBS = chats; UNTIL = new Date(Date.parse(week + 'T00:00:00Z') + 8 * 864e5).toISOString().slice(0, 10) + 'T00:00:00';
   let list = gradable;
   if (opt.only) { const o = new Set(opt.only.split(',')); list = gradable.filter(c => o.has(c.sid)) }
   if (!opt.redo) list = list.filter(c => !fs.existsSync(path.join(OUT, 'grades', c.sid + '.json')));

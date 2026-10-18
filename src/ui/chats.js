@@ -242,6 +242,8 @@ async function gradeOneChat(c,ctl,orderIds,fresh){
     isStop:e=>!!e&&(e.code==="cancelled"||chatIsAccess(e)),
     step:(id,st,note)=>{if(!chatRun||chatRun.sid!==sid)return;chatRun.steps[id]={st,note:note||""};if(st==="run")chatRun.step=id;paintRun()}};
   if(Array.isArray(orderIds))deps.orderIds=orderIds;
+  /* outbound calls by the SA: other chats of the week decide ambiguous restaurant-only matches */
+  deps.siblings=chats.filter(x=>String(x.sid)!==String(c.sid));
   const k=await chatContext(clone(c),deps);
   const R=await gradeChat(k,deps);guard();
   const meta={by:myId||null};if(Array.isArray(orderIds))meta.orderIds=orderIds;
