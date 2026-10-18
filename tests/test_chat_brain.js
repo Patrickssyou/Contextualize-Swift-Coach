@@ -75,6 +75,14 @@ ok(B.caseTypeId('') === '' && B.caseTypeId(null) === '' && B.caseTypeId('weird')
 ok(B.cleanChatAnalysis({ caseType: 'order_issue' }, Fx, policy).caseType === 'order_investigation', 'an old order_issue reply cleans to order_investigation');
 const ap = B.chatAnalysisPrompt({ chat: { sa: 'Ivo Lark', msgs: [] }, orders: [], calls: [] }, Fx, policy, [], []);
 ok(/order_investigation \(Order-taking investigation\)/.test(ap) && !/order_issue/.test(ap) && /contact_customer \(Call the customer\)/.test(ap), 'analysis prompt lists the new ids with labels');
+// call links in the evidence: the SA's outbound calls are labelled with the match, and the rules say they count as action taken
+const evK = { chat: Object.assign({}, chat, { sa: 'Ivo Lark' }), tasks: [], orders: [], refs: { phones: [] }, notFound: [], calls: [
+  { id: 'o1', at: '2026-10-06T12:00:00', sec: 60, agent: 'Ivo Lark', dir: 'out', phone: '5551234567', link: 'sa_outbound', match: 'phone', why: "Ivo called the customer's number …4567 at 12:00 PM, 5 min after the chat opened", text: 'hi' },
+  { id: 'o2', at: '2026-10-06T11:00:00', sec: 60, agent: 'Ana', dir: 'in', phone: '5551234567', link: 'same_caller', text: 'hello' },
+  { id: 'o3', at: '2026-10-06T10:00:00', sec: 60, agent: 'Ana', dir: 'in', phone: '5551234567', link: 'order', text: 'order' }] };
+const ev = B.chatEvidence(evK);
+ok(/CALL 1 · outbound by Ivo Lark · phone match: Ivo called the customer's number …4567/.test(ev) && /CALL 2 · same caller/.test(ev) && /CALL 3 · the linked order's recording/.test(ev), 'evidence labels each call by its link');
+ok(B.EVIDENCE_RULES.some(r => /outbound by/.test(r) && /action taken/.test(r)), 'evidence rules: an SA outbound call is action taken');
 // the call brain mirrors the list: same ids and labels, in order
 ok(JSON.stringify(B.CASE_TYPES.map(t => [t.id, t.label])) === JSON.stringify(C.CALL_CASE_TYPES.map(t => [t.id, t.label])) && JSON.stringify(B.CASE_ALIAS) === JSON.stringify(C.CALL_CASE_ALIAS), 'chat and call case types: identical ids, labels and aliases');
 // N/A rows: fault and amount can be N/A, with the condition printed in the grade prompt
@@ -108,6 +116,7 @@ ok(/may be another case/.test(fp2), "the SA's other tasks are labelled as possib
     if (/ · orders$/.test(title)) return fx.orderRows;
     if (/ · order recordings$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_conversation_id));
     if (/ · same caller$/.test(title)) return fx.callRows.filter(r => cfg.filters.dimensions.includes(r.calls_call_phone_detail));
+    if (/ · SA outbound$/.test(title) || / · SA outbound recordings$/.test(title)) return [];
     throw new Error('unexpected query ' + title); };
   const out = p => JSON.parse(fs.readFileSync(path.join(D, `cases/1831362.r2.${p}.out.json`), 'utf8'));
   const asked = [];
