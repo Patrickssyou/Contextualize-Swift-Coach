@@ -318,4 +318,27 @@ function reinforceWorld(rw) {
     pct: 87.9, verdict: 'good', gradedAt: `${rw}T19:00:00.000Z`, by: 'main' };
   return { sid, findings, seed: [[P('chats/' + sid), chat], [P('audits/' + sid), audit], [`chatWeeks/${rw}`, { week: rw, chats: 1, picked: 1 }]] };
 }
-module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld, learnWorld, reinforceWorld };
+/* Invented chats for a pull (all fake people and restaurants): plan rows {sa: {name, email}, rest, code, day, hm, reply} where reply false means no SA reply.
+   Returns the Lightdash side (more.chat) with small valid Claude replies for grading, and the sids in plan order. */
+function inventChats(plan) {
+  const plus = (t, m) => new Date(Date.parse(t) + m * 6e4).toISOString(), states = [];
+  const base = plan.map((x, i) => { const id = String(9950000 + i + 1), at = `${x.day}T${x.hm}:00.000Z`, wid = `Wid(0,1,1,0,${id})`, cl = 'client-+155504000' + String(i).padStart(2, '0');
+    const msgs = [['client', `Hi, our tablet stopped taking orders at ${x.rest}. This is Noor.`]].concat(x.reply === false ? [] : [['sa', 'Hi Noor, checking the tablet now.'], ['sa', 'It was logged out; it is back online and taking orders.']]);
+    if (x.reply !== false) { states.push({ wira_tasks_state_task_id: wid, wira_tasks_state_task_status: 'open', wira_tasks_state_task_sub_status: 'pending_reply', wira_tasks_state_created_at_est: at },
+      { wira_tasks_state_task_id: wid, wira_tasks_state_task_status: 'closed', wira_tasks_state_task_sub_status: null, wira_tasks_state_created_at_est: plus(at, 12) }) }
+    return { wira_project_tasks_wira_id: wid, wira_project_tasks_short_wira_id: id, wira_project_tasks_created_at_est: at, wira_project_tasks_closed_at_est: null, wira_project_tasks_status: 'closed', wira_project_tasks_sub_status: null,
+      wira_project_tasks_task_title: msgs[0][1].slice(0, 80), wira_project_tasks_task_comments: msgs.map(m => m[1]).join(' ## '), wira_project_tasks_task_commentors: msgs.map(m => m[0] === 'sa' ? x.sa.email : cl).join(' ## '),
+      wira_project_tasks_conversation_direction: 'inbound', wira_project_tasks_created_by: null, wira_project_tasks_created_by_title: null, wira_project_tasks_assigned_user: x.sa.name, wira_project_tasks_agent_alias: x.sa.email,
+      wira_project_tasks_client_alias: cl, wira_project_tasks_first_response_time_minutes: x.reply === false ? null : 2, wira_project_tasks_first_client_message_time_est: at, wira_project_tasks_first_agent_reply_time_est: x.reply === false ? null : plus(at, 2),
+      wira_project_tasks_shape_name: 'general-conversation', wira_project_tasks_rating: null, wira_project_tasks_wira_ticket_url: `https://wira.example.test/tasks/${id}`,
+      restaurants_unique_code: x.code, restaurants_english_name: x.rest, restaurants_cuisine_type: 'pizza', wira_project_tasks_project_name: 'conversation' } });
+  const facts = { brief: ['The client says the tablet stopped taking orders.', 'The SA says it was logged out and is back online.'], calls: [], timeline: [{ src: 'M1', when: '', who: 'Client', kind: 'said', what: 'Says the tablet stopped taking orders' }, { src: 'M2', when: '', who: 'SA', kind: 'said', what: 'Says the tablet is back online' }], claims: [], promises: [] };
+  const analysis = { summary: 'A tablet logged out; the SA put it back online.', caseType: 'device_printer', fault: { who: 'none', why: 'A routine logout.', cites: ['F1'] }, bucket: { id: 'none', why: 'Not a Tarro error.', cites: ['F1'] },
+    affectedOrder: '', selfDelivery: false, deliveryFee: null, ideal: { client: 'Fix it in chat and confirm.', customer: '', escalation: { needed: false, why: 'Routine', to: '' } },
+    saOffer: { amount: null, text: 'Nothing offered', cites: [] }, saPath: { match: 'yes', why: 'Fixed in chat.' }, aeInvolvement: { kind: 'none', saCouldPrevent: false, why: '' }, firstResponse: { concludedBeforeEvidence: false, why: 'Checked first.', cites: ['F2'] } };
+  const g = sc => ({ scores: sc, reasons: Object.fromEntries(Object.keys(sc).map(k => [k, 'Cites F1 and F2.'])), route: { facts: { mark: 'right', why: 'Checked.' }, analysis: { mark: 'right', why: 'Right.' }, solution: { mark: 'right', why: 'Fixed.' }, escalation: { mark: 'right', why: 'Not needed.' } },
+    wentWell: ['Fixed it in chat'], nextTime: [], verdictWhy: 'Solid.' });
+  return { sids: base.map(r => r.wira_project_tasks_short_wira_id), rows: base,
+    chat: { realSid: 'none', states, base, rel: [], orders: [], calls: [], refs: {}, synth: { facts, analysis, grade: [g({ fr: 3, ev: 3, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 3 }), g({ fr: 3, ev: 2, rs: 3, fa: 'na', path: 2, amt: 'na', expl: 'na', esc: 'na', tone: 3 })] } } };
+}
+module.exports = { MOCK, openPage, LD, TASKS, TX, AI, DIR, chatWorld, learnWorld, reinforceWorld, inventChats };

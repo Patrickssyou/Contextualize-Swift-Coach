@@ -1,10 +1,11 @@
 // The Round: one week, 3 chats and 3 calls per SA, marked blind by three graders (Pat, Howard, Li Qi; all invented), compared, settled and locked.
 // World A seeds a drawn round so the flow is deterministic: the Round tab, a chat and a call in the Audit tab, the mixed checklist, Back / Prev / Next,
 // Learning sync, old hashes, Howard's view. World B draws (3 + 3 per SA, short SAs, items drawn before, redraw only before any submission).
+// Worlds F–H: WIRA chats in the round: the owner's auto-pull, "Pull chats and draw", a week with no chats, "Add missing chats / calls" and "Grade the round's chats".
 // World C: only Pat has opened the desk, so Howard and Li Qi are pending columns. Rules checked against the mock's access rules:
 // a draft under data/users/<id> is private, calibMarks/<uid> is written by <uid> only.
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), assert = require('assert');
-const { openPage, learnWorld, DIR } = require('./mock.js');
+const { openPage, learnWorld, inventChats, DIR } = require('./mock.js');
 const B = require('../src/chat.js');
 const SH = path.join(DIR, 'shots'); fs.mkdirSync(SH, { recursive: true });
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; console.log('ok -', m) };
@@ -555,6 +556,120 @@ const tab = page => page.evaluate(() => tab);
     await shot(page, 'case-types-round-390-dark.png', true);
     await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 });
     ok(!errors.length, 'no console errors (case types) ' + JSON.stringify(errors));
+    await ctx.close();
+  }
+
+  // ===== 10. Worlds F–H: a week drawn before its chats were pulled (Oct 12–18). All invented.
+  {
+    const RW = '2026-10-12', NOWF = '2026-10-21T16:00:00Z', RWL = 'Oct 12 – 18', SA2 = ['Ana Ruiz', 'Ben Okafor'];
+    const em = n => n.toLowerCase().replace(' ', '.') + '@wondersco.com', sa = n => ({ name: n, email: em(n) });
+    // Ana: 2 graded chats, 1 ungraded, 1 with no SA reply; Ben: 2 ungraded
+    const plan = [[SA2[0], 'Slate Pie Co', 'R96001', '2026-10-13', '10:05'], [SA2[0], 'Slate Pie Co', 'R96001', '2026-10-14', '11:20'], [SA2[0], 'Brick Lane Za', 'R96002', '2026-10-15', '09:40'],
+      [SA2[0], 'Brick Lane Za', 'R96002', '2026-10-16', '19:00', false], [SA2[1], 'Fennel Crust', 'R96003', '2026-10-13', '13:30'], [SA2[1], 'Fennel Crust', 'R96003', '2026-10-17', '15:45']]
+      .map(([n, rest, code, day, hm, reply]) => ({ sa: sa(n), rest, code, day, hm, reply }));
+    const IC = inventChats(plan), SID = IC.sids, graded = SID.slice(0, 2);
+    const audF = (sid, i) => { const sc = { fr: 3, ev: i ? 2 : 3, rs: 3, fa: 'na', path: 3, amt: 'na', expl: 'na', esc: 'na', tone: 3 }, pct = B.chatScore(sc), x = plan[SID.indexOf(sid)];
+      return [`chatWeeks/${RW}/audits/${sid}`, { v: 'chat-1', sid, week: RW, at: `${x.day}T${x.hm}:00.000Z`, sa: x.sa.name, restaurant: x.rest, code: x.code, initiator: 'client', title: '', frt: 2, checkpoint: 'cp0',
+        tasks: [], orders: [], candidates: [], dayOrders: [], orderNote: '', orderPick: 'auto', refs: {}, calls: [], slack: [], notFound: [],
+        facts: { calls: {}, timeline: [{ id: 'F1', src: 'M1', when: '', who: 'Client', kind: 'said', what: 'Says the tablet stopped taking orders' }], claims: [], promises: [] },
+        analysis: { caseType: 'device_printer', summary: 'A tablet logged out.', fault: { who: 'none', why: 'Routine.', cites: ['F1'] } },
+        grade: { scores: sc, reasons: Object.fromEntries(Object.keys(sc).map(k => [k, 'Cites F1.'])), wentWell: [], nextTime: [], verdictWhy: 'Fine.' }, pct, verdict: B.chatVerdict(pct).id, gradedAt: '2026-10-19T10:00:00.000Z', by: 'main' }] };
+    const callsF = [['qa1', 0, 21], ['qa2', 0, 22], ['qa3', 0, 23], ['qb1', 1, 24], ['qb2', 1, 25], ['qb3', 1, 26]].map(([id, k, i]) => mkCall(id, SA2[k], i, { week: RW }));
+    const roster = ['meta/roster', { agents: SA2.map((n, i) => ({ name: n, logins: ['zzf' + i] })) }];
+    const pullsF = [['pulls/' + RW, { status: 'done', week: RW, at: '2026-10-19T08:00:00.000Z', added: 6 }]];
+    const lrnF = ['learning/state', { week: RW, currentCheckpoint: 'cp0', target: { verdicts: 8, pts: 5, streak: 2 }, marked: [], rounds: [{ round: 1, week: RW, checkpoint: 'cp0', drawnAt: '2026-10-19T09:00:00.000Z', status: 'open', sample: [], results: [], verdictMatch: null, meanAbsDiff: null, pass: null }] }];
+    const itF = callsF.filter(([p]) => p !== 'queue/qb3').map(([p, q]) => ({ kind: 'call', key: p.split('/')[1], sa: q.agent, restaurant: q.restaurantName, at: q.callDate + 'T' + q.callTime }));
+    const roundF = ['calibRounds/' + RW, { week: RW, drawnAt: '2026-10-19T09:00:00.000Z', by: PAT, sas: SA2, items: itF }];
+    const howF = [`calibMarks/${HOW}/items/call_qa1`, subDoc('call', 'qa1', callMarks(2))];
+    const seedF = [roster, lrnF, roundF, howF].concat(pullsF, callsF, joined, graded.map(audF));
+    const moreF = { now: NOWF, tx: TXI, chat: IC.chat };
+    const wiraQ = page => page.evaluate(() => window.__ld.filter(x => /^QA Desk · chats /.test(x.title || '')).length);
+    const chatDocs = page => page.evaluate(w => Object.keys(window.__data).filter(p => p.startsWith(`chatWeeks/${w}/chats/`)).length, RW);
+
+    // F1. Howard (not the owner) opens the week: nothing is pulled
+    ({ page, ctx, errors } = await openPage(b, seedF, { people, room: true, sampleMs: 30, me: HOW }, { width: 1280, height: 900 }, moreF));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(900);
+    ok((await txt(page, '#cbRound h2')) === 'Week ' + RWL && await wiraQ(page) === 0 && await chatDocs(page) === 0 && !(await D(page, 'chatWeeks/' + RW)) && await page.locator('#cbAddChats, #cbAddCalls, #cbGradeChats').count() === 0,
+      'a grader who is not the owner opens the week: no chat pull, no Add or Grade buttons');
+    // F2. Pat (the owner) opens it: the week's chats pull once on their own
+    await page.evaluate(p => window.__switch(p), PAT).catch(() => {}); await page.waitForLoadState('load');
+    await waitDoc(page, 'chatWeeks/' + RW, 'd.chats === 6', 8000); await page.waitForFunction(() => !chatPullRun && chats.length === 6, null, { timeout: 5000 }); await page.waitForTimeout(300);
+    ok(await wiraQ(page) === 1 && await chatDocs(page) === 6 && (await D(page, 'chatWeeks/' + RW)).week === RW, `the owner opens a finished week with no chatWeeks/${RW}: its 6 chats are pulled once`);
+    ok((await txt(page, '#cbAddChats')).replace(/\s+/g, ' ') === 'Add missing chats (5)' && (await txt(page, '#cbAddCalls')).replace(/\s+/g, ' ') === 'Add missing calls (1)' && await page.locator('#cbRedraw').count() === 0,
+      'Round header: "Add missing chats (5)" (Ana 3, Ben 2; not the chat with no reply) and "Add missing calls (1)"; no Redraw after a submission');
+    ok(/Ana 0 of 3 chats/.test(await txt(page, '#cbShort')) && /Ben 0 of 3 chats, 2 of 3 calls/.test((await txt(page, '#cbShort')).replace(/\s+/g, ' ')), 'Short this week says what is missing');
+    await shot(page, 'round-topup-before.png', true);
+    // F3. Add missing chats: appended per SA, items already there untouched
+    await page.click('#cbAddChats');
+    await waitDoc(page, 'calibRounds/' + RW, 'd.items.length === 10 && d.toppedUpAt'); await page.waitForTimeout(250);
+    let rd = await D(page, 'calibRounds/' + RW);
+    const ch = rd.items.filter(x => x.kind === 'chat');
+    ok(JSON.stringify(rd.items.filter(x => x.kind === 'call')) === JSON.stringify(itF) && rd.drawnAt === '2026-10-19T09:00:00.000Z' && rd.by === PAT && !isNaN(Date.parse(rd.toppedUpAt)),
+      'top-up keeps the 5 calls as they were and drawnAt; adds toppedUpAt');
+    ok(JSON.stringify(ch.filter(x => x.sa === SA2[0]).map(x => x.key)) === JSON.stringify(SID.slice(0, 3)) && JSON.stringify(ch.filter(x => x.sa === SA2[1]).map(x => x.key)) === JSON.stringify(SID.slice(4, 6))
+      && ch.find(x => x.key === SID[0]).aiPct === 100 && ch.find(x => x.key === SID[2]).aiPct === null, "Ana gets her 2 graded chats and 1 ungraded (never the one with no reply), Ben his 2; Claude's score kept on the graded");
+    ok(JSON.stringify(rd.items.map(x => x.sa + '|' + x.kind)) === JSON.stringify([...Array(3).fill('Ana Ruiz|chat'), ...Array(3).fill('Ana Ruiz|call'), ...Array(2).fill('Ben Okafor|chat'), ...Array(2).fill('Ben Okafor|call')]), "each SA's chats go before their calls");
+    ok(JSON.stringify((await D(page, `calibMarks/${HOW}/items/call_qa1`)).marks) === JSON.stringify(callMarks(2)) && await page.locator('#cbItems .cbirow[data-ik="call_qa1"] .cbdot.done').count() === 1, "Howard's marks on a call stay");
+    let ls = await D(page, 'learning/state');
+    ok(ls.rounds.length === 1 && ls.rounds[0].status === 'open' && JSON.stringify(ls.rounds[0].sample.map(x => x.sid)) === JSON.stringify(graded) && ls.rounds[0].sample[1].aiScores.ev === 2 && !('checkpoint' in ls.rounds[0].sample[0]),
+      "the week's open Learning round takes the 2 graded chats added (not the ungraded ones)");
+    ok(await page.locator('#cbAddChats').count() === 0 && (await txt(page, '#cbAddCalls')).includes('(1)') && (await txt(page, '#cbSum')).startsWith('10 items'), 'Add missing chats goes away; calls still short by 1');
+    // F4. Add missing calls
+    await page.click('#cbAddCalls'); await waitDoc(page, 'calibRounds/' + RW, 'd.items.length === 11'); await page.waitForTimeout(250);
+    rd = await D(page, 'calibRounds/' + RW);
+    ok(rd.items[10].key === 'qb3' && rd.items[10].kind === 'call' && JSON.stringify(rd.items.slice(0, 10).map(x => x.key)) === JSON.stringify(ch.slice(0, 3).map(x => x.key).concat(['qa1', 'qa2', 'qa3'], ch.slice(3).map(x => x.key), ['qb1', 'qb2'])) && await page.locator('#cbAddCalls').count() === 0 && (await page.locator('#cbShort [data-sa]').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Ben 2 of 3 chats',
+      "Add missing calls: Ben's third call goes after his others; only Ben's 2 chats (all he has) stay short");
+    // F5. the round's ungraded chats: Claude –, and the owner's batch with Stop
+    const rowOf = sid => page.locator(`#cbItems .cbirow[data-ik="chat_${sid}"] .cbimeta`);
+    ok((await rowOf(SID[2]).innerText()) === 'Claude –' && (await rowOf(SID[4]).innerText()) === 'Claude –' && (await rowOf(SID[0]).innerText()) === 'Claude 100.0%' && (await txt(page, '#cbGradeChats')).replace(/\s+/g, ' ') === "Grade the round's chats (3)",
+      `ungraded chats show "Claude –"; the owner sees "Grade the round's chats (3)"`);
+    await page.evaluate(() => { window.__opts.sampleMs = 600 });
+    await page.click('#cbGradeChats'); await page.waitForSelector('#cbRoundRun', { timeout: 3000 });
+    ok(/^Grading 1 of 3 · Ana Ruiz · Brick Lane Za/.test(await txt(page, '#cbRoundRun [data-chline]')) && await page.locator('#cbGradeChats').count() === 0 && await page.locator('#cbRoundStop').isVisible(), 'the run shows "Grading 1 of 3 · SA · restaurant · step" and Stop');
+    await shot(page, 'round-grade-chats-running.png');
+    await page.click('#cbRoundStop'); await page.waitForSelector('#cbRoundNote', { timeout: 4000 }); await page.waitForTimeout(200);
+    ok((await txt(page, '#cbRoundNote')) === 'Stopped · 0 graded' && !(await D(page, `chatWeeks/${RW}/audits/${SID[2]}`)) && (await txt(page, '#cbGradeChats')).includes('(3)'), 'Stop halts it: "Stopped · 0 graded", nothing written, the button back at (3)');
+    await page.evaluate(() => { window.__opts.sampleMs = 30 });
+    await page.click('#cbGradeChats');
+    await page.waitForFunction(() => document.querySelector('#cbRoundNote') && !document.querySelector('#cbRoundRun'), null, { timeout: 20000 }); await page.waitForTimeout(300);
+    const newAud = await page.evaluate(([w, L]) => L.map(s => window.__data[`chatWeeks/${w}/audits/${s}`]).filter(Boolean).length, [RW, [SID[2], SID[4], SID[5]]]);
+    ok((await txt(page, '#cbRoundNote')) === 'Graded 3 chats' && newAud === 3 && await page.locator('#cbGradeChats').count() === 0 && /^Claude \d/.test(await rowOf(SID[4]).innerText()), 'then all 3 are graded one at a time; their rows show Claude\'s score');
+    ls = await D(page, 'learning/state');
+    ok(JSON.stringify(ls.rounds[0].sample.map(x => x.sid).sort()) === JSON.stringify([SID[0], SID[1], SID[2], SID[4], SID[5]].sort()) && ls.rounds.length === 1, 'the Learning round now holds all 5 of the round\'s chats');
+    ok(await page.evaluate(L => L.every(s => window.__prompts.some(p => String(p.input).includes(`CHAT ${s} ·`))) && !window.__prompts.some(p => /CHAT (9950001|9950002|9950004) ·/.test(p.input)), [SID[2], SID[4], SID[5]]), "Claude was asked about the 3 ungraded chats only, through the chat runner");
+    await shot(page, 'round-topup-after.png', true);
+    await page.emulateMedia({ colorScheme: 'dark' }); await page.setViewportSize({ width: 390, height: 860 }); await page.waitForTimeout(200);
+    ok(await width(page) <= 390 && await page.evaluate(() => [...document.querySelectorAll('#cbRound .cbhd button')].every(e => e.getBoundingClientRect().right <= 391)), '390px dark: the Round header fits');
+    await shot(page, 'round-topup-390-dark.png', true);
+    await page.emulateMedia({ colorScheme: 'light' }); await page.setViewportSize({ width: 1280, height: 900 });
+    ok(!errors.length, 'no console errors (top-up) ' + JSON.stringify(errors));
+    await ctx.close();
+
+    // G. no round yet and the auto-pull failed: "Pull chats and draw" pulls first, then draws chats and calls
+    const seedG = [roster, lrnF].concat(pullsF, callsF, joined, graded.map(audF));
+    ({ page, ctx, errors } = await openPage(b, seedG, { people, room: true, sampleMs: 30, fail: 'server_unavailable' }, { width: 1280, height: 900 }, moreF));
+    await page.goto('http://qa.test/'); await page.waitForTimeout(900);
+    ok(await chatDocs(page) === 0 && !(await D(page, 'chatWeeks/' + RW)) && (await txt(page, '#cbDraw')) === 'Pull chats and draw', 'the auto-pull failed: Draw reads "Pull chats and draw"');
+    await page.evaluate(() => { window.__opts.fail = null });
+    await page.click('#cbDraw'); await waitDoc(page, 'calibRounds/' + RW, '', 10000); await page.waitForTimeout(300);
+    rd = await D(page, 'calibRounds/' + RW);
+    ok(await chatDocs(page) === 6 && (await D(page, 'chatWeeks/' + RW)).chats === 6 && rd.items.length === 11 && rd.items.filter(x => x.kind === 'chat').length === 5 && rd.chatPool === 5
+      && JSON.stringify(rd.items.filter(x => x.sa === SA2[0] && x.kind === 'chat').map(x => x.key)) === JSON.stringify(SID.slice(0, 3)), 'it pulls the 6 chats, then draws 5 chats and 6 calls (chatPool 5)');
+    ls = await D(page, 'learning/state');
+    ok(ls.rounds[ls.rounds.length - 1].status === 'open' && JSON.stringify(ls.rounds[ls.rounds.length - 1].sample.map(x => x.sid)) === JSON.stringify(graded), 'the Learning round follows the draw (the 2 graded chats)');
+    ok(await page.locator('#cbAddChats, #cbAddCalls, #cbNoChats').count() === 0 && (await txt(page, '#cbGradeChats')).includes('(3)'), 'nothing missing; 3 chats for Claude to grade');
+    ok(!errors.length, 'no console errors (pull and draw) ' + JSON.stringify(errors));
+    await ctx.close();
+
+    // H. the week has no WIRA chats: the auto-pull writes the index (0 chats), Draw draws the calls and says so
+    ({ page, ctx, errors } = await openPage(b, seedG, { people, room: true, sampleMs: 30 }, { width: 1280, height: 900 }, { now: NOWF, tx: TXI, chat: inventChats([]).chat }));
+    await page.goto('http://qa.test/'); await waitDoc(page, 'chatWeeks/' + RW, 'd.chats === 0', 8000); await page.waitForTimeout(300);
+    ok((await txt(page, '#cbDraw')) === 'Draw', 'chats pulled (none): the button is plain Draw');
+    await page.click('#cbDraw'); await waitDoc(page, 'calibRounds/' + RW); await page.waitForTimeout(250);
+    rd = await D(page, 'calibRounds/' + RW);
+    ok(rd.items.length === 6 && rd.chatPool === 0 && (await txt(page, '#cbNoChats')) === 'No WIRA chats this week' && await page.locator('#cbAddChats').count() === 0, 'calls only, with "No WIRA chats this week"');
+    await shot(page, 'round-no-chats.png');
+    ok(!errors.length, 'no console errors (no chats) ' + JSON.stringify(errors));
     await ctx.close();
   }
   await b.close();

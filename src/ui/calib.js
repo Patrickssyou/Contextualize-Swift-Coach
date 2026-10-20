@@ -1,7 +1,7 @@
 /* ---------- CALIBRATION: three graders (and Claude) mark the same items blind, reveal, settle each row, lock the agreed score.
    db: calibMarks/<uid> {joinedAt, lastSeen} (who grades; each viewer writes their own), calibMarks/<uid>/items/<itemKey> {kind, key, marks, notes, submittedAt, updatedAt} (submitted, shared),
        data/users/<uid>/calib_<itemKey> {marks, notes, updatedAt} (the private draft), calibItems/<itemKey> {kind, key, round, locked:{by, at, pct, verdict, marks} | null},
-       calibItems/<itemKey>/rows/<crit> {mark, note, by, at} (one doc per agreed row, so two people settling different rows never collide), calibRounds/<id> {kind:"call", week, items:[{key, sa}], drawnAt, by}.
+       calibItems/<itemKey>/rows/<crit> {mark, note, by, at} (one doc per agreed row, so two people settling different rows never collide), calibRounds/<week> {week, items:[{kind, key, sa, restaurant, at, aiPct}], sas, drawnAt, by, chatPool (gradable chats when drawn, if pulled), toppedUpAt}.
    itemKey: chat_<sid> | call_<queueId>; "key" in the docs is the bare sid or queue id. Chat rounds are the Learning rounds (learning/state); call rounds are calibRounds.
    People are stored only as ids; names come from user.profiles at render. Subscriptions: calibMarks, each grader's items, calibItems, calibRounds, and the rows of the one item on screen. ---------- */
 let cbGraders=new Map(),cbGradersReady=false,cbItems={},cbItemsReady=false,cbRounds=[];
@@ -270,22 +270,37 @@ function cbDrawnBefore(){const S=new Set();cbRounds.forEach(r=>(r.items||[]).for
 function cbDrawPool(w){const chatsW=chW.week===w?chatsOfWeek().filter(c=>chCanGrade(c)&&c.sa):[],callsW=(queueAll||[]).filter(q=>!q.removed&&q.week===w&&q.agent);
   return {chatsW,callsW,sas:chSaOrder(chatsW.map(c=>c.sa).concat(callsW.map(q=>q.agent)))}}
 function cbPickN(L,key,prev,n){const sh=cbShuffle(L);return sh.filter(x=>!prev.has(key(x))).concat(sh.filter(x=>prev.has(key(x)))).slice(0,n)}
+/* n of an SA's chats (graded first, then not drawn before first) and n of their calls, each in time order */
+function cbPickChats(mine,prev,n){const g=mine.filter(c=>chatAud[c.sid]&&chatAud[c.sid].pct!=null),u=mine.filter(c=>!g.includes(c));
+  let ch=cbPickN(g,c=>"chat|"+c.sid,prev,n);if(ch.length<n)ch=ch.concat(cbPickN(u,c=>"chat|"+c.sid,prev,n-ch.length));
+  return ch.sort((a,b)=>String(a.at||"").localeCompare(String(b.at||"")))}
+const cbPickCalls=(mine,prev,n)=>cbPickN(mine,q=>"call|"+q.id,prev,n).sort((a,b)=>String(a.callDate+a.callTime).localeCompare(String(b.callDate+b.callTime)));
+function cbChatIt(c,sa){const a=chatAud[c.sid];return {kind:"chat",key:String(c.sid),sa,restaurant:c.restaurant||"",at:c.at||"",aiPct:a&&a.pct!=null?a.pct:null}}
+const cbCallIt=(q,sa)=>({kind:"call",key:String(q.id),sa,restaurant:q.restaurantName||"",at:(q.callDate||"")+(q.callTime?"T"+q.callTime:"")});
 function cbDrawItems(w){const {chatsW,callsW,sas}=cbDrawPool(w),prev=cbDrawnBefore(),items=[];
-  sas.forEach(sa=>{const mine=chatsW.filter(c=>c.sa===sa),g=mine.filter(c=>chatAud[c.sid]&&chatAud[c.sid].pct!=null),u=mine.filter(c=>!g.includes(c));
-    let ch=cbPickN(g,c=>"chat|"+c.sid,prev,CB_PER);if(ch.length<CB_PER)ch=ch.concat(cbPickN(u,c=>"chat|"+c.sid,prev,CB_PER-ch.length));
-    ch.sort((a,b)=>String(a.at||"").localeCompare(String(b.at||""))).forEach(c=>{const a=chatAud[c.sid];
-      items.push({kind:"chat",key:String(c.sid),sa,restaurant:c.restaurant||"",at:c.at||"",aiPct:a&&a.pct!=null?a.pct:null})});
-    cbPickN(callsW.filter(q=>q.agent===sa),q=>"call|"+q.id,prev,CB_PER).sort((a,b)=>String(a.callDate+a.callTime).localeCompare(String(b.callDate+b.callTime)))
-      .forEach(q=>items.push({kind:"call",key:String(q.id),sa,restaurant:q.restaurantName||"",at:(q.callDate||"")+(q.callTime?"T"+q.callTime:"")}))});
+  sas.forEach(sa=>{cbPickChats(chatsW.filter(c=>c.sa===sa),prev,CB_PER).forEach(c=>items.push(cbChatIt(c,sa)));
+    cbPickCalls(callsW.filter(q=>q.agent===sa),prev,CB_PER).forEach(q=>items.push(cbCallIt(q,sa)))});
   return {items,sas}}
+/* chats must be pulled before a draw (when they can be): the week has chats or its index doc */
+const cbNeedPull=w=>!!mcp&&chPulled(w||week)!==true;
+/* pull the week's chats (or wait for a pull already running), then wait for them to load */
+async function cbPullFirst(w){const nap=ms=>new Promise(f=>setTimeout(f,ms));
+  for(let i=0;chatPullRun&&i<600;i++)await nap(100);
+  if(chPulled(w)===true)return true;
+  const r=await pullChats();
+  if(!r||!r.ok){cbNote=(chatNote&&chatNote.text)||(r&&r.busy?"Chats are busy. Try again in a moment.":"Couldn't pull chats. Try again.");return false}
+  for(let i=0;i<60&&!(chW.week===w&&chatsReady&&chats.length>=r.n);i++)await nap(60);
+  return chW.week===w}
 const cbRoundStarted=items=>cbGraderIds().some(u=>items.some(it=>cbSub(u,it.ik)));
 async function cbDraw(redo){if(!db||!amOwner||cbBusy)return;const w=week,cur=cbWeekRound(w);
   if(cur&&(!redo||cbRoundStarted(cbRoundItems(w))))return;
   if(chW.week!==w||!chatsReady||!queueReady){cbNote="Still loading this week. Try again in a moment.";renderCalib();return}
+  if(cbNeedPull(w)){cbBusy="pull";cbNote="";renderCalib();let ok=false;try{ok=await cbPullFirst(w)}finally{cbBusy=false}
+    if(!ok||week!==w){renderCalib();return}}
   const {items,sas}=cbDrawItems(w);cbNote="";
   if(!items.length){cbNote=`No chats or calls in ${weekLabel(w)} to draw.`;renderCalib();return}
   cbBusy=true;renderCalib();
-  try{const at=new Date().toISOString(),doc={week:w,drawnAt:at,by:myId||null,items,sas};
+  try{const at=new Date().toISOString(),doc={week:w,drawnAt:at,by:myId||null,items,sas};if(chPulled(w)===true)doc.chatPool=cbDrawPool(w).chatsW.length;
     await db.doc("calibRounds/"+w).set(doc);
     const i=cbRounds.findIndex(r=>r.id===w);const d=Object.assign({},doc,{id:w});if(i>=0)cbRounds[i]=d;else cbRounds.push(d);
     await cbSyncLearning(w,items,at);cbRedraw=false}
@@ -295,13 +310,57 @@ async function cbDraw(redo){if(!db||!amOwner||cbBusy)return;const w=week,cur=cbW
    Locking a chat records the panel's agreed score in it (cbChatLocked → lrnRecord) */
 async function cbSyncLearning(w,items,at){const st=lrnState?clone(lrnState):{};
   const rounds=(st.rounds||[]).map(r=>r.status==="open"?Object.assign({},r,{status:"replaced",replacedAt:at}):r);
-  const sample=items.filter(x=>x.kind==="chat").map(x=>{const a=chatAud[x.key];if(!a||a.pct==null||!a.grade||!a.grade.scores)return null;
-    return {sid:x.key,sa:x.sa,restaurant:x.restaurant,aiPct:a.pct,aiVerdict:a.verdict||((chatVerdict(a.pct)||{}).id)||null,aiScores:clone(a.grade.scores),checkpoint:a.checkpoint||null}}).filter(Boolean);
+  const sample=items.filter(x=>x.kind==="chat").map(cbSampleEntry).filter(Boolean);
   const cps=new Map();sample.forEach(x=>{if(x.checkpoint)cps.set(x.checkpoint,(cps.get(x.checkpoint)||0)+1)});sample.forEach(x=>delete x.checkpoint);
   const cp=[...cps.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||(brLatest()||{}).id||null;
   rounds.push({round:rounds.length+1,week:w,checkpoint:cp,drawnAt:at,status:"open",sample,results:[],verdictMatch:null,meanAbsDiff:null,pass:null});
   const doc=Object.assign({},st,{week:w,currentCheckpoint:cp||st.currentCheckpoint||null,target:st.target||lrnTarget(),marked:(st.marked||[]).map(String),rounds});
   await db.doc(LRN_DOC).set(doc);lrnState=doc}
+/* a graded round chat as a Learning sample entry, Claude's marks as they are now */
+function cbSampleEntry(x){const a=chatAud[x.key];if(!a||a.pct==null||!a.grade||!a.grade.scores)return null;
+  return {sid:x.key,sa:x.sa,restaurant:x.restaurant,aiPct:a.pct,aiVerdict:a.verdict||((chatVerdict(a.pct)||{}).id)||null,aiScores:clone(a.grade.scores),checkpoint:a.checkpoint||null}}
+/* the week's open Learning round takes the round's graded chats it doesn't have yet (after a top-up, or once Claude grades them) */
+async function cbLearnAppend(w){const r=cbWeekRound(w);if(!db||!r||!lrnState)return;const st=clone(lrnState),R=st.rounds||[],k=R.findIndex(x=>x.status==="open"&&x.week===w);if(k<0)return;
+  const have=new Set((R[k].sample||[]).map(x=>String(x.sid))),add=r.items.filter(x=>x.kind!=="call"&&!have.has(String(x.key))).map(x=>cbSampleEntry(Object.assign({},x,{key:String(x.key)}))).filter(Boolean);
+  if(!add.length)return;add.forEach(x=>delete x.checkpoint);R[k].sample=(R[k].sample||[]).concat(add);
+  await db.doc(LRN_DOC).set(st);lrnState=st}
+
+/* ---------- top-up: an SA short of 3 chats or calls gets new items from what's there now (chats pulled after the draw). Items already in the round stay as they are ---------- */
+function cbTopUp(w){const r=cbWeekRound(w),out={chat:[],call:[],sas:[]};if(!r||chW.week!==w||!chatsReady||!queueReady)return out;
+  const {chatsW,callsW}=cbDrawPool(w),have=new Set(r.items.map(x=>(x.kind==="call"?"call|":"chat|")+x.key)),prev=cbDrawnBefore();
+  const sas=(r.sas||[]).slice();chSaOrder(r.items.map(x=>x.sa).concat(chatsW.map(c=>c.sa),callsW.map(q=>q.agent)).filter(Boolean)).forEach(sa=>{if(!sas.includes(sa))sas.push(sa)});
+  sas.forEach(sa=>{const nC=CB_PER-r.items.filter(x=>x.sa===sa&&x.kind!=="call").length,nK=CB_PER-r.items.filter(x=>x.sa===sa&&x.kind==="call").length;
+    if(nC>0)cbPickChats(chatsW.filter(c=>c.sa===sa&&!have.has("chat|"+c.sid)),prev,nC).forEach(c=>out.chat.push(cbChatIt(c,sa)));
+    if(nK>0)cbPickCalls(callsW.filter(q=>q.agent===sa&&!have.has("call|"+q.id)),prev,nK).forEach(q=>out.call.push(cbCallIt(q,sa)))});
+  out.sas=sas;return out}
+/* a new item goes after the SA's last of its kind; a chat with none goes before the SA's calls; a new SA goes last */
+function cbInsert(L,x){const call=y=>y.kind==="call";let j=-1;L.forEach((y,i)=>{if(y.sa===x.sa&&call(y)===call(x))j=i});
+  if(j<0&&!call(x)){const k=L.findIndex(y=>y.sa===x.sa);if(k>=0){L.splice(k,0,x);return}}
+  if(j<0)L.forEach((y,i)=>{if(y.sa===x.sa)j=i});
+  L.splice(j<0?L.length:j+1,0,x)}
+async function cbAddMissing(kind){if(!db||!amOwner||cbBusy)return;const w=week,r=cbWeekRound(w);if(!r)return;
+  const T=cbTopUp(w),add=T[kind];if(!add.length)return;
+  const items=r.items.slice();add.forEach(x=>cbInsert(items,x));
+  cbBusy="top";cbNote="";renderCalib();
+  try{const patch={items,sas:T.sas,toppedUpAt:new Date().toISOString()};if(chPulled(w)===true)patch.chatPool=cbDrawPool(w).chatsW.length;
+    await db.doc("calibRounds/"+w).update(patch);
+    const i=cbRounds.findIndex(x=>x.id===w);if(i>=0)cbRounds[i]=Object.assign({},cbRounds[i],patch);
+    if(kind==="chat")await cbLearnAppend(w);
+    toast(`Added ${chPl(add.length,kind)}`)}
+  catch(e){cbNote=e&&e.code==="invalid_argument"?"You can't save to this QA Desk.":"Couldn't add them. Try again."}
+  finally{cbBusy=false;renderCalib();renderChats()}}
+
+/* ---------- the round's chats Claude hasn't graded: one at a time with the chat runner, progress and Stop in the Round tab ---------- */
+let cbChRun=false;
+const cbCanGradeChats=()=>!!(db&&mcp&&sampleFn);
+const cbUngradedChats=()=>cbChatItems().map(it=>chatBy(it.key)).filter(c=>c&&chCanGrade(c)&&!(chatAud[c.sid]&&chatAud[c.sid].pct!=null));
+async function cbGradeChats(){const L=cbUngradedChats(),w=week;if(!L.length||cbChRun||cbGR||chatRun||chatPullRun||!cbCanGradeChats())return;
+  cbChRun=true;cbGRNote=null;
+  try{await runChatGrades(L,{});
+    /* wait for the new audits to load, then bring the Learning round up to date */
+    for(let i=0;i<30&&!L.every(c=>chatAud[c.sid]||c.gradeError);i++)await new Promise(f=>setTimeout(f,50));
+    try{await cbLearnAppend(w)}catch(e){}}
+  finally{cbChRun=false;cbGRNote=chatNote?{text:chatNote.text,err:!!chatNote.err}:null;renderCalib()}}
 
 /* ---------- expected graders (owner edits) ---------- */
 function cbGrEditHtml(){if(!amOwner||!cbGrEdit)return "";
@@ -373,13 +432,19 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const mine=items.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,nx=cbNextItem(items);
   const ctl=[];
   if(amOwner)ctl.push(`<button type="button" class="btn" data-cb="graders" id="cbGrBtn" aria-expanded="${cbGrEdit}">Graders</button>`);
-  if(amOwner&&db){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy?" disabled":""}>${cbBusy?"Drawing…":"Draw"}</button>`);
-    else if(!started)ctl.push(`<button type="button" class="btn" data-cb="redraw" id="cbRedraw" aria-expanded="${cbRedraw}"${cbBusy?" disabled":""}>${cbBusy?"Drawing…":"Redraw"}</button>`)}
-  if(amOwner&&r&&cbCanGrade()&&!cbGR){const ug=cbUngraded().length;if(ug)ctl.push(`<button type="button" class="btn" data-cb="gradeall" id="cbGradeAll"${typeof chatRun!=="undefined"&&chatRun?" disabled":""}>Grade the round's calls <span class="num">(${ug})</span></button>`)}
+  const busyL=cbBusy==="pull"?"Pulling chats…":cbBusy==="top"?"Adding…":"Drawing…",pullL=amOwner&&cbNeedPull(week);if(amOwner&&!r&&chPulled(week)===null)chIdxCheck(week);
+  if(amOwner&&db){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy||chatPullRun?" disabled":""}>${cbBusy?busyL:chatPullRun?"Pulling chats…":pullL?"Pull chats and draw":"Draw"}</button>`);
+    else if(!started)ctl.push(`<button type="button" class="btn" data-cb="redraw" id="cbRedraw" aria-expanded="${cbRedraw}"${cbBusy?" disabled":""}>${cbBusy?busyL:"Redraw"}</button>`)}
+  if(amOwner&&db&&r){const T=cbTopUp(week),dis=cbBusy||chatPullRun?" disabled":"";
+    if(T.chat.length)ctl.push(`<button type="button" class="btn" data-cb="addchats" id="cbAddChats"${dis}>Add missing chats <span class="num">(${T.chat.length})</span></button>`);
+    if(T.call.length)ctl.push(`<button type="button" class="btn" data-cb="addcalls" id="cbAddCalls"${dis}>Add missing calls <span class="num">(${T.call.length})</span></button>`)}
+  if(amOwner&&r&&cbCanGrade()&&!cbGR){const ug=cbUngraded().length;if(ug)ctl.push(`<button type="button" class="btn" data-cb="gradeall" id="cbGradeAll"${(typeof chatRun!=="undefined"&&chatRun)||cbChRun?" disabled":""}>Grade the round's calls <span class="num">(${ug})</span></button>`)}
+  if(amOwner&&r&&cbCanGradeChats()&&!cbChRun){const uc=cbUngradedChats().length;if(uc)ctl.push(`<button type="button" class="btn" data-cb="gradechats" id="cbGradeChats"${cbGR||chatRun||chatPullRun?" disabled":""}>Grade the round's chats <span class="num">(${uc})</span></button>`)}
   if(nx)ctl.push(`<button type="button" class="btn primary" data-cb="continue" id="cbGo">${mine?"Continue":"Start"} →</button>`);
   const head=`<div class="cbhd"><div class="cbttl"><h2>Week ${esc(weekLabel(week))}</h2>${r?`<span class="num" id="cbSum">${items.length} items · you: ${mine} of ${items.length} done</span>`:""}</div><span class="cbhdr"><span data-cbhere="">${cbHereHtml("")}</span>${ctl.join("")}</span></div>${cbGrEditHtml()}`;
-  const conf=cbRedraw&&r&&!started&&amOwner?`<div class="cbconfirm" id="cbRdConfirm" role="group" aria-label="Redraw"><span>Replace this week's ${items.length} items with a new draw?</span><button type="button" class="btn danger" data-cb="redrawgo" id="cbRdGo">Redraw</button><button type="button" class="btn" data-cb="redraw">Cancel</button></div>`:"";
+  const conf=cbRedraw&&r&&!started&&amOwner?`<div class="cbconfirm" id="cbRdConfirm" role="group" aria-label="Redraw"><span>Replace this week's ${items.length} items with a new draw?</span><button type="button" class="btn danger" data-cb="redrawgo" id="cbRdGo">${cbNeedPull(week)?"Pull chats and redraw":"Redraw"}</button><button type="button" class="btn" data-cb="redraw">Cancel</button></div>`:"";
   const note=cbNote?`<div class="cvnote" id="cbNote">${esc(cbNote)}</div>`:"";
+  const noChats=r&&r.chatPool===0&&!items.some(x=>x.kind==="chat")?`<p class="cvnote" id="cbNoChats">No WIRA chats this week</p>`:"";
   if(!r)return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${note}<p class="hint" id="cbNone">${!db?"Sign in to claude.ai to calibrate.":"No round for this week yet."}</p></div></section>`;
   cbNeedNames(G);
   /* who came up short: fewer than 3 chats or calls this week */
@@ -406,7 +471,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const gl=any?S.G.filter(u=>S.per.get(u)||cbPend(u)).map(u=>{const p=S.per.get(u);return cbBar(`<span class="cbcolh">${cbAv(u)}${u===myId?"You":esc(cbName(u))}</span>`,p?p.m/p.n*100:null,"lo",u)}):[];
   if(S.claude!=null)gl.push(cbBar(`<span class="cbcolh">${cbAv("claude")}Claude</span>`,S.claude,"lo","claude"));
   const each=`<div><h3 class="evh">Each grader vs the agreed mark</h3>${gl.length?`<div class="cbbars" id="cbEach">${gl.join("")}</div>`:`<p class="hint">Nothing agreed yet.</p>`}</div>`;
-  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}${ctf}
+  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${noChats}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}${ctf}
     <div class="cbgroups" id="cbItems">${groups||`<p class="hint">Nothing to do here.</p>`}</div>${kpis}<div class="cbtwo">${dis}${each}</div></div></section>`}
 
 /* ---------- a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching, like a chat ---------- */
@@ -613,7 +678,8 @@ function cbGradeBoxHtml(it){const k=String(it.key),g=cbCG.get(k),err=cbGRErr.get
   const btn=cbCanGrade()?`<div class="row"><button type="button" class="btn${g?"":" primary"}" data-cb="grade" id="cbGradeBtn"${cbGR||(typeof chatRun!=="undefined"&&chatRun)?" disabled":""}>${g?"Re-grade":"Grade with Claude"}</button></div>`:"";
   return btn+(err?`<div class="cvnote" id="cbGrErr" role="alert">${esc(err)}</div>`:"")}
 /* the Round tab: the owner grades the round's ungraded calls one after another */
-function cbRoundRunHtml(){if(cbGR&&!cbGR.one)return `<div class="cbgrun" id="cbRoundRun" role="status"><span class="spin" aria-hidden="true"></span><span data-grline>${esc(cbGRLine())}</span><button type="button" class="btn small" data-cb="gstop" id="cbRoundStop">Stop</button></div>`;
+function cbRoundRunHtml(){if(cbChRun&&chatRun)return `<div class="cbgrun" id="cbRoundRun" role="status"><span class="spin" aria-hidden="true"></span><span data-chline>${esc(chProgress())}</span><button type="button" class="btn small" data-cb="cstop" id="cbRoundStop">Stop</button></div>`;
+  if(cbGR&&!cbGR.one)return `<div class="cbgrun" id="cbRoundRun" role="status"><span class="spin" aria-hidden="true"></span><span data-grline>${esc(cbGRLine())}</span><button type="button" class="btn small" data-cb="gstop" id="cbRoundStop">Stop</button></div>`;
   return cbGRNote?`<div class="cvnote${cbGRNote.err?"":" ok"}" id="cbRoundNote" role="status">${esc(cbGRNote.text)}</div>`:""}
 
 /* ---------- events ---------- */
@@ -641,6 +707,10 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
     case "ccopy":if(it)chClip((cbItems[it.ik]||{}).locked?cbCoachText(it):cbDraftText(it),"Copied");return;
     case "gstop":if(cbGR)cbGR.ctl.abort();return;
     case "gradeall":if(amOwner)cbGradeRun(cbUngraded(),false);return;
+    case "gradechats":if(amOwner)cbGradeChats();return;
+    case "cstop":if(chatRun)chatRun.ctl.abort();return;
+    case "addchats":cbAddMissing("chat");return;
+    case "addcalls":cbAddMissing("call");return;
     case "pclose":cbPanelClose(true);return}
   if(!it)return;const ik=it.ik,k=ik+"|"+crit;
   switch(A){

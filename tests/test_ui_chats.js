@@ -66,7 +66,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
 (async () => {
   const b = await chromium.launch(); const allErrors = [];
   // ===== 1. landing, nav, the parked Calls area
-  let { page, ctx, errors } = await openPage(b, seed.concat(callSeed), { viewer: true, sampleMs: 30 }, { width: 1280, height: 900 }, more);
+  let { page, ctx, errors } = await openPage(b, seed.concat(callSeed), { viewer: true, sampleMs: 30, owner: 'u_lead' }, { width: 1280, height: 900 }, more); // not the owner: this page tests the manual pull, so no auto-pull
   await page.goto('http://qa.test/'); await page.waitForTimeout(400);
   ok(await sel(page) === 'calib' && await page.locator('#view-calib').isVisible() && await page.locator('[data-area="chats"][aria-current="page"]').count() === 1, 'lands on Audits › Round');
   ok((await page.locator('.weekpick small').textContent()) === 'Week' && (await txt(page, '#wkLabel')).startsWith('Oct 12'), 'week picker says Week and opens on the case week');

@@ -200,7 +200,8 @@ function chatHistory(){if(!db||chHistRun)return chHistRun;
       try{const s=await db.collection(CHAT_PATHS.reviews(w)).get();if(w!==chW.week&&!chRevHist.has(w))chRevHist.set(w,Object.fromEntries(s.docs.map(x=>[x.id,x.data()])))}catch(e){}}));
     renderGame()})();
   return chHistRun}
-function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain();if(tab==="calib"&&typeof renderCalib==="function")renderCalib()}
+function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain();if(tab==="calib"&&typeof renderCalib==="function")renderCalib();
+  Promise.resolve().then(chAutoPull)}
 function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="chat"]');if(!tb)return;
   const c=!callSel&&chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid],lk=callSel&&typeof cbItems!=="undefined"?(cbItems["call_"+callSel]||{}).locked:null;tb.classList.toggle("done",!!c||!!lk);
   const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=lk?lk.pct:d?chatScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
@@ -242,9 +243,10 @@ async function chatSlack(c,ctl){
 }
 
 /* ---------- pull the week ---------- */
+/* returns {ok, n} (n: chats saved) or {ok:false, busy} when it can't start */
 async function pullChats(){
-  if(chatPullRun||chatRun||!db||!mcp||!chatsReady||chW.week!==week)return;
-  const w=week;chatPullRun={step:"Pulling chats from Lightdash…"};chatNote=null;renderChats();
+  if(chatPullRun||chatRun||!db||!mcp||!chatsReady||chW.week!==week)return {ok:false,busy:true};
+  const w=week;chatPullRun={step:"Pulling chats from Lightdash…"};chatNote=null;renderChats();let res={ok:false};
   try{
     const R=roster,staff=(staffDoc&&staffDoc.map)||{};
     const list=await pullChatWeek(w,R.agents.map(a=>a.name),(cfg,title)=>ldQuery(cfg,title),{roster:R.agents.map(a=>({name:a.name})),staff});
@@ -258,10 +260,26 @@ async function pullChats(){
     for(let i=0;i<docs.length;i+=8)await Promise.all(docs.slice(i,i+8).map(([sid,d])=>db.doc(chPath("chats",w,sid)).set(d).catch(e=>{throw chTag(e,"db")})));
     const np=docs.filter(d=>d[1].picked).length;
     try{await db.doc(CH_ROOT+"/"+w).set({week:w,chats:docs.length,picked:np,at:new Date().toISOString(),by:myId||null})}catch(e){}
+    chIdx.set(w,true);res={ok:true,n:docs.length};
     toast(docs.length?`Pulled ${docs.length} chat${docs.length===1?"":"s"} for ${weekLabel(w)} · ${np} picked`:`No chats for ${weekLabel(w)}`);
   }catch(e){chatNote={text:e&&e.src==="db"?chatErrMsg(e):pullErr(e,"Pull again"),err:true}}
   finally{chatPullRun=null;renderChats()}
+  return res
 }
+/* ---------- auto-pull for the owner, like the calls: once per week per load, for a week past its Monday whose index doc (chatWeeks/<week>, written by a pull) is missing ---------- */
+const chIdx=new Map(),chAutoTried=new Set();let chAutoT=null;
+function chWeekOpen(w){const [y,m,d]=String(w).split("-").map(Number);return w>=CH_FIRST_WEEK&&etNowMs()>=Date.UTC(y,m-1,d+1)}
+/* has the week been pulled: true (it has chats, or its index doc), false, or null while unknown */
+function chPulled(w){w=w||week;if(chW.week===w&&chatsReady&&chats.length)return true;const v=chIdx.get(w);return v===true||v===false?v:null}
+function chIdxCheck(w){if(!db||chIdx.has(w))return;chIdx.set(w,"checking");
+  db.doc(CH_ROOT+"/"+w).get().then(s=>{if(chIdx.get(w)!==true)chIdx.set(w,!!(s&&s.exists))},()=>{chIdx.set(w,"error")}).then(()=>renderChats())}
+function chAutoPull(){const w=week;
+  if(!mayAuto||!db||!mcp||chAutoTried.has(w)||!chWeekOpen(w))return;
+  /* the roster and the week's chats load on their own; look again shortly (both turn ready on error too) */
+  if(!rosterReady||!chatsReady||chW.week!==w){if(!chAutoT)chAutoT=setTimeout(()=>{chAutoT=null;chAutoPull()},300);return}
+  if(chatPullRun||chatRun||chats.length)return;
+  const p=chPulled(w);if(p===null){chIdxCheck(w);return}if(p)return;
+  chAutoTried.add(w);pullChats()}
 async function chTogglePick(sid){const c=chatBy(sid);if(!c||!db||!chCanGrade(c))return;const v=!c.picked;c.picked=v;renderChats();renderGame();
   try{await db.doc(chPath("chats",chWk(c),c.sid)).update({picked:v})}catch(e){c.picked=!v;renderChats();toast("Couldn't change the pick.")}}
 
@@ -317,6 +335,7 @@ function chProgress(){const r=chatRun;if(!r)return "";const lab=(CHAT_STEPS.find
 function chStepsHtml(S){return `<ol class="csteps">${CHAT_STEPS.map(([id,l])=>{const s=S[id]||{},st=s.st||"wait";
   return `<li class="cst ${st}"><span class="csi">${st==="run"?'<span class="spin"></span>':st==="done"?"✓":st==="error"?"✗":"·"}</span><span class="csl">${esc(l)}</span>${s.note?`<span class="hint">${esc(s.note)}</span>`:""}</li>`}).join("")}</ol>`}
 function paintRun(){if(!chatRun)return;const st=$("#chatStatus");if(st)st.innerHTML=`<span class="spin"></span>${esc(chProgress())}`;
+  document.querySelectorAll("[data-chline]").forEach(el=>{el.textContent=chProgress()});
   const el=$("#chatSteps");if(el&&String(chatRun.sid)===String(chatSel))el.innerHTML=chStepsHtml(chatRun.steps)}
 
 /* ---------- the QA ticket's data: findings, marks, priority, the compensation check. The brain computes all of it; the page only reads ---------- */
