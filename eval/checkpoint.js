@@ -4,9 +4,10 @@
 //   data/chats/week_<week>/base_full.json        the week's base rows
 //   data/chats/week_<week>/pool/                  Lightdash rows answered offline by eval/week_pool.js
 //   data/checkpoints/<cpId>/inputs.json           {policy, cal, lessons, learned, notes} copied from the live db by the main session
+// The week is read from --week and the pool from data/chats/week_<week>/pool (poolQuery.use(week)). Calls pass siblings and until, the same as the page.
 // Outputs: data/checkpoints/<cpId>/{audits,tx,grades}/<sid>.json and run.json (the brainRuns doc).
 // The refs pass is cached per chat in data/checkpoints/refs/<sid>.json so every checkpoint links the same evidence.
-const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
+const fs = require('fs'), path = require('path');
 const B = require('../src/chat.js'), C = require('../src/core.js');
 const ROOT = path.join(__dirname, '..');
 const [cp] = process.argv.slice(2);
@@ -18,21 +19,11 @@ const OUT = path.join(ROOT, 'data/checkpoints', cp), REFS = path.join(ROOT, 'dat
 const rj = f => JSON.parse(fs.readFileSync(f, 'utf8')), wj = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 1));
 const inputs = rj(path.join(OUT, 'inputs.json'));
 const { poolQuery } = require('./week_pool.js');
+poolQuery.use(week);
 let SIBS = [], UNTIL = '';
 
-/* one Claude pass, blind: no tools, no project files. A reply that isn't JSON is passed back as invalid_json so the brain's askPass can repair it, like the page */
-function claude(prompt) {
-  return new Promise((resolve, reject) => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
-    const p = spawn('claude', ['-p', '--safe-mode', '--model', model, '--tools', '', '--output-format', 'text',
-      '--system-prompt', 'Follow the instructions in the message exactly. Reply with only the JSON object it asks for.'], { cwd });
-    let out = '', err = '';
-    p.stdout.on('data', d => out += d); p.stderr.on('data', d => err += d);
-    const t = setTimeout(() => p.kill('SIGKILL'), 15 * 60e3);
-    p.on('close', code => { clearTimeout(t); if (code) return reject({ code: 'cli', message: err.slice(0, 300) }); resolve(out) });
-    p.stdin.end(prompt);
-  });
-}
+const { claude: cli } = require('./claude_cli.js');
+const claude = prompt => cli(prompt, model);
 async function ask(prompt, pass, sid) {
   let txt;
   try { txt = await claude(prompt) } catch (e) { txt = await claude(prompt) }   // one retry on a CLI failure only
@@ -91,5 +82,6 @@ async function gradeOne(c) {
     perSA: Object.fromEntries(Object.entries(perSA).map(([sa, l]) => [sa, { n: l.length, avgPct: avg(l.map(g => g.pct).filter(x => x != null)), verdicts: mix(l) }])),
     lessonsUsed: (inputs.lessons || []).length, learned: inputs.learned || [], notes: inputs.notes || '' };
   wj(path.join(OUT, 'run.json'), run);
+  console.log(`pool misses: ${poolQuery.misses().length}`);
   console.log(`done: ${G.length} graded, ${fail.length} failed${fail.length ? ' (' + fail.join(',') + ')' : ''}; avg ${run.avgPct}`, JSON.stringify(run.verdicts));
 })().catch(e => { console.error(e); process.exit(1) });

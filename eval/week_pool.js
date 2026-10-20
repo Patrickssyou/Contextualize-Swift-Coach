@@ -6,6 +6,8 @@
 //   poolQuery.log()         -> [{title, kind, rows}] every query answered so far
 //   poolQuery.strict = true -> throw on a miss instead of answering []
 //   node eval/week_pool.js build [monday]   -> merge pool/raw/*.json into pool/{tasks,orders,calls,saout,states}.json
+//   node eval/week_discover.js <monday>    -> list the queries the pool still cannot answer (run chatContext with the saved refs); fetch them through Lightdash into pool/raw/ and repeat until none are left
+//   raw file kinds: tasks_*, orders_* (restaurant codes + day range), orderids_*, callids_* ({codes, ids, from, to}: fetched by id), phonecalls_* ({codes, phones, from, to}), saout_* ({logins, from, to})
 //   saout: the 6 SAs' outbound calls (no transcripts), raw files saout_*.json = {logins, from, to, rows}; answers the SA-outbound query (login list + outbound + day range)
 //
 // How a config is answered: the config's own filter string is parsed (`field op=values` clauses joined by AND; values may be quoted),
@@ -62,6 +64,8 @@ function build(monday) {
       for (const c of j.codes) { ph[c] = ph[c] || {}; for (const p of j.phones) ph[c][p] = { from: j.from, to: j.to }; } }
     out.calls.rows.sort((a, b) => String(a[DAY.calls]).localeCompare(String(b[DAY.calls])));
     out.calls.phonesFetched = ph; }
+  /* a dataset built only from by-id / by-phone raw files has no day-range rows to take the field list from */
+  for (const k of ['orders', 'calls']) if (!out[k].fields.length && out[k].rows.length) out[k].fields = Object.keys(out[k].rows[0]);
   /* the SAs' outbound calls (no transcripts), fetched per SA over a day range: a login is covered for every day of its raw file */
   { const rows = [], seen = new Set(), cover = {};
     for (const f of files.filter(f => f.startsWith('saout_'))) {
