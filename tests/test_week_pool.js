@@ -73,5 +73,18 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); n++; };
   poolQuery.reset();
   for (const c of chats) await B.chatContext(c, D0);
   eq(poolQuery.misses().length, 0, 'all 85 chats answered with no misses');
+  /* week 2026-10-12 (built from by-id and by-phone fetches): every base chat answers with no misses, using the refs saved by the checkpoint */
+  const W2 = '2026-10-12', PD2 = path.join(ROOT, 'data/chats/week_' + W2);
+  if (fs.existsSync(path.join(PD2, 'pool', 'orders.json'))) {
+    poolQuery.use(W2); poolQuery.reset();
+    const chats2 = JSON.parse(fs.readFileSync(path.join(PD2, 'base_full.json'), 'utf8')).map(x => B.chatRow(x, { roster: C.ROSTER_DEFAULT })).filter(c => c.wid && B.isBaseChat(c));
+    const seen2 = new Set(), list2 = chats2.filter(c => !seen2.has(c.wid) && seen2.add(c.wid));
+    const REFS = path.join(ROOT, 'data/checkpoints/refs'); let ran = 0;
+    for (const c of list2) { const rf = path.join(REFS, c.sid + '.json'); if (!fs.existsSync(rf)) continue;
+      await B.chatContext(c, { query: poolQuery, ask: async () => JSON.parse(fs.readFileSync(rf, 'utf8')), until: '2026-10-20T00:00:00', siblings: list2 }); ran++; }
+    ok(ran > 0, 'week 2026-10-12 chats ran');
+    eq(poolQuery.misses().length, 0, `week ${W2}: ${ran} chats answered with no misses`);
+    poolQuery.use(WEEK);
+  }
   console.log(`test_week_pool: ${n} checks passed`);
 })().catch(e => { console.error(e); process.exit(1); });
