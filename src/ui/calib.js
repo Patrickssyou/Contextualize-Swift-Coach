@@ -566,7 +566,7 @@ async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {cod
   const G=(R&&R.G)||{};if(!G.scores||typeof G.scores!=="object")throw {code:"ai_shape",src:"ai"};
   const ids=items.map(x=>x.id),pick=o=>Object.fromEntries(ids.filter(id=>o&&o[id]!==undefined).map(id=>[id,o[id]]));
   const doc=clone({v:G.v||(R&&R.v)||1,at:new Date().toISOString(),by:myId||null,items:ids,scores:pick(G.scores),reasons:pick(G.reasons),cites:pick(G.cites),
-    wentWell:Array.isArray(G.wentWell)?G.wentWell:[],fixes:Array.isArray(G.fixes)?G.fixes:[],summary:String(G.summary||""),F:(R&&R.F)??null,A:(R&&R.A)??null});
+    wentWell:Array.isArray(G.wentWell)?G.wentWell:[],fixes:Array.isArray(G.fixes)?G.fixes:[],summary:String(G.summary||""),caseType:String(G.caseType||""),caseWhy:String(G.caseWhy||""),F:(R&&R.F)??null,A:(R&&R.A)??null});
   try{await db.doc(CG_ROOT+"/"+it.key).set(doc)}catch(e){throw chTag(e,"db")}
   cbCG.set(String(it.key),doc);cbGRErr.delete(String(it.key))}
 async function cbGradeRun(list,one){if(cbGR||(typeof chatRun!=="undefined"&&chatRun)||!cbCanGrade()||!list.length)return;

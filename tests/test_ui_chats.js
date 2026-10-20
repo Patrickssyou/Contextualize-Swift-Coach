@@ -394,7 +394,7 @@ const shot = async (page, name, full) => { await page.evaluate(() => { const t =
   ok(fsum === `Timeline and SA claims ${realA.facts.timeline.length} facts · ${realA.facts.claims.length} claims · ${ncon} wrong` && /^Order Ticket 65 · \$59\.10 · [a-z ]+ · \d{1,2}:\d{2} [AP]M Open in GreenDot ↗$/.test(osum), `source lines: ${fsum}; ${osum}`);
   const brief0 = await page.locator('#evBrief li').allInnerTexts();
   ok(brief0.length === 1 + realA.calls.length && brief0[0] === realA.analysis.summary && brief0[1].startsWith('Call 1: '), 'no brief on the real case: the summary plus each call\'s first bullet');
-  ok(await page.locator('.cfacts .fact').count() === realA.facts.timeline.length && await page.locator('.claim').count() === realA.facts.claims.length, `case facts: ${realA.facts.timeline.length} facts, ${realA.facts.claims.length} claims`);
+  ok(await page.locator('.cfacts .fact:not(.callmk)').count() === realA.facts.timeline.length && await page.locator('.claim').count() === realA.facts.claims.length, `case facts: ${realA.facts.timeline.length} facts, ${realA.facts.claims.length} claims`);
   ok(await page.locator('.claim.contradicted').count() === realA.facts.claims.filter(c => c.check === 'contradicted').length, 'contradicted claims flagged');
   ok(await page.locator('.ccrit').count() === 9 && await page.locator('[data-cm="esc"]').count() === 6 && await page.locator('[data-cm="ev"][data-v="na"]').count() === 0, 'scorecard: 9 criteria, esc 0–4 + N/A, N/A only where allowed');
   const note0 = await noteOf(page);
