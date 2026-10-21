@@ -112,7 +112,7 @@ function chatHash(){if(callSel)return "call/"+week+"/"+encodeURIComponent(callSe
 /* the Audit tab shows one chat (chatSel) or one call from the queue (callSel); #call/<week>/<id> opens a call */
 let callSel=null;
 {const h=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
-  if(/^call\/./.test(h)){const p=h.slice(5).split("/");callSel=p.pop();if(p.length&&chatWeek(p[0]))week=chatWeek(p[0])}}
+  if(/^call\/./.test(h)){const p=h.slice(5).split("/");callSel=p.pop();if(p.length&&chatWeek(p[0])&&!ONLY_WEEK)week=chatWeek(p[0])}}
 function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&!callSel&&String(chatSel)===String(sid)))navPush();
   wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   callSel=null;chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}

@@ -799,7 +799,9 @@ function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)
 function weekLabel(s){const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
 function shortWeek(s){return parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
 function shortDate(s){return s?parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}
-let week = iso(mondayOf(new Date(Date.now()-7*864e5)));
+/* Alignment sessions: only Oct 5–11 is shown. Set ONLY_WEEK to "" to bring the week picker back. */
+const ONLY_WEEK="2026-10-05";
+let week = ONLY_WEEK||iso(mondayOf(new Date(Date.now()-7*864e5)));
 
 /* ---------- parsing ---------- */
 function parseLink(u){
@@ -904,6 +906,7 @@ function setTab(t){if(t==="score")t="calls";if(t==="round")t="calib";if(!TABS.in
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
 document.querySelectorAll(".tabs [data-area], .subtabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab||lastTab[b.dataset.area]));
 {let lastTool="queue";const ct=document.querySelector("[data-calltools]");if(ct)ct.onclick=()=>setTab(CALL_TOOLS.includes(tab)?tab:lastTool);document.addEventListener("click",e=>{const b=e.target.closest("#sub-calls [data-tab]");if(b)lastTool=b.dataset.tab})}
+if(ONLY_WEEK){$("#wkPrev").hidden=true;$("#wkNext").hidden=true}
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);chatsWeekListen();renderAll()};
 $("#wkNext").onclick=()=>{week=addDays(week,7);chatsWeekListen();renderAll()};
 
@@ -2107,7 +2110,7 @@ function renderAll(){
 }
 const h0=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
 /* #chat/<week>/<sid> opens that chat on its week; #chat/<sid> on the default week */
-if(/^chat\/./.test(h0)){const p=h0.slice(5).split("/");chatSel=p.pop();if(p.length&&chatWeek(p[0]))week=chatWeek(p[0])}
+if(/^chat\/./.test(h0)){const p=h0.slice(5).split("/");chatSel=p.pop();if(p.length&&chatWeek(p[0])&&!ONLY_WEEK)week=chatWeek(p[0])}
 tab=h0==="score"?"calls":h0==="round"?"calib":/^(chat|call)\//.test(h0)?"chat":TABS.includes(h0)?h0:"calib";
 lastParsed=parseLink(form.link);
 setTab(tab);renderForm();
