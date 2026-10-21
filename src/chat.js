@@ -2,7 +2,7 @@
 /* ---- The chat brain: audit a Super Agent's WIRA chat. See docs/brain-wira-chats.md.
    Route: facts -> analysis (fault, policy bucket, ideal resolution) -> solution quality -> grade + coaching.
    Code does the data work and all the money; Claude reads and judges. ---- */
-const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15,
+const CHAT = {explore:"wira_project_tasks", perSA:5, relBeforeH:2, relAfterH:24, txCap:7000, budget:60000, calibMax:3, maxCalls:6, quietCalls:2, gradeRuns:1, lessonMax:20, slowReplyMin:15, aeReplyMaxMin:60,
   outBeforeMin:5, outAfterMin:60, outRestH:3, outOpenH:24, outLimit:80, maxOutCalls:4, quietOut:2};
 const CHAT_V = "chat-2";
 const CHAT_DIMS = ["wira_project_tasks_wira_id","wira_project_tasks_short_wira_id","wira_project_tasks_created_at_est","wira_project_tasks_closed_at_est",
@@ -180,7 +180,9 @@ function chatTiming(c,rows){
    which WIRA shows as the first status change after the chat was created (status changes on the first reply, a handoff or the close) */
 function aeFirstReply(opened,states){const o=ldTs(opened);if(isNaN(o))return null;
   const s=(states||[]).find(x=>{const t=ldTs(x.at);return !isNaN(t)&&t>=o-60e3});
-  return s?{at:s.at,min:Math.max(0,rnd1((ldTs(s.at)-o)/60e3))}:null}
+  if(!s)return null;const m=Math.max(0,rnd1((ldTs(s.at)-o)/60e3));
+  /* a status change more than an hour later says the SA didn't move the ticket, not that they didn't reply: no time then */
+  return m>CHAT.aeReplyMaxMin?{at:"",min:null,late:true,statusAt:s.at,statusMin:m}:{at:s.at,min:m}}
 const STATE_ON_L = {support:"Support's turn",client:"waiting on the client",handoff:"waiting on an internal handoff",closed:"closed","":""};
 /* the timing lines the facts pass and the grader read */
 function chatTimingLines(t,c){if(!t)return [];const day=String(t.opened||"").slice(0,10),at=v=>!v?"–":(String(v).slice(0,10)===day?"":String(v).slice(5,10)+" ")+String(v).slice(11,16),mn=v=>v==null?"–":v+" min";

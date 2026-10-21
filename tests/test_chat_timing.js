@@ -119,5 +119,7 @@ function part2() {
   eq(t.states.map(s => [s.sub, s.min, !!s.ongoing]), [['pending_reply', 2.3, false], ['waiting_on_client', null, true]], '1831362: Support\'s turn 2.3 min, then waiting on the client');
   eq([t.firstReplyMin, t.slowFirstReply, t.waitingOnSupportMin, t.closedAt, t.handleMin], [2.3, false, 2.3, '', null], '1831362 timing');
   ok(chat.msgs.length >= 10 && chat.msgs.every(m => !('at' in m)), '1831362 has ' + chat.msgs.length + ' messages and no message time');
+  { const late = B.aeFirstReply('2026-10-17T20:45:47', [{ at: '2026-10-18T16:24:19' }]); ok(late && late.late && late.min === null && late.statusMin > 60, 'an AE chat whose first status change is hours later has no first-reply time');
+    const ok1 = B.aeFirstReply('2026-10-17T20:45:47', [{ at: '2026-10-17T20:50:47' }]); ok(ok1 && ok1.min === 5, 'a status change within the hour times the reply'); }
   console.log(`chat timing: ${n} checks passed`);
 }
