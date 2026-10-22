@@ -1250,7 +1250,7 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .lg-src{font-weight:700;font-size:13px;color:var(--accent)}
 .lg-meta{font-size:12.5px;color:var(--muted)}
 .lg-link{margin-left:auto;font-size:12.5px;font-weight:600;text-decoration:none}
-.lg-r{display:grid;grid-template-columns:64px minmax(0,1fr) 34px;gap:10px;align-items:baseline;padding:4px 16px;font-size:13.5px;line-height:1.45}
+.lg-r{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:baseline;padding:4px 16px;font-size:13.5px;line-height:1.45}
 .lg-r:hover{background:var(--accent-soft)}
 .lg-r.last{box-shadow:inset 3px 0 0 var(--s3)}
 .lg-t{color:var(--muted);font-size:12px}
@@ -1268,6 +1268,16 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evrf-r dd{margin:0;font-size:14px;line-height:1.45}
 .evrf-r .pill{margin-right:4px}
 .evtl{margin-top:10px}
+@media (prefers-reduced-motion:no-preference){
+  :root{interpolate-size:allow-keywords}
+  details::details-content{block-size:0;overflow:hidden;opacity:0;transition:block-size .28s ease,opacity .22s ease,content-visibility .28s allow-discrete}
+  details[open]::details-content{block-size:auto;opacity:1}
+  .evfull:not([hidden]),.cbopen>td{animation:evIn .26s ease both}
+  .lg-r{transition:background-color .25s ease,box-shadow .25s ease}
+  .cbnb,.cm{transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+}
+@keyframes evIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.lg-r.hit{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
 .evtl>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);list-style:none;min-height:32px;display:flex;align-items:center;gap:6px}
 .evtl>summary::-webkit-details-marker{display:none}
 .evtl[open]>summary{margin-bottom:8px}
@@ -5728,7 +5738,7 @@ function chLog(c,a){const tl=((a.facts||{}).timeline)||[];if(!tl.length)return "
     return `<span class="lg-src">${esc(g.k)}</span>`};
   const n=tl.length;let i=0;
   return `<section class="tlog" aria-label="Ticket log"><header class="lg-hd"><span>Ticket log</span><span class="num tkmut">${chPl(n,"event")}</span></header><ol class="lg-list">${G.map(g=>`<li class="lg-g"><div class="lg-gh">${head(g)}</div><ol class="lg-rows">${g.rows.map(t=>{i++;const internal=t.kind==="internal"||/internal/i.test(String(t.kind||""));
-    return `<li class="lg-r${i===n?" last":""}" id="lg-${esc(t.id||"")}"><span class="lg-t num">${esc(hm(t.when))}</span><span class="lg-w">${/^M\d+$/.test(String(t.src||""))?`<span class="lg-m">${esc(t.src)}</span>`:""}<b>${esc(t.who||"")}</b>${internal?`<span class="lg-int">internal</span>`:""} ${esc(t.what||"")}</span><span class="lg-id num">${esc(t.id||"")}</span></li>`}).join("")}</ol></li>`).join("")}</ol></section>`}
+    return `<li class="lg-r${i===n?" last":""}" id="lg-${esc(t.id||"")}" data-fid="${esc(t.id||"")}" data-src="${esc(String(t.src||""))}"><span class="lg-t num">${esc(hm(t.when))}</span><span class="lg-w"><b>${esc(t.who||"")}</b>${internal?`<span class="lg-int">internal</span>`:""} ${esc(t.what||"")}</span></li>`}).join("")}</ol></li>`).join("")}</ol></section>`}
 function chFacts(a,c){const F=a.facts||{},tl=F.timeline||[],cl=F.claims||[],pr=F.promises||[];
   return `<div class="fhd"><span class="lbl-sm">Timeline</span><span class="hint num">${tl.length} facts${tl.some(t=>t.kind==="internal")?` · ${tl.filter(t=>t.kind==="internal").length} internal`:""}</span></div>
     <ol class="flist cfacts" id="cfTimeline">${chTlCalls(a,c||{},tl)}</ol>
@@ -6252,7 +6262,7 @@ function chPanelView(c,a,toFirst){const P=chPanel,V=P.view||{kind:"chat"},el=$("
   const msgs=c.msgs||[],cited=new Set(P.items.filter(i=>i.tgt&&i.tgt.kind==="msg").map(i=>String(i.tgt.n)));
   if(!cited.size&&!P.chatOnly){const ci=P.items.find(i=>i.tgt&&i.tgt.kind==="call");if(ci){P.view=Object.assign({},ci.tgt,{quote:ci.quote||[]});P.chatOnly=true;chPanelView(c,a);return}}
   el.innerHTML=`<div class="chpvh"><h3 class="chph">Chat</h3><span class="num tkmut">${chPl(msgs.length,"message")} · ${cited.size} cited</span></div><ol class="bubbles chpchat" id="chpChat">${msgs.map(m=>chBubble(m,"pm")).join("")||`<li class="hint">No messages.</li>`}</ol>`;
-  cited.forEach(n=>{const b=document.getElementById("pm-"+n);if(b){b.classList.add("cited");(b.querySelector(".bwho")||b).insertAdjacentHTML("beforeend",`<span class="ctag">Cited</span>`)}});
+  cited.forEach(n=>{const b=document.getElementById("pm-"+n);if(b)b.classList.add("cited")});
   if(toFirst)chPanelScroll(el.querySelector(".cited"))}
 /* load the transcript, then fill it in and bring the marked words into view */
 async function chPanelTxFill(sid,id){await chTxLoad(sid);const t=$("#chpTx"),d=t&&t.closest("details");if(!t||!chPanel||String(chatSel)!==String(sid)||d.dataset.ptx!==String(id))return;
@@ -6269,7 +6279,11 @@ function chPanelOpen(crit,via){const sid=String(chatSel||""),c=chatBy(sid),a=cha
   el.hidden=false;document.body.classList.add("chp-on");chPanelRender();chPanelAria()}
 function chPanelClose(refocus){if(!chPanel)return;const P=chPanel;chPanel=null;if(chPanelEl){chPanelEl.hidden=true;chPanelEl.innerHTML=""}document.body.classList.remove("chp-on");chPanelAria();
   if(refocus){const b=$(`[data-psrc="${P.crit}"]`);if(b)b.focus({preventScroll:true})}}
-function chPanelAria(){if(typeof cbPaint==="function")setTimeout(cbPaint,0);document.querySelectorAll("#view-chat [data-psrc]").forEach(b=>b.setAttribute("aria-expanded",String(!!(chPanel&&chPanel.crit===b.dataset.psrc))))}
+/* the open criterion's cites, lit in the ticket log */
+function chLogMark(){const rows=document.querySelectorAll("#view-chat .lg-r");rows.forEach(r=>r.classList.remove("hit"));if(!chPanel)return;
+  const c=chatBy(chatSel),a=c&&chatAud[c.sid];if(!a)return;const ks=new Set(chCitesIn(chReasons(a)[chPanel.crit]||""));(chPanel.items||[]).forEach(i=>{if(i.tgt&&i.tgt.kind==="msg")ks.add("M"+i.tgt.n);(i.chips||[]).forEach(x=>ks.add(chCiteKey(x)))});
+  rows.forEach(r=>{const src=chCiteKey(r.dataset.src);if(ks.has(r.dataset.fid)||ks.has(src))r.classList.add("hit")})}
+function chPanelAria(){if(typeof cbPaint==="function")setTimeout(cbPaint,0);setTimeout(chLogMark,0);document.querySelectorAll("#view-chat [data-psrc]").forEach(b=>b.setAttribute("aria-expanded",String(!!(chPanel&&chPanel.crit===b.dataset.psrc))))}
 /* closes the panel when its chat, tab or audit is gone, or when the contest that opened it closed */
 function chPanelSync(){if(!chPanel)return;const sid=String(chatSel||"");
   if(chPanel.sid!==sid||tab!=="chat"||!chatAud[sid]||!chRub(chPanel.crit)){chPanelClose();return}
