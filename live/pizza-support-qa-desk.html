@@ -1237,7 +1237,15 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 
 /* ---------- 2 EVIDENCE: What happened beside the key sources; the timeline and every fold behind one toggle ---------- */
 .ev2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px}
-.evside{margin-top:12px}
+.evrf{margin:0 0 12px;display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-radius:10px;background:var(--soft)}
+.evrf-r{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:baseline}
+.evrf-r dt{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.evrf-r dd{margin:0;font-size:14px;line-height:1.45}
+.evrf-r .pill{margin-right:4px}
+.evtl{margin-top:10px}
+.evtl>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);list-style:none;min-height:32px;display:flex;align-items:center;gap:6px}
+.evtl>summary::-webkit-details-marker{display:none}
+.evtl[open]>summary{margin-bottom:8px}
 .tkev .evfull{margin-top:14px}
 .evsrcs{display:flex;flex-direction:column;gap:8px;min-width:0}
 .evrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
@@ -5735,8 +5743,8 @@ function chStrip(c,a){const A=a.analysis||{},f=A.fault||{},b=A.bucket||{},ae=A.a
 function chEvRows(c,a){const R=[],code=a.code||c.code||"";
   (a.orders||[]).slice(0,2).forEach(o=>R.push({k:"order",ic:"O",t:`Order ${o.ticket||"?"}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total)].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",l:"GreenDot ↗"}));
   const CN=(a.calls||[]).map((l,i)=>Object.assign({i},l)),out=CN.filter(chOut);
-  CN.filter(l=>!chOut(l)).slice(0,2).forEach(l=>R.push({k:"call",ic:"C",t:`Call ${l.i+1}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
-  out.forEach(l=>R.push({k:"call",link:"sa_outbound",n:l.i+1,ic:"C",t:`Outbound call by ${chOutWho(l)}`,s:[l.sec?dur(l.sec):"",chClock(l.at,chDay(c))].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true,why:String(l.why||"")}));
+  CN.filter(l=>!chOut(l)).slice(0,2).forEach(l=>R.push({k:"call",ic:"C",t:`Call ${l.i+1} · ${l.dir==="out"?"Outbound":"Inbound"}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
+  out.forEach(l=>R.push({k:"call",link:"sa_outbound",n:l.i+1,ic:"C",t:`Call ${l.i+1} · Outbound by ${chOutWho(l)}`,s:[l.sec?dur(l.sec):"",chClock(l.at,chDay(c))].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true,why:String(l.why||"")}));
   const t=(a.tasks||[])[0];
   if(t)R.push({k:"wira",ic:"W",t:"WIRA ticket",s:[t.intent||t.project,capFirst(String(t.status||""))].filter(Boolean).join(" · ")||t.title||"",u:safeUrl(t.url)||wiraUrl(t.sid),l:"Open ↗"});
   else R.push({k:"wira",ic:"W",t:"WIRA chat",s:[String(c.sid),chStatusL(c)].filter(Boolean).join(" · "),u:safeUrl(c.url||a.url)||wiraUrl(c.sid),l:"Open ↗"});
@@ -5769,11 +5777,12 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   if(!a)return `<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`;
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
-  const A0=a.analysis||{},f0=A0.fault||{},side=inTicket?[A0.request?`<div class="tkblk"><h5>Request</h5><p>${esc(A0.request)}</p></div>`:"",f0.why?`<div class="tkblk"><h5>Fault · ${esc(CH_FAULT[f0.who]||f0.who||"–")}</h5><p>${esc(f0.why)}</p></div>`:""].filter(Boolean).join(""):"";
-  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:`<p class="tkmut">No summary.</p>`}${side?`<div class="tkside evside">${side}</div>`:""}</div>
+  const A0=a.analysis||{},f0=A0.fault||{},rf=inTicket?[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join(""):"";
+  const tl=(a.facts&&(a.facts.timeline||[]).length)?`<details class="evtl"><summary>Full timeline <span class="num tkmut">${(a.facts.timeline||[]).length}</span></summary>${chFacts(a,c)}</details>`:"";
+  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${rf?`<dl class="evrf">${rf}</dl>`:""}${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:`<p class="tkmut">No summary.</p>`}${inTicket?tl:""}</div>
     <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
-      <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">Timeline and full sources</button></div></div>
-    <div class="evfull" id="evFull"${more?"":" hidden"}>${chStrip(c,a)}<div class="evsrc">${src.join("")}</div></div>`);
+      <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">${inTicket?"All sources":"Timeline and full sources"}</button></div></div>
+    <div class="evfull" id="evFull"${more?"":" hidden"}>${inTicket?"":chStrip(c,a)}<div class="evsrc">${(inTicket?src.filter(x=>!/data-fold="facts"|id="cf-facts"|>Timeline and SA claims</.test(x)):src).join("")}</div></div>`);
   return out.join("")}
 function chScorecard(a,d){const T=chAT(a),G=a.grade||{},cl=scM("chat",G.scores||{},T),old=chClaudeOld(a),rs=chReasons(a),runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs.map(x=>scM("chat",x||{},T)):null,C=d.contests||{},RF=d.reinforce||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
   const R=chRubric(T),GR=scGroups(R);
@@ -5854,14 +5863,8 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
   const F=[["Restaurant",`${esc(c.restaurant||a.restaurant||"–")}${code?` <span class="num tkcode">${esc(code)}</span>`:""}`],
     ["SA",esc(a.sa||c.sa||"–")],
     ["Chat",link(url,"WIRA "+esc(c.sid))],
-    ["Order",(a.orders||[]).length?a.orders.map(o=>`<span class="tkord">${link(chGdOrder(code,o.id),"Ticket "+esc(o.ticket||"?"))}<span class="num tkmut">${money(o.total)}</span>${chOrdTags(o)}</span>`).join(""):`<span class="tkmut">No order linked</span>`],
     ["Case type",(T=>T?`<span class="ctype">${esc(chCaseL(T.id))}</span>`:`<span class="tkmut">–</span>`)(ctOf("chat",c.sid))],
-    ["Fault",A.fault?`<span class="pill ${chFaultCls(f.who)}">${esc(CH_FAULT[f.who]||f.who||"–")}</span>`:`<span class="tkmut">–</span>`],
-    ["Opened",`<span class="num">${esc(when(c.at)||"–")}</span>`],
-    ["First reply",chFrHtml(c,a)],
-    ["Closed",c.closedAt?`<span class="num">${esc(when(c.closedAt))}</span>`:`<span class="tkmut">Not closed${c.status?" · "+esc(chStatusL(c)):""}</span>`],
     ["Started by",esc(chInit(c))],
-    ["Recordings",recs.length?`<span class="tkrecs">${recs.map(l=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec" title="${esc([chOut(l)?"Outbound call by "+chOutWho(l):l.agent,when(l.at),l.sec?dur(l.sec):"",chOut(l)?l.why:""].filter(Boolean).join(" · "))}"${chOut(l)?' data-link="sa_outbound"':""}>▶ Call ${l.i+1}${chOut(l)?" · outbound":""}${l.at?` <span class="num tkmut">(${esc(chClock(l.at,chDay(c)))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`],
     ["Slack",(a.slack||[]).length?`<span class="tkrecs">${a.slack.map(t=>{const u=safeUrl(t.url),lbl=`#${esc(t.channel||"slack")}${(t.replies||[]).length?` <span class="num tkmut">(${(t.replies||[]).length})</span>`:""}`,ti=esc([t.author,when(t.at),t.why].filter(Boolean).join(" · "));return u?`<a href="${esc(u)}" target="_blank" rel="noopener" class="tklink" title="${ti}">${lbl} ↗</a>`:`<span title="${ti}">${lbl}</span>`}).join("")}</span>`:`<span class="tkmut">None found</span>`]];
   return `<dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`}
 /* the Timing block: the chat's times, a strip of its status changes sized by minutes, the totals per side, and why there is no time per reply */
