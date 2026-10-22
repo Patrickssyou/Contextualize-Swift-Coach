@@ -1141,9 +1141,10 @@ body.chp-on{padding-right:var(--chpw)}
 .cbwhyfull{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--ink);max-width:760px}
 .cbnotein{width:100%;max-width:760px;box-sizing:border-box;font:inherit;font-size:14px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);resize:vertical;field-sizing:content;min-height:40px}
 .cbmynotero{margin:0;font-size:13px;color:var(--muted)}
-.cbnb{display:inline-grid;place-items:center;width:28px;height:28px;margin:-4px 0;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);cursor:pointer;vertical-align:middle}
-.cbnb:hover{color:var(--accent);background:var(--accent-soft)}
-.cbnb.has{color:var(--accent)}
+.cbnb{display:inline-grid;place-items:center;width:30px;height:30px;margin-left:6px;padding:0;border:1.5px dashed var(--line);border-radius:8px;background:var(--panel);color:var(--muted);cursor:pointer;vertical-align:middle;box-sizing:border-box}
+.cbnb:hover{color:var(--accent);border-color:var(--accent)}
+.cbnb.has{color:var(--on-fill);background:var(--accent);border:0}
+.cbsc td.me{white-space:nowrap}
 .cbsc .cm.na{font-family:var(--f-body)}
 .chpanel{position:fixed;top:0;right:0;bottom:0;width:var(--chpw);z-index:15;display:flex;flex-direction:column;background:var(--panel);color:var(--ink);
   border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px color-mix(in srgb,var(--ink) 45%,transparent);animation:chpin .18s ease-out}
@@ -6668,15 +6669,15 @@ function cbGridHtml(it){
     return `<tr class="scgrp" data-grp="${esc(g.name)}"><th scope="rowgroup" colspan="${cols}"><span class="scgn">${esc(g.name||"Other")}</span><span class="scgw num">${scWt(g.w)}</span>${p!=null?`<span class="scgp num">${fmt(p)}%</span>`:""}</th></tr>`};
   const selC=(it.kind==="chat"?(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit):(cbPanel&&cbPanel.ik===ik&&cbPanel.crit))||cbRowSel.get(ik);
   const rows=R.map(r=>{const k=ik+"|"+r.id,cv=C?C.marks[r.id]:null,sel=selC===r.id;
-    const hasN=!!String(mine.notes[r.id]||"").trim(),nb=`<button type="button" class="cbnb${hasN?" has":""}" data-cb="rowopen" data-crit="${r.id}" aria-label="${hasN?"Your note":"Add a note"} on ${esc(r.label)}" title="${hasN?"Your note":"Add a note"}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"></path></svg></button>`;
+    const hasN=!!String(mine.notes[r.id]||"").trim(),nb=`<button type="button" class="cbnb${hasN?" has":""}" data-cb="rowopen" data-crit="${r.id}" aria-label="${hasN?"Your note":"Add a note"} on ${esc(r.label)}" title="${hasN?"Your note":"Add a note"}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"></path></svg></button>`;
     const crit=(it.kind==="chat"?`<button type="button" class="cbcrit" data-psrc="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit===r.id)}">${esc(r.label)}</button>`
-      :`<button type="button" class="cbcrit" data-cb="panel" data-crit="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(cbPanel&&cbPanel.crit===r.id)}">${esc(r.label)}</button>`)+`<span class="scmeta">${scWHtml(r,NM[r.id])}${scInfoBtn(r,kd)}${lk?"":nb}</span>`;
+      :`<button type="button" class="cbcrit" data-cb="panel" data-crit="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(cbPanel&&cbPanel.crit===r.id)}">${esc(r.label)}</button>`)+`<span class="scmeta">${scWHtml(r,NM[r.id])}${scInfoBtn(r,kd)}</span>`;
     const cwhy=C?String((C.why||{})[r.id]||""):"",ccites=C?(it.kind==="call"?cbCites(C,r.id):chCitesIn(cwhy)):[];
     const cells=G.map(u=>{
       if(u===me&&active){const v=mine.marks[r.id],hn=!!String(mine.notes[r.id]||"").trim();
-        return `<td class="me"><span class="cbpicks" role="group" aria-label="${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="pick" data-crit="${r.id}" data-v="${x}" aria-pressed="${String(v)===String(x)}">${esc(scL(x,r))}</button>`).join("")}</span></td>`}
+        return `<td class="me"><span class="cbpicks" role="group" aria-label="${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="pick" data-crit="${r.id}" data-v="${x}" aria-pressed="${String(v)===String(x)}">${esc(scL(x,r))}</button>`).join("")}</span>${nb}</td>`}
       const d=u===me?{marks:mine.marks,notes:mine.notes}:cbSub(u,ik);
-      if(vis(u)&&d){const n=String((d.notes||{})[r.id]||"").trim();return `<td class="${u===me?"me":""}">${cbMk((d.marks||{})[r.id],r)}${n?`<span class="cbhasnote" title="${esc(n)}" aria-label="Has a note">✎</span>`:""}</td>`}
+      if(vis(u)&&d){const n=String((d.notes||{})[r.id]||"").trim();return `<td class="${u===me?"me":""}">${cbMk((d.marks||{})[r.id],r)}${u===me&&!lk?nb:n?`<span class="cbhasnote" title="${esc(n)}" aria-label="Has a note">✎</span>`:""}</td>`}
       const st=cbPend(u)?"hasn't opened it":cbSub(u,ik)?"scored":"not yet";
       return `<td class="cbav-c"><span class="cbav-d${cbSub(u,ik)?" on "+cbColor(u):""}" title="${esc(cbName(u))}: ${st}" aria-label="${esc(cbName(u))}: ${st}">${esc(cbIni(u))}</span></td>`});
     let extra="";
