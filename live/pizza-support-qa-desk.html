@@ -44,8 +44,10 @@ h1,h2,h3{text-wrap:balance}
 .weekpick button{border:0;background:transparent;width:30px;height:30px;border-radius:999px;font-size:16px;color:var(--muted)}
 .weekpick button:hover{background:var(--soft);color:var(--ink)}
 .weekpick.wkswitch{padding:3px;gap:2px}
-.weekpick .wksw{width:auto;height:34px;padding:0 14px;font-size:13.5px;font-weight:600;color:var(--muted)}
-.weekpick .wksw[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.weekpick .wksw{width:auto;height:36px;padding:0 16px;font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;transition:background .15s,color .15s}
+.weekpick.wkswitch{border:1.5px solid var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.weekpick .wksw[aria-pressed="false"]:hover{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.weekpick .wksw[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);cursor:default}
 .weekpick .lbl{padding-inline:6px;font-weight:600;font-size:14px;min-width:150px;text-align:center}
 .weekpick .lbl small{display:block;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
@@ -1351,6 +1353,32 @@ a.evcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Dashboard: by case type */
 .ctdash{margin-bottom:14px;padding:14px 16px}
 .ctdash .h2{margin:0 0 8px}
+.agdash{margin-top:14px}
+.agtbl{display:flex;flex-direction:column}
+.agr{display:grid;grid-template-columns:28px minmax(120px,1.1fr) 150px 84px minmax(0,2.4fr) 18px;gap:12px;align-items:center;padding:10px 6px;border-top:1px solid var(--line);font-size:13.5px}
+.aghead{border-top:0;padding-block:4px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.aghead .num,.agr .agsc{text-align:right}
+.agd summary{list-style:none;cursor:pointer;border-radius:8px;transition:background .15s}
+.agd summary::-webkit-details-marker{display:none}
+.agd summary:hover{background:var(--soft)}
+.agrk{color:var(--muted);font-weight:700}
+.agnm{overflow-wrap:anywhere}
+.agit{color:var(--muted);font-size:12.5px;text-align:right}
+.agsc{font-weight:700;font-size:15px}
+.agpats{display:flex;flex-wrap:wrap;gap:6px}
+.agpat{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--s1-soft);color:var(--ink)}
+.agpat b{color:var(--s1);font-weight:700}
+.agcv{color:var(--muted);font-size:18px;transition:transform .2s}
+.agd[open] .agcv{transform:rotate(90deg)}
+.agcrit{list-style:none;margin:0;padding:4px 6px 14px 46px;display:grid;gap:6px;animation:agin .22s ease}
+@keyframes agin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.agc{display:grid;grid-template-columns:minmax(140px,220px) minmax(80px,1fr) 44px 96px;gap:10px;align-items:center;font-size:13px}
+.agc .num{text-align:right}
+.agc.pat .agcl{font-weight:700}
+.agcn{color:var(--muted);font-size:12px}
+.agc .cbfill.t-good{background:var(--s3)}.agc .cbfill.t-ok{background:var(--s2)}.agc .cbfill.t-bad{background:var(--s1)}
+@media (max-width:760px){.agr{grid-template-columns:24px minmax(0,1fr) 70px 18px}.agr .agit,.aghead span:nth-child(3),.aghead span:nth-child(5){display:none}.agpats{grid-column:2/-1;grid-row:2}.agcrit{padding-left:6px}.agc{grid-template-columns:minmax(0,1fr) 60px 40px;}.agc .agcn{grid-column:1/-1}}
+@media (prefers-reduced-motion:reduce){.agcrit{animation:none}.agcv{transition:none}}
 .ctcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
 .cttbl{min-width:0}
 .cttbl table{width:100%;border-collapse:collapse;font-size:13px}
@@ -3807,7 +3835,7 @@ if(ONLY_WEEK){$("#wkPrev").hidden=true;$("#wkNext").hidden=true}
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);chatsWeekListen();renderAll()};
 $("#wkNext").onclick=()=>{week=addDays(week,7);chatsWeekListen();renderAll()};
 if(ONLY_WEEK){const wp=document.querySelector(".weekpick");
-  if(wp){wp.classList.add("wkswitch");wp.innerHTML=[[ONLY_WEEK,"Oct 5 – 11"],[CAND_WEEK,"SA candidates"]].map(([w,l])=>`<button type="button" class="wksw" data-wk="${w}" aria-pressed="${week===w}">${l}</button>`).join("")+'<span id="wkLabel" hidden></span>';
+  if(wp){wp.classList.add("wkswitch");wp.innerHTML=[[ONLY_WEEK,"Current SAs"],[CAND_WEEK,"SA candidates"]].map(([w,l])=>`<button type="button" class="wksw" data-wk="${w}" aria-pressed="${week===w}">${l}</button>`).join("")+'<span id="wkLabel" hidden></span>';
     wp.addEventListener("click",e=>{const b=e.target.closest("[data-wk]");if(!b||b.dataset.wk===week)return;week=b.dataset.wk;wp.querySelectorAll("[data-wk]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.wk===week)));if(typeof chPanelClose==="function")chPanelClose();chatSel=null;callSel=null;setTab("calib");chatsWeekListen();renderAll()})}}
 
 /* ---------- SCORE: details ---------- */
@@ -5587,7 +5615,7 @@ function ctDashHtml(wk){const C=ctChatRows(wk),K=ctCallRows();if(!C.length&&!K.l
 function renderChatQueue(){const v=$("#view-chats");if(!v)return;
   if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="chatMetrics" aria-label="This week"></div><div class="panel quest" id="chatQuest" hidden></div>
     <div class="panel pullbar chatbar"><div class="cbinfo"><div class="h2" style="margin:0">WIRA chats</div><div class="hint cstatus" id="chatStatus" role="status"></div></div><div class="cbtns" id="chatBtns"></div></div>
-    <div class="sastrip" id="chatStrip"></div><section class="panel ctdash" id="ctDash" aria-labelledby="ctDashH" hidden></section><div class="sagroups" id="chatGroups"></div>`}
+    <div class="sastrip" id="chatStrip"></div><section class="panel ctdash" id="ctDash" aria-labelledby="ctDashH" hidden></section><section class="panel agdash" id="agDash" aria-labelledby="agDashH" hidden></section><div class="sagroups" id="chatGroups"></div>`}
   const wk=chatsOfWeek(),ready=chatsReady&&chW.week===week,can=!!(db&&mcp),canAi=can&&!!sampleFn,busy=!!(chatRun||chatPullRun),pk=chGradeList("picks").length,all=chGradeList("all").length;
   const graded=wk.filter(c=>chatAud[c.sid]).length,reviewed=wk.filter(c=>chatRev[c.sid]).length,picked=wk.filter(c=>c.picked).length;
   /* a week with no pull shows the Pull button only */
@@ -5610,6 +5638,7 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
       ${S.comp.n?`<span class="sacomp t-${S.comp.right===S.comp.n?"good":"bad"}">Comp right <b class="num">${S.comp.right} of ${S.comp.n}</b></span>`:""}
       <span class="sanums">${[["chats",S.n],["graded",S.graded],["reviewed",S.reviewed]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span></button>`}).join("");
   {const D=$("#ctDash"),h=ctDashHtml(wk);D.hidden=!h;if(D._h!==h){D.innerHTML=h;D._h=h}}
+  {const D=$("#agDash"),h=agDashHtml();D.hidden=!h;if(D._h!==h){const op=new Set([...D.querySelectorAll("details[open]")].map(x=>x.dataset.sa));D.innerHTML=h;D._h=h;D.querySelectorAll("details").forEach(x=>{if(op.has(x.dataset.sa))x.open=true})}}
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";
     return `<div class="panel sagroup" id="sag-${i}"><h3><span>${esc(sa)}${pips}</span><span class="num hint">${done} of ${picks.length} picks reviewed</span></h3>${l.map(chRowHtml).join("")}</div>`}).join(""):"";
@@ -6697,6 +6726,26 @@ function cbVerdict(kind,pct,marks,it){if(pct==null)return null;if(kind==="chat")
 /* a lock's verdict: the id it stored, else from its % and marks */
 const cbLockV=(it,lk)=>!lk?null:lk.verdict&&chVLabel(lk.verdict)?{id:lk.verdict,label:chVLabel(lk.verdict)}:cbVerdict(it.kind,lk.pct,lk.marks,it);
 const cbWeekRound=w=>cbRounds.find(r=>r.id===(w||week)&&Array.isArray(r.items)&&r.week)||null;
+/* by agent: the round's items (chats and calls). Score and marks are the agreed ones where locked, else Claude's.
+   A low mark is 1 or 2 on the 1–5 scale; a criterion is a pattern when it is low on 2 or more items */
+function agItemPct(it){const lk=(cbItems[it.ik]||{}).locked;if(lk&&lk.pct!=null)return Number(lk.pct);
+  if(it.kind==="chat"){const r=chatRev[it.key],a=chatAud[it.key];return r&&r.pct!=null?Number(r.pct):a&&a.pct!=null?Number(a.pct):it.aiPct!=null?Number(it.aiPct):null}
+  const p=cbCGPct(it);return p==null?null:Number(p)}
+function agItemMarks(it){const lk=(cbItems[it.ik]||{}).locked;if(lk&&lk.marks)return {m:cbLkMarks(it.ik,lk),ag:true};const C=cbClaude(it);return C?{m:C.marks||{},ag:false}:null}
+function agStats(){if(typeof cbRoundItems!=="function")return [];cbCGLoadRound();const by=new Map();
+  cbRoundItems().forEach(it=>{const sa=it.sa||"–",A=by.get(sa)||{sa,n:0,chats:0,calls:0,ps:[],ag:0,cr:new Map()};A.n++;A[it.kind==="chat"?"chats":"calls"]++;
+    const p=agItemPct(it);if(p!=null)A.ps.push(p);const M=agItemMarks(it);
+    if(M){if(M.ag)A.ag++;cbRubric(it.kind,it).forEach(r=>{const v=M.m[r.id];if(v==null||v==="")return;const c=A.cr.get(r.label)||{label:r.label,n:0,na:0,ps:[],low:0};c.n++;
+      if(v==="na")c.na++;else{const x=Number(v)/(r.max||4);c.ps.push(x*100);if(x<=.25)c.low++}A.cr.set(r.label,c)})}
+    by.set(sa,A)});
+  return [...by.values()].map(A=>{const cr=[...A.cr.values()].map(c=>Object.assign(c,{avg:chMeanPct(c.ps),k:c.ps.length})).sort((a,b)=>b.low-a.low||(a.avg??101)-(b.avg??101));
+    return Object.assign(A,{avg:chMeanPct(A.ps),cr,pat:cr.filter(c=>c.low>=2)})}).sort((a,b)=>(a.avg==null)-(b.avg==null)||(b.avg??0)-(a.avg??0)||a.sa.localeCompare(b.sa))}
+function agDashHtml(){const L=agStats();if(!L.length)return "";
+  const head=`<div class="agr aghead" aria-hidden="true"><span>#</span><span>Agent</span><span class="num">Items</span><span class="num">Avg score</span><span>Repeated low marks</span><span></span></div>`;
+  return `<h3 class="h2" id="agDashH">By agent</h3><div class="agtbl">${head}${L.map((A,i)=>{const items=[A.chats?chPl(A.chats,"chat"):"",A.calls?chPl(A.calls,"call"):""].filter(Boolean).join(" · ");
+    const pat=A.pat.length?A.pat.slice(0,3).map(c=>`<span class="agpat">${esc(c.label)} <b class="num">${c.low} of ${c.k}</b></span>`).join(""):`<span class="hint">None</span>`;
+    const crit=A.cr.map(c=>`<li class="agc${c.low>=2?" pat":""}"><span class="agcl">${esc(c.label)}</span><span class="cbtrack"><span class="cbfill ${chVB(c.avg)==="none"?"":"t-"+chVB(c.avg)}" style="width:${c.avg==null?0:Math.max(2,Math.min(100,c.avg))}%"></span></span><span class="num">${c.avg==null?"–":Math.round(c.avg)+"%"}</span><span class="num agcn">${c.low?`${c.low} low`:""}${c.na?`${c.low?" · ":""}${c.na} N/A`:""}</span></li>`).join("");
+    return `<details class="agd" data-sa="${esc(A.sa)}"><summary class="agr"><span class="num agrk">${A.avg==null?"–":i+1}</span><b class="agnm">${esc(A.sa)}</b><span class="num agit">${esc(items)}${A.ag?`<span class="hint"> · ${A.ag} agreed</span>`:""}</span><span class="num agsc t-${chVB(A.avg)}">${A.avg==null?"–":fmt(A.avg)+"%"}</span><span class="agpats">${pat}</span><span class="agcv" aria-hidden="true">›</span></summary><ul class="agcrit">${crit}</ul></details>`}).join("")}</div>`}
 /* Claude's marks at draw (the Learning sample) for a chat, when its audit isn't loaded */
 function cbSampleOf(sid){const R=lrnRounds();for(let i=R.length-1;i>=0;i--){const x=lrnInSample(R[i],sid);if(x)return x}return null}
 function cbRoundItems(w){const r=cbWeekRound(w);if(!r)return [];const n=r.items.length;
