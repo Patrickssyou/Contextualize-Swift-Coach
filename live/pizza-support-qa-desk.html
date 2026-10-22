@@ -1238,6 +1238,30 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 /* ---------- 2 EVIDENCE: What happened beside the key sources; the timeline and every fold behind one toggle ---------- */
 .ev2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px}
 .evrf{margin:0 0 12px;display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-radius:10px;background:var(--soft)}
+.evrf.wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 28px;margin:0 0 14px}
+.evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
+.evcards .evrow{margin:0}
+.tlog{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.lg-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--line)}
+.lg-list,.lg-rows{list-style:none;margin:0;padding:0}
+.lg-g+.lg-g{border-top:1px solid var(--line)}
+.lg-gh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:9px 16px;background:var(--bg)}
+.lg-src{font-weight:700;font-size:13px;color:var(--accent)}
+.lg-meta{font-size:12.5px;color:var(--muted)}
+.lg-link{margin-left:auto;font-size:12.5px;font-weight:600;text-decoration:none}
+.lg-r{display:grid;grid-template-columns:72px minmax(0,1fr) 40px;gap:10px;align-items:start;padding:8px 16px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);font-size:13.5px;line-height:1.45}
+.lg-r:hover{background:var(--accent-soft)}
+.lg-r.last{box-shadow:inset 3px 0 0 var(--s3)}
+.lg-t{color:var(--muted);font-size:12.5px;padding-top:1px}
+.lg-w b{display:block;font-size:12px;font-weight:600;color:var(--muted);line-height:1.3}
+.lg-w>span{display:block}
+.lg-m{display:inline;font-family:var(--f-mono);font-size:11px;color:var(--accent);margin-right:6px}
+.lg-int{display:inline;font-size:10.5px;font-weight:700;color:var(--s2);text-transform:uppercase;letter-spacing:.04em;margin-left:4px}
+.lg-id{color:var(--muted);font-size:11px;text-align:right;padding-top:2px}
+.evfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-top:12px}
+.evfoot .evtl{margin:0;flex:1 1 100%}
+.evclaims{padding-top:4px}
+@media (max-width:640px){.lg-r{grid-template-columns:56px minmax(0,1fr)}.lg-id{display:none}}
 .evrf-r{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:baseline}
 .evrf-r dt{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
 .evrf-r dd{margin:0;font-size:14px;line-height:1.45}
@@ -5692,6 +5716,18 @@ function chTlCalls(a,c,tl){const fact=t=>`<li id="cf-${esc(t.id)}" class="fact $
   for(let k=calls.length-1,nx=tl.length;k>=0;k--){const l=calls[k];if(at.has(l.i))nx=at.get(l.i);else at.set(l.i,nx)}
   const out=[];tl.forEach((t,j)=>{calls.filter(l=>at.get(l.i)===j).forEach(l=>out.push(mk(l)));out.push(fact(t))});calls.filter(l=>at.get(l.i)>=tl.length).forEach(l=>out.push(mk(l)));
   return out.join("")}
+/* the ticket log (MGR tool call-log style): the timeline grouped by source in order; a call's group opens with its direction, agent, time and recording */
+function chLog(c,a){const tl=((a.facts||{}).timeline)||[];if(!tl.length)return "";const calls=chCallsN(a),G=[];
+  const os=a.orders||[],grp=src=>{const x=String(src||"").trim();if(!x||/^(M\d+|Header|Chat|WIRA chat)\b/i.test(x)||/^M\d+/.test(x))return "WIRA chat";
+    const o=/^O(\d+)$/.exec(x);if(o){const od=os[+o[1]-1];return od?`Order ${od.ticket||"?"}`:"Order"}return x.replace(/^Task\s*/i,"Task ")};
+  tl.forEach(t=>{const k=grp(t.src);const g=G[G.length-1];if(g&&g.k===k)g.rows.push(t);else G.push({k,rows:[t]})});
+  const hm=w=>{const m=/(\d{1,2}):(\d{2})/.exec(String(w||""));if(!m)return "";let h=+m[1];const ap=h>=12?"PM":"AM";h=h%12||12;return h+":"+m[2]+" "+ap};
+  const head=g=>{const m=/^Call\s*#?(\d+)/i.exec(g.k),l=m?calls.find(x=>x.i+1===+m[1]):null;
+    if(l){const dir=chOut(l)||l.dir==="out"?"Outbound":"Inbound";return `<span class="lg-src">Call ${l.i+1}</span><span class="lg-meta">${dir} · ${esc(chOut(l)?chOutWho(l):l.agent||"Unknown")}${l.at?" · "+esc(chClock(l.at,chDay(c))):""}${l.sec?" · "+esc(dur(l.sec)):""}</span>${l.id?`<a class="lg-link" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}`}
+    return `<span class="lg-src">${esc(g.k)}</span>`};
+  const n=tl.length;let i=0;
+  return `<section class="tlog" aria-label="Ticket log"><header class="lg-hd"><span>Ticket log</span><span class="num tkmut">${chPl(n,"event")}</span></header><ol class="lg-list">${G.map(g=>`<li class="lg-g"><div class="lg-gh">${head(g)}</div><ol class="lg-rows">${g.rows.map(t=>{i++;const internal=t.kind==="internal"||/internal/i.test(String(t.kind||""));
+    return `<li class="lg-r${i===n?" last":""}" id="lg-${esc(t.id||"")}"><span class="lg-t num">${esc(hm(t.when))}</span><span class="lg-w"><b>${/^M\d+$/.test(String(t.src||""))?`<span class="lg-m">${esc(t.src)}</span>`:""}${esc(t.who||"")}${internal?` <span class="lg-int">internal</span>`:""}</b><span>${esc(t.what||"")}</span></span><span class="lg-id num">${esc(t.id||"")}</span></li>`}).join("")}</ol></li>`).join("")}</ol></section>`}
 function chFacts(a,c){const F=a.facts||{},tl=F.timeline||[],cl=F.claims||[],pr=F.promises||[];
   return `<div class="fhd"><span class="lbl-sm">Timeline</span><span class="hint num">${tl.length} facts${tl.some(t=>t.kind==="internal")?` · ${tl.filter(t=>t.kind==="internal").length} internal`:""}</span></div>
     <ol class="flist cfacts" id="cfTimeline">${chTlCalls(a,c||{},tl)}</ol>
@@ -5777,12 +5813,18 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   if(!a)return `<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`;
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
-  const A0=a.analysis||{},f0=A0.fault||{},rf=inTicket?[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join(""):"";
-  const tl=(a.facts&&(a.facts.timeline||[]).length)?`<details class="evtl"><summary>Full timeline <span class="num tkmut">${(a.facts.timeline||[]).length}</span></summary>${chFacts(a,c)}</details>`:"";
-  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${rf?`<dl class="evrf">${rf}</dl>`:""}${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:`<p class="tkmut">No summary.</p>`}${inTicket?tl:""}</div>
-    <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
-      <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">${inTicket?"All sources":"Timeline and full sources"}</button></div></div>
-    <div class="evfull" id="evFull"${more?"":" hidden"}>${inTicket?"":chStrip(c,a)}<div class="evsrc">${(inTicket?src.filter(x=>!/data-fold="facts"|id="cf-facts"|>Timeline and SA claims</.test(x)):src).join("")}</div></div>`);
+  const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join("");
+  const srcRows=rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("");
+  if(inTicket){const log=chLog(c,a),fx=chFacts(a,c),ci=fx.indexOf('<div class="fhd"><span class="lbl-sm">SA claims'),rest=ci>=0?fx.slice(ci):"",F2=a.facts||{},ncl=(F2.claims||[]).length,npr=(F2.promises||[]).length;
+    out.push(`${rf?`<dl class="evrf wide">${rf}</dl>`:""}<div class="evcards" id="evSrcs">${srcRows}</div>
+      ${log||(br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:"")}
+      <div class="evfoot">${rest&&(ncl||npr)?`<details class="evtl"><summary>SA claims and promises <span class="num tkmut">${ncl+npr}</span></summary><div class="evclaims">${rest}</div></details>`:""}<button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">All sources</button></div>
+      <div class="evfull" id="evFull"${more?"":" hidden"}><div class="evsrc">${src.filter(x=>!/>Timeline and SA claims</.test(x)).join("")}</div></div>`);
+    return out.join("")}
+  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
+    <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${srcRows}
+      <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">Timeline and full sources</button></div></div>
+    <div class="evfull" id="evFull"${more?"":" hidden"}>${chStrip(c,a)}<div class="evsrc">${src.join("")}</div></div>`);
   return out.join("")}
 function chScorecard(a,d){const T=chAT(a),G=a.grade||{},cl=scM("chat",G.scores||{},T),old=chClaudeOld(a),rs=chReasons(a),runs=Array.isArray(G.runs)&&G.runs.length>1?G.runs.map(x=>scM("chat",x||{},T)):null,C=d.contests||{},RF=d.reinforce||{},B=chContest&&chContest.sid===String(chatSel)?chContest:null;
   const R=chRubric(T),GR=scGroups(R);
