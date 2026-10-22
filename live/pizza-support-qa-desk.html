@@ -1241,7 +1241,9 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evrf.wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 28px;margin:0 0 14px}
 .evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
 .evcards .evrow{margin:0}
-.evlinks{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.evtl-a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.evtl-a:hover{color:var(--accent);text-decoration-color:var(--accent)}
+.evcards .evs a{color:var(--accent);font-weight:600}
 .tlog{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
 .lg-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--line)}
 .lg-list,.lg-rows{list-style:none;margin:0;padding:0}
@@ -5798,8 +5800,7 @@ function chEvRows(c,a){const R=[],code=a.code||c.code||"",CN=(a.calls||[]).map((
   /* an order and the call that placed it are one source */
   (a.orders||[]).slice(0,2).forEach(o=>{const ids=new Set((o.callIds||[]).map(String)),pc=CN.find(l=>ids.has(String(l.id))&&!(chOut(l)||l.dir==="out"))||CN.find(l=>ids.has(String(l.id)));
     if(pc)used.add(pc.i);
-    R.push({k:"order",ic:"O",t:`Order ${chTkL(o)}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total),pc?`placed on Call ${pc.i+1} · ${pc.agent||""}`:""].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",l:"GreenDot ↗",
-      u2:pc&&pc.id?recUrl(pc.id):"",l2:"▶ Recording"})});
+    R.push({k:"order",ic:"O",t:`Order ${chTkL(o)}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total),].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",pc:pc?{n:pc.i+1,who:pc.agent||"",u:pc.id?recUrl(pc.id):""}:null})});
   const rest=CN.filter(l=>!used.has(l.i)),sao=rest.filter(chOut),oth=rest.filter(l=>!chOut(l));
   oth.slice(0,3).forEach(l=>R.push({k:"call",ic:"C",t:`Call ${l.i+1} · ${chCallL(c,l)}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
   sao.forEach(l=>R.push({k:"call",link:"sa_outbound",n:l.i+1,ic:"C",t:`Call ${l.i+1} · ${chCallL(c,l)}`,s:[chOutWho(l),chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true,why:String(l.why||"")}));
@@ -5835,12 +5836,12 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
   const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join("");
-  const srcRows=rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span><span class="evlinks">${r.u2?`<a class="evlink rec" href="${esc(r.u2)}" target="_blank" rel="noopener">${r.l2}</a>`:""}${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</span></div>`).join("");
+  const srcRows=rows.map(r=>{const tt=r.u?`<a class="evtl-a" href="${esc(r.u)}" target="_blank" rel="noopener">${esc(r.t)}</a>`:esc(r.t),pc=r.pc?` · placed on ${r.pc.u?`<a href="${esc(r.pc.u)}" target="_blank" rel="noopener">Call ${r.pc.n}</a>`:"Call "+r.pc.n}${r.pc.who?" · "+esc(r.pc.who):""}`:"";
+    return `<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${tt}</b>${r.tags||""}<span class="evs">${esc(r.s)}${pc}</span></span></div>`}).join("");
   if(inTicket){const log=chLog(c,a),fx=chFacts(a,c),ci=fx.indexOf('<div class="fhd"><span class="lbl-sm">SA claims'),rest=ci>=0?fx.slice(ci):"",F2=a.facts||{},ncl=(F2.claims||[]).length,npr=(F2.promises||[]).length;
     out.push(`${rf?`<dl class="evrf wide">${rf}</dl>`:""}<div class="evcards" id="evSrcs">${srcRows}</div>
       ${log||(br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:"")}
-      <div class="evfoot">${rest&&(ncl||npr)?`<details class="evtl"><summary>SA claims and promises <span class="num tkmut">${ncl+npr}</span></summary><div class="evclaims">${rest}</div></details>`:""}<button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">All sources</button></div>
-      <div class="evfull" id="evFull"${more?"":" hidden"}><div class="evsrc">${src.filter(x=>!/>Timeline and SA claims</.test(x)).join("")}</div></div>`);
+      <div class="evfoot">${rest&&(ncl||npr)?`<details class="evtl"><summary>SA claims and promises <span class="num tkmut">${ncl+npr}</span></summary><div class="evclaims">${rest}</div></details>`:""}</div>`);
     return out.join("")}
   out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
     <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${srcRows}
