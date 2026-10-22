@@ -1241,9 +1241,9 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evrf.wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 28px;margin:0 0 14px}
 .evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
 .evcards .evrow{margin:0}
-.evtl-a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
-.evtl-a:hover{color:var(--accent);text-decoration-color:var(--accent)}
-.evcards .evs a{color:var(--accent);font-weight:600}
+a.evcard{text-decoration:none;color:inherit;cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
+a.evcard:hover{border-color:var(--accent);background:var(--accent-soft)}
+a.evcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tlog{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
 .lg-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--line)}
 .lg-list,.lg-rows{list-style:none;margin:0;padding:0}
@@ -5836,8 +5836,9 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
   const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join("");
-  const srcRows=rows.map(r=>{const tt=r.u?`<a class="evtl-a" href="${esc(r.u)}" target="_blank" rel="noopener">${esc(r.t)}</a>`:esc(r.t),pc=r.pc?` · placed on ${r.pc.u?`<a href="${esc(r.pc.u)}" target="_blank" rel="noopener">Call ${r.pc.n}</a>`:"Call "+r.pc.n}${r.pc.who?" · "+esc(r.pc.who):""}`:"";
-    return `<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${tt}</b>${r.tags||""}<span class="evs">${esc(r.s)}${pc}</span></span></div>`}).join("");
+  const srcRows=rows.map(r=>{const pc=r.pc?` · placed on Call ${r.pc.n}${r.pc.who?" · "+esc(r.pc.who):""}`:"",tag=r.u?"a":"div",
+      at=r.u?` href="${esc(r.u)}" target="_blank" rel="noopener"`:"";
+    return `<${tag} class="evrow${r.u?" evcard":""}" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}${at}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}${pc}</span></span></${tag}>`}).join("");
   if(inTicket){const log=chLog(c,a),fx=chFacts(a,c),ci=fx.indexOf('<div class="fhd"><span class="lbl-sm">SA claims'),rest=ci>=0?fx.slice(ci):"",F2=a.facts||{},ncl=(F2.claims||[]).length,npr=(F2.promises||[]).length;
     out.push(`${rf?`<dl class="evrf wide">${rf}</dl>`:""}<div class="evcards" id="evSrcs">${srcRows}</div>
       ${log||(br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:"")}
