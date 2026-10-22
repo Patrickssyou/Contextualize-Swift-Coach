@@ -1245,19 +1245,20 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .lg-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--line)}
 .lg-list,.lg-rows{list-style:none;margin:0;padding:0}
 .lg-g+.lg-g{border-top:1px solid var(--line)}
-.lg-gh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:9px 16px;background:var(--bg)}
+.lg-gh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:7px 16px;background:var(--bg)}
+.lg-rows{padding:4px 0}
 .lg-src{font-weight:700;font-size:13px;color:var(--accent)}
 .lg-meta{font-size:12.5px;color:var(--muted)}
 .lg-link{margin-left:auto;font-size:12.5px;font-weight:600;text-decoration:none}
-.lg-r{display:grid;grid-template-columns:72px minmax(0,1fr) 40px;gap:10px;align-items:start;padding:8px 16px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);font-size:13.5px;line-height:1.45}
+.lg-r{display:grid;grid-template-columns:64px minmax(0,1fr) 34px;gap:10px;align-items:baseline;padding:4px 16px;font-size:13.5px;line-height:1.45}
 .lg-r:hover{background:var(--accent-soft)}
 .lg-r.last{box-shadow:inset 3px 0 0 var(--s3)}
-.lg-t{color:var(--muted);font-size:12.5px;padding-top:1px}
-.lg-w b{display:block;font-size:12px;font-weight:600;color:var(--muted);line-height:1.3}
-.lg-w>span{display:block}
+.lg-t{color:var(--muted);font-size:12px}
+.lg-w b{font-weight:600;color:var(--ink);margin-right:6px}
+.lg-w{min-width:0}
 .lg-m{display:inline;font-family:var(--f-mono);font-size:11px;color:var(--accent);margin-right:6px}
-.lg-int{display:inline;font-size:10.5px;font-weight:700;color:var(--s2);text-transform:uppercase;letter-spacing:.04em;margin-left:4px}
-.lg-id{color:var(--muted);font-size:11px;text-align:right;padding-top:2px}
+.lg-int{font-size:10.5px;font-weight:700;color:var(--s2);text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
+.lg-id{color:var(--muted);font-size:11px;text-align:right}
 .evfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-top:12px}
 .evfoot .evtl{margin:0;flex:1 1 100%}
 .evclaims{padding-top:4px}
@@ -5727,7 +5728,7 @@ function chLog(c,a){const tl=((a.facts||{}).timeline)||[];if(!tl.length)return "
     return `<span class="lg-src">${esc(g.k)}</span>`};
   const n=tl.length;let i=0;
   return `<section class="tlog" aria-label="Ticket log"><header class="lg-hd"><span>Ticket log</span><span class="num tkmut">${chPl(n,"event")}</span></header><ol class="lg-list">${G.map(g=>`<li class="lg-g"><div class="lg-gh">${head(g)}</div><ol class="lg-rows">${g.rows.map(t=>{i++;const internal=t.kind==="internal"||/internal/i.test(String(t.kind||""));
-    return `<li class="lg-r${i===n?" last":""}" id="lg-${esc(t.id||"")}"><span class="lg-t num">${esc(hm(t.when))}</span><span class="lg-w"><b>${/^M\d+$/.test(String(t.src||""))?`<span class="lg-m">${esc(t.src)}</span>`:""}${esc(t.who||"")}${internal?` <span class="lg-int">internal</span>`:""}</b><span>${esc(t.what||"")}</span></span><span class="lg-id num">${esc(t.id||"")}</span></li>`}).join("")}</ol></li>`).join("")}</ol></section>`}
+    return `<li class="lg-r${i===n?" last":""}" id="lg-${esc(t.id||"")}"><span class="lg-t num">${esc(hm(t.when))}</span><span class="lg-w">${/^M\d+$/.test(String(t.src||""))?`<span class="lg-m">${esc(t.src)}</span>`:""}<b>${esc(t.who||"")}</b>${internal?`<span class="lg-int">internal</span>`:""} ${esc(t.what||"")}</span><span class="lg-id num">${esc(t.id||"")}</span></li>`}).join("")}</ol></li>`).join("")}</ol></section>`}
 function chFacts(a,c){const F=a.facts||{},tl=F.timeline||[],cl=F.claims||[],pr=F.promises||[];
   return `<div class="fhd"><span class="lbl-sm">Timeline</span><span class="hint num">${tl.length} facts${tl.some(t=>t.kind==="internal")?` · ${tl.filter(t=>t.kind==="internal").length} internal`:""}</span></div>
     <ol class="flist cfacts" id="cfTimeline">${chTlCalls(a,c||{},tl)}</ol>
