@@ -1241,7 +1241,10 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evrf.wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 28px;margin:0 0 14px}
 .evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
 .evcards .evrow{margin:0}
-a.evcard{text-decoration:none;color:inherit;cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
+a.evcard{text-decoration:none;color:inherit;cursor:pointer;position:relative;padding-right:34px;border-color:color-mix(in srgb,var(--accent) 30%,var(--line));transition:border-color .15s ease,background-color .15s ease,transform .15s ease}
+a.evcard::after{content:"↗";position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--accent)}
+a.evcard b{color:var(--accent)}
+a.evcard:active{transform:translateY(1px)}
 a.evcard:hover{border-color:var(--accent);background:var(--accent-soft)}
 a.evcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tlog{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
@@ -5200,9 +5203,10 @@ function scPopPlace(){const el=document.getElementById("scPop"),btn=scPopBtn;if(
 function scPopHide(refocus){const el=document.getElementById("scPop");if(el)el.hidden=true;const b=scPopBtn;if(b)b.setAttribute("aria-expanded","false");scPopKey="";scPopPin=false;scPopBtn=null;
   if(refocus&&b&&b.isConnected)b.focus({preventScroll:true})}
 const scPopOpen=()=>{const el=document.getElementById("scPop");return !!(el&&!el.hidden)};
-document.addEventListener("pointerover",e=>{if(e.pointerType!=="mouse")return;const b=e.target.closest&&e.target.closest("[data-scinfo]");if(b&&!(scPopPin&&scPopBtn===b))scPopShow(b,scPopPin&&scPopBtn===b)});
+let scPopT=null;const scPopKeep=()=>{clearTimeout(scPopT);scPopT=null};
+document.addEventListener("pointerover",e=>{if(e.pointerType!=="mouse")return;if(e.target.closest&&e.target.closest("#scPop")){scPopKeep();return}const b=e.target.closest&&e.target.closest("[data-scinfo]");if(b&&scPopBtn===b)scPopKeep();if(b&&!(scPopPin&&scPopBtn===b))scPopShow(b,scPopPin&&scPopBtn===b)});
 document.addEventListener("pointerout",e=>{if(e.pointerType!=="mouse"||scPopPin||!scPopOpen())return;const to=e.relatedTarget,P=document.getElementById("scPop");
-  if(to&&(P&&P.contains(to)||scPopBtn&&scPopBtn.contains(to)))return;const from=e.target.closest&&e.target.closest("[data-scinfo],#scPop");if(from&&document.activeElement!==scPopBtn)scPopHide()});
+  if(to&&(P&&P.contains(to)||scPopBtn&&scPopBtn.contains(to)))return;const from=e.target.closest&&e.target.closest("[data-scinfo],#scPop");if(from&&document.activeElement!==scPopBtn){scPopKeep();scPopT=setTimeout(()=>{scPopT=null;if(!scPopPin)scPopHide()},350)}});
 document.addEventListener("focusin",e=>{const b=e.target.closest&&e.target.closest("[data-scinfo]");if(b){if(scPopBtn!==b||!scPopOpen())scPopShow(b,false);return}
   const P=document.getElementById("scPop");if(scPopOpen()&&!scPopPin&&!(P&&P.contains(e.target)))scPopHide()});
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-scinfo]");
