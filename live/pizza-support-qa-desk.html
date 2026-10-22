@@ -43,6 +43,9 @@ h1,h2,h3{text-wrap:balance}
 .weekpick{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px}
 .weekpick button{border:0;background:transparent;width:30px;height:30px;border-radius:999px;font-size:16px;color:var(--muted)}
 .weekpick button:hover{background:var(--soft);color:var(--ink)}
+.weekpick.wkswitch{padding:3px;gap:2px}
+.weekpick .wksw{width:auto;height:34px;padding:0 14px;font-size:13.5px;font-weight:600;color:var(--muted)}
+.weekpick .wksw[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
 .weekpick .lbl{padding-inline:6px;font-weight:600;font-size:14px;min-width:150px;text-align:center}
 .weekpick .lbl small{display:block;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
@@ -1567,6 +1570,10 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbisv.great,.cbisv.good{color:var(--s3)}.cbisv.okay{color:var(--s2)}.cbisv.needs_work,.cbisv.ok{color:var(--s2)}.cbisv.miss,.cbisv.bad{color:var(--s1)}
 .cbirow .cttag{background:none;border:0;padding:0;font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted)}
 .cbirow+.cbirow{border-top:1px solid var(--line)}
+.ctsel{margin-left:auto}
+.ctsel,.ctsel select{text-transform:none;letter-spacing:0}
+.ctsel select{font:inherit;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 30px 7px 12px;min-height:36px;cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+.ctsel select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .cbirow .cblink{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbidate{color:var(--muted);font-size:12.5px}
 .cbimeta{font-size:12.5px;color:var(--muted);white-space:nowrap}
@@ -2129,7 +2136,7 @@ function cleanAiFacts(x){if(!x||typeof x!=="object"||Array.isArray(x))return nul
   if(!out.rootCause&&!out.summary)return null;
   if(out.faultCorrect==="no_error"&&!out.errorType)out.errorType="";
   return out}
-const KIND_TEXT={CL:"the restaurant client called support",MGR:"a call routed to the manager line",DE:"a delivery call"};
+const KIND_TEXT={CL:"the restaurant client called support",MGR:"a call routed to the manager line",DE:"a delivery call",SME:"a call routed to the subject-matter-expert line (an escalation from another agent or a caller who needs an expert)"};
 function clock12u(ms){const d=new Date(ms),h=d.getUTCHours(),m=d.getUTCMinutes();return (h%12||12)+":"+String(m).padStart(2,"0")+(h<12?" AM":" PM")}
 function dur(s){s=Math.max(0,Math.round(Number(s)||0));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
 function whenTask(k){const m=k.min;return k.when==="before"?`${m} min before the first call`:k.when==="after"?(m<1?"right after the last call":`${m} min after the last call`):k.leg?`during call ${k.leg}`:"between calls"}
@@ -3685,11 +3692,12 @@ function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function parseIso(s){const [y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
 function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)}
-function weekLabel(s){const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
+const wkPre=w=>w===CAND_WEEK?"SA candidates":"Week "+esc(weekLabel(w));
+function weekLabel(s){if(s===CAND_WEEK)return "SA candidates";const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
 function shortWeek(s){return parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
 function shortDate(s){return s?parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}
-/* Alignment sessions: only Oct 5–11 is shown. Set ONLY_WEEK to "" to bring the week picker back. */
-const ONLY_WEEK="2026-10-05";
+/* Alignment sessions: only Oct 5–11 is shown, plus the SA-candidate pool (its own round under the key CAND_WEEK). Set ONLY_WEEK to "" to bring the week picker back. */
+const ONLY_WEEK="2026-10-05",CAND_WEEK="2026-11-02";
 let week = ONLY_WEEK||iso(mondayOf(new Date(Date.now()-7*864e5)));
 
 /* ---------- parsing ---------- */
@@ -3798,6 +3806,9 @@ document.querySelectorAll(".tabs [data-area], .subtabs [data-tab]").forEach(b=>b
 if(ONLY_WEEK){$("#wkPrev").hidden=true;$("#wkNext").hidden=true}
 $("#wkPrev").onclick=()=>{week=addDays(week,-7);chatsWeekListen();renderAll()};
 $("#wkNext").onclick=()=>{week=addDays(week,7);chatsWeekListen();renderAll()};
+if(ONLY_WEEK){const wp=document.querySelector(".weekpick");
+  if(wp){wp.classList.add("wkswitch");wp.innerHTML=[[ONLY_WEEK,"Oct 5 – 11"],[CAND_WEEK,"SA candidates"]].map(([w,l])=>`<button type="button" class="wksw" data-wk="${w}" aria-pressed="${week===w}">${l}</button>`).join("")+'<span id="wkLabel" hidden></span>';
+    wp.addEventListener("click",e=>{const b=e.target.closest("[data-wk]");if(!b||b.dataset.wk===week)return;week=b.dataset.wk;wp.querySelectorAll("[data-wk]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.wk===week)));if(typeof chPanelClose==="function")chPanelClose();chatSel=null;callSel=null;setTab("calib");chatsWeekListen();renderAll()})}}
 
 /* ---------- SCORE: details ---------- */
 let typeArm=null, typeArmT=null;
@@ -5281,7 +5292,7 @@ function navList(){const R=typeof cbRoundItems==="function"?cbRoundItems():[],ik
 function chNavHtml(){const back=`<button type="button" class="btn small cnavback" id="navBack" data-nav="back">← ${esc(navBackLabel())}</button>`;if(!chatSel&&!callSel)return back;
   const N=navList(),i=N.L.findIndex(x=>x.kind+"_"+x.key===N.cur),p=i>0,n=i>=0&&i<N.L.length-1;
   return back+`<span class="cnavstep"><button type="button" class="btn small" id="navPrev" data-nav="prev"${p?"":" disabled"}>‹ Prev</button>
-    <span class="num hint" id="navPos">${i<0?"":(N.round!=null?`Week ${esc(weekLabel(N.round))} · `:"")+`${i+1} of ${N.L.length}`}</span>
+    <span class="num hint" id="navPos">${i<0?"":(N.round!=null?`${wkPre(N.round)} · `:"")+`${i+1} of ${N.L.length}`}</span>
     <button type="button" class="btn small" id="navNext" data-nav="next"${n?"":" disabled"}>Next ›</button></span>`}
 function chNavPaint(){const el=$("#chNav");if(!el)return;const h=chNavHtml();if(el._h===h)return;
   const f=document.activeElement,k=f&&el.contains(f)?f.id:"";el.innerHTML=h;el._h=h;if(k){const g=document.getElementById(k);if(g&&!g.disabled)g.focus({preventScroll:true})}}
@@ -6798,7 +6809,7 @@ function cbGridHtml(it){
   else if(!iSub)status=`<span><b class="num">${subd.length} of ${G.length}</b> submitted. Submit yours to reveal the others.</span>${dots}<span class="r"><span class="hint num" id="cbFilled">${filled}/${need}</span><button type="button" class="btn primary" data-cb="submit"${filled<need||!db?" disabled":""}>Submit my marks</button></span>`;
   else if(!cmp)status=`<span><b class="num">${subd.length} of ${G.length}</b> submitted.</span>${dots}<span class="r">${edit?`<button type="button" class="btn" data-cb="editdone">Done</button>`:`<button type="button" class="btn" data-cb="edit">Edit my marks</button>`}<button type="button" class="btn primary" data-cb="compare">Compare all</button></span>`;
   else status=`<span><b>Compare.</b> <span class="num" id="cbToSettle">${toSettle}</span> of ${need} rows to settle.</span>${dots}<span class="r"><button type="button" class="btn" data-cb="compare">Hide compare</button>${edit?`<button type="button" class="btn" data-cb="editdone">Done</button>`:`<button type="button" class="btn" data-cb="edit">Edit my marks</button>`}<button type="button" class="btn primary" data-cb="lock"${allAgreed&&!cbLockRun&&db?"":" disabled"}>Lock agreed score</button></span>`;
-  const meta=`<div class="cbmeta"><span class="hint num">${it.n?`Week ${esc(weekLabel(it.week))} · ${it.i+1} of ${it.n}`:"Calibration"}</span><span data-cbhere="${esc(ik)}">${cbHereHtml(ik)}</span></div>`;
+  const meta=`<div class="cbmeta"><span class="hint num">${it.n?`${wkPre(it.week)} · ${it.i+1} of ${it.n}`:"Calibration"}</span><span data-cbhere="${esc(ik)}">${cbHereHtml(ik)}</span></div>`;
   return `<div class="cbgrid" id="cbGrid" data-ik="${esc(ik)}" data-stage="${lk?"agreed":cmp?"compare":iSub?"submitted":"scoring"}"><div class="cbstatus${lk?" agreed":""}" role="status">${status}</div>
     <div class="cbscroll"><table class="cbsc"><thead>${head}</thead><tbody>${rows}</tbody>${tot}</table></div>${lk?cbOutcome(it,R,C,lk,subd):""}</div>`}
 function cbOutcome(it,R,C,lk,subd){const M=cbLkMarks(it.ik,lk),off=C?R.filter(r=>String(C.marks[r.id])!==String(M[r.id])):[];
@@ -7008,7 +7019,7 @@ function cbRailHtml(cur){const L=cbRoundItems();if(!L.length)return "";
   const groups=cbBySa(L).map(([sa,l])=>`<li class="cbrgrp"><span class="cbrsa">${esc(sa)}</span><ol>${l.map(it=>{const st=cbRailState(it),lk=(cbItems[it.ik]||{}).locked,on=it.ik===cur;
     return `<li><button type="button" class="cbrrow${on?" cur":""}" data-cb="go" data-ik="${esc(it.ik)}" data-st="${st}" data-kind="${it.kind}"${on?' aria-current="true"':""}><span class="cbrmk ${st}" aria-hidden="true">${st==="agreed"?"✓":""}</span><span class="cbrt"><b>${cbKic(it.kind)}${esc(it.title)}</b><span>${esc(it.kind==="call"?cbKindL(it.q)+" call":"Chat")}${cbDay(it.at)?" · "+esc(cbDay(it.at)):""}${(T=>T?` · <i class="cbrct" data-ct="${esc(T.id)}">${esc(chCaseL(T.id))}</i>`:"")(ctOf(it.kind,it.key))}</span></span>${cbStatusHtml(st,lk)}</button></li>`}).join("")}</ol></li>`).join("");
   return `<section class="cbrail" id="cbRail" data-open="${cbRailOpen?1:0}" aria-label="Round checklist"><button type="button" class="cbrtog" data-cb="railtog" aria-expanded="${cbRailOpen}" aria-controls="cbRailBody"><b>Round checklist</b><span class="cbrsum">${sum}</span><span class="cbrchev" aria-hidden="true">▾</span></button>
-    <div class="cbrbody" id="cbRailBody"><header class="cbrhd"><b>Week ${esc(weekLabel(L[0].week))}</b><span id="cbRailDone">${sum}</span></header><ol class="cbrlist">${groups}</ol></div></section>`}
+    <div class="cbrbody" id="cbRailBody"><header class="cbrhd"><b>${wkPre(L[0].week)}</b><span id="cbRailDone">${sum}</span></header><ol class="cbrlist">${groups}</ol></div></section>`}
 const cbRailBox=ik=>`<div class="cbrailbox" id="cbRailBox" data-ik="${esc(ik)}">${cbRailHtml(ik)}</div>`;
 /* repaint in place when marks change (keeps focus on a row) */
 function cbRailPaint(){const el=$("#view-"+tab+" #cbRailBox");if(!el)return;const h=cbRailHtml(el.dataset.ik);if(el._h===h)return;
@@ -7042,15 +7053,16 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const ctl=[];
   if(amOwner)ctl.push(`<button type="button" class="btn" data-cb="graders" id="cbGrBtn" aria-expanded="${cbGrEdit}">Graders</button>`);
   const busyL=cbBusy==="pull"?"Pulling chats…":cbBusy==="top"?"Adding…":"Drawing…",pullL=amOwner&&cbNeedPull(week);if(amOwner&&!r&&chPulled(week)===null)chIdxCheck(week);
-  if(amOwner&&db){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy||chatPullRun?" disabled":""}>${cbBusy?busyL:chatPullRun?"Pulling chats…":pullL?"Pull chats and draw":"Draw"}</button>`);
+  const isCand=week===CAND_WEEK;
+  if(amOwner&&db&&!isCand){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy||chatPullRun?" disabled":""}>${cbBusy?busyL:chatPullRun?"Pulling chats…":pullL?"Pull chats and draw":"Draw"}</button>`);
     else if(!started)ctl.push(`<button type="button" class="btn" data-cb="redraw" id="cbRedraw" aria-expanded="${cbRedraw}"${cbBusy?" disabled":""}>${cbBusy?busyL:"Redraw"}</button>`)}
-  if(amOwner&&db&&r){const T=cbTopUp(week),dis=cbBusy||chatPullRun?" disabled":"";
+  if(amOwner&&db&&r&&!isCand){const T=cbTopUp(week),dis=cbBusy||chatPullRun?" disabled":"";
     if(T.chat.length)ctl.push(`<button type="button" class="btn" data-cb="addchats" id="cbAddChats"${dis}>Add missing chats <span class="num">(${T.chat.length})</span></button>`);
     if(T.call.length)ctl.push(`<button type="button" class="btn" data-cb="addcalls" id="cbAddCalls"${dis}>Add missing calls <span class="num">(${T.call.length})</span></button>`)}
   if(amOwner&&r&&cbCanGrade()&&!cbGR){const ug=cbUngraded().length;if(ug)ctl.push(`<button type="button" class="btn" data-cb="gradeall" id="cbGradeAll"${(typeof chatRun!=="undefined"&&chatRun)||cbChRun?" disabled":""}>Grade the round's calls <span class="num">(${ug})</span></button>`)}
   if(amOwner&&r&&cbCanGradeChats()&&!cbChRun){const uc=cbUngradedChats().length;if(uc)ctl.push(`<button type="button" class="btn" data-cb="gradechats" id="cbGradeChats"${cbGR||chatRun||chatPullRun?" disabled":""}>Grade the round's chats <span class="num">(${uc})</span></button>`)}
   if(nx)ctl.push(`<button type="button" class="btn primary" data-cb="continue" id="cbGo">${mine?"Continue":"Start"} →</button>`);
-  const head=`<div class="cbhd"><div class="cbttl"><h2>Week ${esc(weekLabel(week))}</h2>${r?`<span class="num" id="cbSum">${items.length} items · you: ${mine} of ${items.length} done</span>`:""}</div><span class="cbhdr"><span data-cbhere="">${cbHereHtml("")}</span>${ctl.join("")}</span></div>${cbGrEditHtml()}`;
+  const head=`<div class="cbhd"><div class="cbttl"><h2>${wkPre(week)}</h2>${r?`<span class="num" id="cbSum">${items.length} items · you: ${mine} of ${items.length} done</span>`:""}</div><span class="cbhdr"><span data-cbhere="">${cbHereHtml("")}</span>${ctl.join("")}</span></div>${cbGrEditHtml()}`;
   const conf=cbRedraw&&r&&!started&&amOwner?`<div class="cbconfirm" id="cbRdConfirm" role="group" aria-label="Redraw"><span>Replace this week's ${items.length} items with a new draw?</span><button type="button" class="btn danger" data-cb="redrawgo" id="cbRdGo">${cbNeedPull(week)?"Pull chats and redraw":"Redraw"}</button><button type="button" class="btn" data-cb="redraw">Cancel</button></div>`:"";
   const note=cbNote?`<div class="cvnote" id="cbNote">${esc(cbNote)}</div>`:"";
   const noChats=r&&r.chatPool===0&&!items.some(x=>x.kind==="chat")?`<p class="cvnote" id="cbNoChats">No WIRA chats this week</p>`:"";
@@ -7058,7 +7070,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   cbNeedNames(G);
   /* who came up short: fewer than 3 chats or calls this week */
   const sas=(r.sas&&r.sas.length?r.sas:[...new Set(items.map(x=>x.sa))]);
-  const short=sas.map(sa=>{const c=items.filter(x=>x.sa===sa&&x.kind==="chat").length,k=items.filter(x=>x.sa===sa&&x.kind==="call").length,p=[];
+  const short=isCand?[]:sas.map(sa=>{const c=items.filter(x=>x.sa===sa&&x.kind==="chat").length,k=items.filter(x=>x.sa===sa&&x.kind==="call").length,p=[];
     if(c<CB_PER)p.push(`${c} of ${CB_PER} chats`);if(k<CB_PER)p.push(`${k} of ${CB_PER} calls`);return p.length?`<span data-sa="${esc(sa)}"><b>${esc(chFirst(sa))}</b> ${p.join(", ")}</span>`:""}).filter(Boolean);
   const filt=`<div class="cbfilt"><div class="cbseg" role="group" aria-label="Show">${[["all","All"],["chat","Chats"],["call","Calls"]].map(([v,l])=>`<button type="button" data-cb="filt" data-v="${v}" aria-pressed="${cbFilt===v}">${l}</button>`).join("")}</div>
     <button type="button" class="btn small cbmine" data-cb="mine" aria-pressed="${cbMineOnly}">Mine to do</button></div>`;
@@ -7067,7 +7079,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   /* the case type chips: counts over what the kind and Mine filters show; the picked chip stays at 0 */
   const ctN=new Map();items.filter(vis0).forEach(it=>{const k=ctId(it);ctN.set(k,(ctN.get(k)||0)+1)});if(cbCtFilt!=="all"&&!ctN.has(cbCtFilt))ctN.set(cbCtFilt,0);
   const ctOrd=ctTypes().map(t=>t.id),ctL=[...ctN.entries()].sort((a,b)=>b[1]-a[1]||(a[0]?ctOrd.indexOf(a[0]):99)-(b[0]?ctOrd.indexOf(b[0]):99));
-  const ctf=`<div class="ctfilt" id="cbCtFilt" role="group" aria-label="Case type"><button type="button" class="ctchip" data-cb="ctf" data-v="all" aria-pressed="${cbCtFilt==="all"}">All <span class="num">${items.filter(vis0).length}</span></button>${ctL.map(([k,n])=>`<button type="button" class="ctchip" data-cb="ctf" data-v="${esc(k||"none")}" aria-pressed="${cbCtFilt===k}">${esc(k?chCaseL(k):"No type")} <span class="num">${n}</span></button>`).join("")}</div>`;
+  const ctf=`<label class="ctsel"><span class="sr-only">Case type</span><select id="cbCtSel"><option value="all"${cbCtFilt==="all"?" selected":""}>All case types (${items.filter(vis0).length})</option>${ctL.map(([k,n])=>`<option value="${esc(k||"none")}"${cbCtFilt===k?" selected":""}>${esc(k?chCaseL(k):"No type")} (${n})</option>`).join("")}</select></label>`;
   const groups=cbBySa(items).map(([sa,l])=>{const v=l.filter(vis);if(!v.length)return "";const d=l.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length;
     return `<section class="cbsa" data-sa="${esc(sa)}"><h3><span>${esc(sa)}</span><span class="hint num">${d} of ${l.length} done (you)</span></h3><ol class="cbilist">${v.map(it=>cbIRow(it,G)).join("")}</ol></section>`}).join("");
   const S=cbStats(items),SC=cbStats(items.filter(x=>x.kind==="chat")),SK=cbStats(items.filter(x=>x.kind==="call"));
@@ -7080,7 +7092,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const gl=any?S.G.filter(u=>S.per.get(u)||cbPend(u)).map(u=>{const p=S.per.get(u);return cbBar(`<span class="cbcolh">${cbAv(u)}${u===myId?"You":esc(cbName(u))}</span>`,p?p.m/p.n*100:null,"lo",u)}):[];
   if(S.claude!=null)gl.push(cbBar(`<span class="cbcolh">${cbAv("claude")}Claude</span>`,S.claude,"lo","claude"));
   const each=`<div><h3 class="evh">Each grader vs the agreed mark</h3>${gl.length?`<div class="cbbars" id="cbEach">${gl.join("")}</div>`:`<p class="hint">Nothing agreed yet.</p>`}</div>`;
-  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${noChats}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt}${ctf}
+  return `<section class="panel cbsec" id="cbRound">${head}<div class="cbbd">${conf}${note}${noChats}${cbRoundRunHtml()}${short.length?`<p class="cbshort" id="cbShort"><span class="lbl-sm">Short this week</span>${short.join("")}</p>`:""}${filt.replace(/<\/div>\s*$/,ctf+"</div>")}
     <div class="cbgroups" id="cbItems">${groups||`<p class="hint">Nothing to do here.</p>`}</div>${kpis}<div class="cbtwo">${dis}${each}</div></div></section>`}
 
 /* ---------- a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching, like a chat ---------- */
@@ -7099,7 +7111,7 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLo
     ["Talk time",`<span class="num">${esc(dur(cbTalk(q)))}</span>`],["Linked calls",legs.length>1?`<span class="num">${legs.length} calls</span>${lc&&lc.hidden?` <span class="tkmut">+ ${lc.hidden} voicemail / no answer</span>`:""}`:`<span class="tkmut">Single call</span>`],
     ["Team",team.length?`Case with ${esc(team.join(", "))}`:`<span class="tkmut">Solo</span>`],["WIRA tasks",T.length?`<span class="num">${T.length}</span> linked`:`<span class="tkmut">None linked</span>`],
     ["Recordings",legs.filter(l=>l.id).length?`<span class="tkrecs">${legs.filter(l=>l.id).map((l,i)=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec">▶ Call ${i+1}${l.sec?` <span class="num tkmut">(${esc(dur(l.sec))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
-  const band=cbInRound(it.ik)?`<div class="lrband" id="tkRound"><b>Week ${esc(weekLabel(it.week))}</b><span>Round call · ${esc(chFirst(it.sa))}</span></div>`:"";
+  const band=cbInRound(it.ik)?`<div class="lrband" id="tkRound"><b>${wkPre(it.week)}</b><span>Round call · ${esc(chFirst(it.sa))}</span></div>`:"";
   return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span>${ctTicketHtml("call",it.key,true)}</div>
     <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
@@ -7343,6 +7355,7 @@ document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!(t.datase
   const crit=t.dataset.cbnote,s=cbSub(myId,it.ik);if(s){if((cbItems[it.ik]||{}).locked)return;cbSetMine(it.ik,{notes:Object.assign({},s.notes,{[crit]:t.value})})}else cbDraftOf(it.ik).notes[crit]=t.value;
   cbSaveMine(it.ik);const b=document.querySelector(`#cbGrid [data-cb="note"][data-crit="${crit}"].cbnotebtn`);if(b){const h=!!t.value.trim();b.classList.toggle("has",h);b.textContent=h?"Note ✓":"+ Note"}});
 document.addEventListener("input",e=>{if(e.target&&e.target.id==="cbGrIn")cbGrDraft=e.target.value});
+document.addEventListener("change",e=>{if(!e.target||e.target.id!=="cbCtSel")return;const v=e.target.value;cbCtFilt=v==="all"?"all":v==="none"?"":ctAlias(v);renderCalib();const n=$("#cbCtSel");if(n)n.focus()});
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target&&e.target.id==="cbGrIn"){e.preventDefault();cbGrSave()}});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&cbPanel&&!e.defaultPrevented){e.preventDefault();cbPanelClose(true)}});
 
