@@ -1141,6 +1141,9 @@ body.chp-on{padding-right:var(--chpw)}
 .cbwhyfull{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--ink);max-width:760px}
 .cbnotein{width:100%;max-width:760px;box-sizing:border-box;font:inherit;font-size:14px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);resize:vertical;field-sizing:content;min-height:40px}
 .cbmynotero{margin:0;font-size:13px;color:var(--muted)}
+.cbnb{display:inline-grid;place-items:center;width:28px;height:28px;margin:-4px 0;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);cursor:pointer;vertical-align:middle}
+.cbnb:hover{color:var(--accent);background:var(--accent-soft)}
+.cbnb.has{color:var(--accent)}
 .cbsc .cm.na{font-family:var(--f-body)}
 .chpanel{position:fixed;top:0;right:0;bottom:0;width:var(--chpw);z-index:15;display:flex;flex-direction:column;background:var(--panel);color:var(--ink);
   border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px color-mix(in srgb,var(--ink) 45%,transparent);animation:chpin .18s ease-out}
@@ -6490,7 +6493,7 @@ const cbMarks=new Map(),cbMarkOffs=new Map();
 let cbRowsSub={ik:"",off:null,rows:{}};
 const cbDrafts=new Map(),cbW=new Map(),cbNames=new Map();let cbNameRun=null;
 /* local view state: who I revealed (per item), Compare all, open rows, my open note, editing my submitted marks, the settle box */
-const cbPeek=new Set(),cbCompare=new Set(),cbOpen=new Set(),cbEdit=new Set();let cbNoteOpen="",cbSettle=null;
+const cbPeek=new Set(),cbCompare=new Set(),cbOpen=new Set(),cbEdit=new Set(),cbRowSel=new Map();let cbNoteOpen="",cbSettle=null;
 let cbFilt="all",cbCtFilt="all",cbMineOnly=false,cbRedraw=false,cbTkTab="ticket",cbEvMore=false,cbBusy=false,cbNote="",cbPeers=[],cbPresSig="",cbSeenAt=0,cbPanel=null,cbPanelEl=null,cbLockRun=false;
 /* short names for the call rubric rows (the live rubric, CUR); MGR / DE and cases change a few */
 const CB_CALL_SHORT={"1a":"Opening spiel","1b":"Tone and dead air","1c":"Empathy and composure","1d":"Clear communication","2a":"Listened and gathered info","2b":"Root cause and fault",
@@ -6663,10 +6666,11 @@ function cbGridHtml(it){
   const NM={};R.forEach(r=>{const a=cbAgreed(ik,r.id,subd);NM[r.id]=a?a.mark:mine.marks[r.id]});
   const GR=scGroups(R),gHead=r=>{const g=GR.find(x=>x.rows[0]===r);if(!g)return "";const p=scPct(g.rows,NM);
     return `<tr class="scgrp" data-grp="${esc(g.name)}"><th scope="rowgroup" colspan="${cols}"><span class="scgn">${esc(g.name||"Other")}</span><span class="scgw num">${scWt(g.w)}</span>${p!=null?`<span class="scgp num">${fmt(p)}%</span>`:""}</th></tr>`};
-  const selC=it.kind==="chat"?(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit):(cbPanel&&cbPanel.ik===ik&&cbPanel.crit);
+  const selC=(it.kind==="chat"?(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit):(cbPanel&&cbPanel.ik===ik&&cbPanel.crit))||cbRowSel.get(ik);
   const rows=R.map(r=>{const k=ik+"|"+r.id,cv=C?C.marks[r.id]:null,sel=selC===r.id;
+    const hasN=!!String(mine.notes[r.id]||"").trim(),nb=`<button type="button" class="cbnb${hasN?" has":""}" data-cb="rowopen" data-crit="${r.id}" aria-label="${hasN?"Your note":"Add a note"} on ${esc(r.label)}" title="${hasN?"Your note":"Add a note"}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"></path></svg></button>`;
     const crit=(it.kind==="chat"?`<button type="button" class="cbcrit" data-psrc="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit===r.id)}">${esc(r.label)}</button>`
-      :`<button type="button" class="cbcrit" data-cb="panel" data-crit="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(cbPanel&&cbPanel.crit===r.id)}">${esc(r.label)}</button>`)+`<span class="scmeta">${scWHtml(r,NM[r.id])}${scInfoBtn(r,kd)}</span>`;
+      :`<button type="button" class="cbcrit" data-cb="panel" data-crit="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(cbPanel&&cbPanel.crit===r.id)}">${esc(r.label)}</button>`)+`<span class="scmeta">${scWHtml(r,NM[r.id])}${scInfoBtn(r,kd)}${lk?"":nb}</span>`;
     const cwhy=C?String((C.why||{})[r.id]||""):"",ccites=C?(it.kind==="call"?cbCites(C,r.id):chCitesIn(cwhy)):[];
     const cells=G.map(u=>{
       if(u===me&&active){const v=mine.marks[r.id],hn=!!String(mine.notes[r.id]||"").trim();
@@ -6687,7 +6691,7 @@ function cbGridHtml(it){
       det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbnotes">${cards.join("")}</div>${lk?(a&&a.note?`<p class="cbagwhy"><span class="lbl-sm">Agreed</span> ${esc(a.note)}</p>`:""):
         `<div class="cbagree"><span class="lbl-sm">Agreed</span><span class="cbpicks" role="group" aria-label="Agreed mark for ${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="apick" data-crit="${r.id}" data-v="${x}" aria-pressed="${pickV!=null&&String(pickV)===String(x)}">${esc(scL(x,r))}</button>`).join("")}</span>
           <textarea rows="1" data-cbag="${r.id}" aria-label="Why we agreed on ${esc(r.label)}">${esc(noteV)}</textarea><button type="button" class="btn primary" data-cb="asave" data-crit="${r.id}"${pickV==null?" disabled":""}>Save</button></div>`}</td></tr>`}
-    if(sel&&!open){const hn=String(mine.notes[r.id]||"");det=`<tr class="cbdet cbopen"><td colspan="${cols}"><p class="cbwhyfull">${C&&cwhy?esc(cwhy):"No reason from Claude."}</p>${active?`<textarea rows="1" class="cbnotein" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Your note">${esc(hn)}</textarea>`:hn.trim()?`<p class="cbmynotero">${esc(hn)}</p>`:""}</td></tr>`}
+    if(sel&&!open){const hn=String(mine.notes[r.id]||"");det=`<tr class="cbdet cbopen"><td colspan="${cols}"><p class="cbwhyfull">${C&&cwhy?esc(cwhy):"No reason from Claude."}</p>${!lk&&(active||iSub)?`<textarea rows="1" class="cbnotein" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Your note">${esc(hn)}</textarea>`:hn.trim()?`<p class="cbmynotero">${esc(hn)}</p>`:""}</td></tr>`}
     else if(active&&cbNoteOpen===k)det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbmynote">${me?cbAv(me):""}<textarea rows="2" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Why this mark">${esc(mine.notes[r.id]||"")}</textarea><button type="button" class="btn" data-cb="note" data-crit="${r.id}">Done</button></div></td></tr>`;
     const tr=`<tr class="${cmp?"cbrow":""}${open?" open":""}${sel?" cbsel":""}" data-cb="${cmp?"row":"x"}" data-crit="${r.id}" id="cbr-${r.id}"><th scope="row" class="cbcritc">${crit}</th><td class="cbcl">${C?cbMk(cv,r):`<span class="cbmk na">–</span>`}</td>${cells.join("")}${extra}</tr>`;
     return gHead(r)+tr+det}).join("");
@@ -7222,7 +7226,8 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
     case "pclose":cbPanelClose(true);return}
   if(!it)return;const ik=it.ik,k=ik+"|"+crit;
   switch(A){
-    case "pick":cbPick(it,crit,el.dataset.v);break;
+    case "pick":cbRowSel.set(ik,crit);cbPick(it,crit,el.dataset.v);break;
+    case "rowopen":cbRowSel.set(ik,cbRowSel.get(ik)===crit?"":crit);cbPaint();{const t=document.querySelector(`#cbGrid [data-cbnote="${crit}"]`);if(t)t.focus()}break;
     case "note":cbNoteOpen=cbNoteOpen===k?"":k;cbPaint();{const t=document.querySelector(`[data-cbnote="${crit}"]`);if(t)t.focus()}break;
     case "peek":{const p=ik+"|"+el.dataset.u;if(cbPeek.has(p))cbPeek.delete(p);else cbPeek.add(p);cbPaint();break}
     case "submit":cbSubmit(it);break;
@@ -7240,7 +7245,7 @@ document.addEventListener("click",e=>{const el=e.target.closest("[data-cb]");if(
     case "grade":if(it.kind==="call"){cbGRErr.delete(String(it.key));cbGradeRun([it],true)}break}});
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!(t.dataset.cbnote||t.dataset.cbag))return;const it=cbGridItem(t);if(!it)return;
   if(t.dataset.cbag){const crit=t.dataset.cbag;if(!cbSettle||cbSettle.ik!==it.ik||cbSettle.crit!==crit)cbSettle={ik:it.ik,crit,mark:null,note:""};cbSettle.note=t.value;return}
-  const crit=t.dataset.cbnote,s=cbSub(myId,it.ik);if(s){if(!cbEdit.has(it.ik))return;cbSetMine(it.ik,{notes:Object.assign({},s.notes,{[crit]:t.value})})}else cbDraftOf(it.ik).notes[crit]=t.value;
+  const crit=t.dataset.cbnote,s=cbSub(myId,it.ik);if(s){if((cbItems[it.ik]||{}).locked)return;cbSetMine(it.ik,{notes:Object.assign({},s.notes,{[crit]:t.value})})}else cbDraftOf(it.ik).notes[crit]=t.value;
   cbSaveMine(it.ik);const b=document.querySelector(`#cbGrid [data-cb="note"][data-crit="${crit}"].cbnotebtn`);if(b){const h=!!t.value.trim();b.classList.toggle("has",h);b.textContent=h?"Note ✓":"+ Note"}});
 document.addEventListener("input",e=>{if(e.target&&e.target.id==="cbGrIn")cbGrDraft=e.target.value});
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target&&e.target.id==="cbGrIn"){e.preventDefault();cbGrSave()}});
