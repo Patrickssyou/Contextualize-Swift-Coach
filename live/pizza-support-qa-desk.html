@@ -1130,6 +1130,18 @@ body.chp-on{padding-right:var(--chpw)}
 /* Audit is one column: no verdict board or round checklist on the right */
 #view-chat .cdesk{grid-template-columns:minmax(0,1fr)!important;grid-template-areas:"ticket" "main"!important}
 #view-chat .cverdict,#view-chat .cside,#view-chat .cbrailbox{display:none!important}
+/* scorecard, option C: compact rows, others as avatars, the open row holds Claude's reason and my note */
+.cbsc td.cbav-c{width:40px}
+.cbav-d{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:10px;font-weight:700;color:var(--muted);border:1.5px dashed var(--line);box-sizing:border-box}
+.cbav-d.on{border:0;color:#fff}
+.cbav-d.on.g1{background:var(--g1)}.cbav-d.on.g2{background:var(--g2)}.cbav-d.on.g3{background:var(--g3)}.cbav-d.on.g4{background:var(--g4)}
+.cbsc tr.cbsel>*{background:var(--accent-soft)}
+.cbsc tr.cbsel>th:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.cbsc tr.cbopen>td{background:var(--accent-soft);text-align:left;padding:4px 16px 14px 19px;box-shadow:inset 3px 0 0 var(--accent)}
+.cbwhyfull{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--ink);max-width:760px}
+.cbnotein{width:100%;max-width:760px;box-sizing:border-box;font:inherit;font-size:14px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);resize:vertical;field-sizing:content;min-height:40px}
+.cbmynotero{margin:0;font-size:13px;color:var(--muted)}
+.cbsc .cm.na{font-family:var(--f-body)}
 .chpanel{position:fixed;top:0;right:0;bottom:0;width:var(--chpw);z-index:15;display:flex;flex-direction:column;background:var(--panel);color:var(--ink);
   border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px color-mix(in srgb,var(--ink) 45%,transparent);animation:chpin .18s ease-out}
 @keyframes chpin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
@@ -5028,6 +5040,9 @@ const chEscOf=m=>!m?undefined:m.escalation!==undefined?m.escalation:m.esc!==unde
 /* the route's last mark: Ownership on v4 ("2/4"), Escalation on v3 / v2 ("Level 2") */
 const chEscV4=m=>!!m&&m.escalation===undefined&&m.esc===undefined&&m.ownership!==undefined;
 const chEscTxt=m=>{const v=chEscOf(m);return v==="na"||v==null?"N/A":chEscV4(m)?chMarkL(v)+"/4":"Level "+chMarkL(v)};
+/* the v4 rows show 1–5 (stored 0–4: a 1 is zero points) */
+const sc15=r=>!!r&&r.min===0&&r.max===4;
+const scL=(v,r)=>v==="na"?"N/A":v==null||v===""?"–":sc15(r)&&!(Number(v)%1)?String(Number(v)+1):chMarkL(v);
 const chMarkL=v=>v==="na"?"N/A":v==null?"–":Number(v)%1?`${Math.floor(v)}–${Math.ceil(v)}`:String(v);
 function chMarkCls(v,max){if(v==="na"||v==null)return "na";const p=Number(v)/max;return p>=1?"s3":p>=.5?"s2":p>0?"s1":"s0"}
 
@@ -5118,9 +5133,9 @@ function scWHtml(r,v){return v==="na"&&!scNaFull()?`<s class="scw num" title="Re
 /* ---------- ⓘ: the criterion's definition, its level ladder and its N/A rule, in one fixed layer (never clipped by a scrolling table or a rail) ---------- */
 const scInfoReg=new Map();let scPopKey="",scPopPin=false,scPopBtn=null;
 function scInfoBtn(r,kind){const k=(kind||"chat")+":"+r.id;scInfoReg.set(k,r);return `<button type="button" class="scinfo" data-scinfo="${esc(k)}" aria-label="About ${esc(r.label)}" aria-expanded="${scPopKey===k}" aria-controls="scPop">ⓘ</button>`}
-function scPopHtml(r){const L=[];for(let v=r.min;v<=r.max;v++){const t=String((r.lv||[])[v]||"").trim();if(t)L.push(`<li><b class="cbmk ${chMarkCls(v,r.max)}">${v}</b><span>${esc(t)}</span></li>`)}
+function scPopHtml(r){const L=[];for(let v=r.min;v<=r.max;v++){const t=String((r.lv||[])[v]||"").trim();if(t)L.push(`<li><b class="cbmk ${chMarkCls(v,r.max)}">${esc(scL(v,r))}</b><span>${esc(t)}</span></li>`)}
   const sc=L.length?"":`<p class="scpd">Scale ${r.min}–${r.max}${r.na?" or N/A":""}</p>`;
-  if(r.na)L.push(`<li class="scna"><b class="cbmk na">N/A</b><span>${esc(r.naText||"Doesn't apply")}</span></li>`);
+  if(r.na||sc15(r))L.push(`<li class="scna"><b class="cbmk na">N/A</b><span>${esc(r.naText||"Doesn't apply")}</span></li>`);
   return `<p class="scpt">${esc(r.label)} <span class="num">${scWt(r.w)}</span></p>${r.d?`<p class="scpd">${esc(r.d)}</p>`:""}${sc}${L.length?`<ol class="scpl">${L.join("")}</ol>`:""}`}
 function scPopEl(){let el=document.getElementById("scPop");if(!el){el=document.createElement("div");el.id="scPop";el.className="scpop";el.setAttribute("role","tooltip");el.hidden=true;document.body.append(el)}return el}
 function scPopShow(btn,pin){const k=btn.dataset.scinfo,r=scInfoReg.get(k);if(!r)return;const el=scPopEl();
@@ -6192,7 +6207,7 @@ function chPanelOpen(crit,via){const sid=String(chatSel||""),c=chatBy(sid),a=cha
   el.hidden=false;document.body.classList.add("chp-on");chPanelRender();chPanelAria()}
 function chPanelClose(refocus){if(!chPanel)return;const P=chPanel;chPanel=null;if(chPanelEl){chPanelEl.hidden=true;chPanelEl.innerHTML=""}document.body.classList.remove("chp-on");chPanelAria();
   if(refocus){const b=$(`[data-psrc="${P.crit}"]`);if(b)b.focus({preventScroll:true})}}
-function chPanelAria(){document.querySelectorAll("#view-chat [data-psrc]").forEach(b=>b.setAttribute("aria-expanded",String(!!(chPanel&&chPanel.crit===b.dataset.psrc))))}
+function chPanelAria(){if(typeof cbPaint==="function")setTimeout(cbPaint,0);document.querySelectorAll("#view-chat [data-psrc]").forEach(b=>b.setAttribute("aria-expanded",String(!!(chPanel&&chPanel.crit===b.dataset.psrc))))}
 /* closes the panel when its chat, tab or audit is gone, or when the contest that opened it closed */
 function chPanelSync(){if(!chPanel)return;const sid=String(chatSel||"");
   if(chPanel.sid!==sid||tab!=="chat"||!chatAud[sid]||!chRub(chPanel.crit)){chPanelClose();return}
@@ -6632,8 +6647,8 @@ function cbStage(it){const d=cbItems[it.ik];if(d&&d.locked)return "agreed";const
 function cbSpread(vals){const v=vals.filter(x=>x!=null&&x!=="");if(v.length<2)return null;if(v.every(x=>String(x)===String(v[0])))return 0;
   if(v.some(x=>x==="na"))return "na";return Math.max(...v.map(Number))-Math.min(...v.map(Number))}
 const cbSpreadHtml=s=>s==null?"":s===0?`<span class="pill good">Match</span>`:s==="na"?`<span class="pill ok">N/A split</span>`:`<span class="pill ${s>=2?"bad":"ok"}">${s} apart</span>`;
-const cbMk=(v,r)=>v==null||v===""?`<span class="cbmk na">–</span>`:`<span class="cbmk ${chMarkCls(v,r.max)}">${esc(v==="na"?"N/A":chMarkL(v))}</span>`;
-const cbOpts=r=>{const o=[];for(let v=r.min;v<=r.max;v++)o.push(v);if(r.na)o.push("na");return o};
+const cbMk=(v,r)=>v==null||v===""?`<span class="cbmk na">–</span>`:`<span class="cbmk ${chMarkCls(v,r.max)}">${esc(scL(v,r))}</span>`;
+const cbOpts=r=>{const o=[];for(let v=r.min;v<=r.max;v++)o.push(v);if(r.na||sc15(r))o.push("na");return o};
 
 /* ---------- the shared scorecard grid (chats in the Audit tab, calls in the Calibration tab) ---------- */
 function cbGridHtml(it){
@@ -6648,17 +6663,18 @@ function cbGridHtml(it){
   const NM={};R.forEach(r=>{const a=cbAgreed(ik,r.id,subd);NM[r.id]=a?a.mark:mine.marks[r.id]});
   const GR=scGroups(R),gHead=r=>{const g=GR.find(x=>x.rows[0]===r);if(!g)return "";const p=scPct(g.rows,NM);
     return `<tr class="scgrp" data-grp="${esc(g.name)}"><th scope="rowgroup" colspan="${cols}"><span class="scgn">${esc(g.name||"Other")}</span><span class="scgw num">${scWt(g.w)}</span>${p!=null?`<span class="scgp num">${fmt(p)}%</span>`:""}</th></tr>`};
-  const rows=R.map(r=>{const k=ik+"|"+r.id,cv=C?C.marks[r.id]:null;
+  const selC=it.kind==="chat"?(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit):(cbPanel&&cbPanel.ik===ik&&cbPanel.crit);
+  const rows=R.map(r=>{const k=ik+"|"+r.id,cv=C?C.marks[r.id]:null,sel=selC===r.id;
     const crit=(it.kind==="chat"?`<button type="button" class="cbcrit" data-psrc="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(typeof chPanel!=="undefined"&&chPanel&&chPanel.crit===r.id)}">${esc(r.label)}</button>`
       :`<button type="button" class="cbcrit" data-cb="panel" data-crit="${r.id}" title="${esc(r.title)}" aria-expanded="${!!(cbPanel&&cbPanel.crit===r.id)}">${esc(r.label)}</button>`)+`<span class="scmeta">${scWHtml(r,NM[r.id])}${scInfoBtn(r,kd)}</span>`;
     const cwhy=C?String((C.why||{})[r.id]||""):"",ccites=C?(it.kind==="call"?cbCites(C,r.id):chCitesIn(cwhy)):[];
     const cells=G.map(u=>{
       if(u===me&&active){const v=mine.marks[r.id],hn=!!String(mine.notes[r.id]||"").trim();
-        return `<td class="me"><span class="cbpicks" role="group" aria-label="${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="pick" data-crit="${r.id}" data-v="${x}" aria-pressed="${String(v)===String(x)}">${x==="na"?"N/A":x}</button>`).join("")}</span><button type="button" class="cbnotebtn${hn?" has":""}" data-cb="note" data-crit="${r.id}" aria-expanded="${cbNoteOpen===k}">${hn?"Note ✓":"+ Note"}</button></td>`}
+        return `<td class="me"><span class="cbpicks" role="group" aria-label="${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="pick" data-crit="${r.id}" data-v="${x}" aria-pressed="${String(v)===String(x)}">${esc(scL(x,r))}</button>`).join("")}</span></td>`}
       const d=u===me?{marks:mine.marks,notes:mine.notes}:cbSub(u,ik);
       if(vis(u)&&d){const n=String((d.notes||{})[r.id]||"").trim();return `<td class="${u===me?"me":""}">${cbMk((d.marks||{})[r.id],r)}${n?`<span class="cbhasnote" title="${esc(n)}" aria-label="Has a note">✎</span>`:""}</td>`}
-      if(cbPend(u))return `<td class="pend"><span class="cbhid">Hasn't opened it</span></td>`;
-      return `<td><span class="cbhid">${cbSub(u,ik)?"✓ Scored":"Not yet"}</span></td>`});
+      const st=cbPend(u)?"hasn't opened it":cbSub(u,ik)?"scored":"not yet";
+      return `<td class="cbav-c"><span class="cbav-d${cbSub(u,ik)?" on "+cbColor(u):""}" title="${esc(cbName(u))}: ${st}" aria-label="${esc(cbName(u))}: ${st}">${esc(cbIni(u))}</span></td>`});
     let extra="";
     if(cmp){const sp=cbSpread(subd.map(u=>((cbSub(u,ik)||{}).marks||{})[r.id])),a=cbAgreed(ik,r.id,subd);ag[r.id]=a;if(!a){allAgreed=false;toSettle++}
       const off=lk&&a&&C&&String(cv)!==String(a.mark);
@@ -6669,10 +6685,11 @@ function cbGridHtml(it){
         .concat(subd.map(u=>{const d=cbSub(u,ik),n=String((d.notes||{})[r.id]||"").trim();return `<div class="cbnt${n?"":" empty"}"><header>${cbAv(u)}${u===me?"You":esc(cbName(u))} · ${cbMk((d.marks||{})[r.id],r)}</header><p>${esc(n||"No note.")}</p></div>`}));
       const pickV=S?S.mark:a?a.mark:null,noteV=S?S.note:a&&!a.auto?a.note:"";
       det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbnotes">${cards.join("")}</div>${lk?(a&&a.note?`<p class="cbagwhy"><span class="lbl-sm">Agreed</span> ${esc(a.note)}</p>`:""):
-        `<div class="cbagree"><span class="lbl-sm">Agreed</span><span class="cbpicks" role="group" aria-label="Agreed mark for ${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="apick" data-crit="${r.id}" data-v="${x}" aria-pressed="${pickV!=null&&String(pickV)===String(x)}">${x==="na"?"N/A":x}</button>`).join("")}</span>
+        `<div class="cbagree"><span class="lbl-sm">Agreed</span><span class="cbpicks" role="group" aria-label="Agreed mark for ${esc(r.label)}">${cbOpts(r).map(x=>`<button type="button" class="cm ${chMarkCls(x,r.max)}" data-cb="apick" data-crit="${r.id}" data-v="${x}" aria-pressed="${pickV!=null&&String(pickV)===String(x)}">${esc(scL(x,r))}</button>`).join("")}</span>
           <textarea rows="1" data-cbag="${r.id}" aria-label="Why we agreed on ${esc(r.label)}">${esc(noteV)}</textarea><button type="button" class="btn primary" data-cb="asave" data-crit="${r.id}"${pickV==null?" disabled":""}>Save</button></div>`}</td></tr>`}
-    if(active&&cbNoteOpen===k)det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbmynote">${me?cbAv(me):""}<textarea rows="2" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Why this mark">${esc(mine.notes[r.id]||"")}</textarea><button type="button" class="btn" data-cb="note" data-crit="${r.id}">Done</button></div></td></tr>`;
-    const tr=`<tr class="${cmp?"cbrow":""}${open?" open":""}" data-cb="${cmp?"row":"x"}" data-crit="${r.id}" id="cbr-${r.id}"><th scope="row" class="cbcritc">${crit}</th><td class="cbcl">${C?cbMk(cv,r)+scWhyHtml(ik+"|"+r.id,r.id,cwhy,[],C.old&&cv!=null&&cv!==""):`<span class="cbmk na">–</span>`}</td>${cells.join("")}${extra}</tr>`;
+    if(sel&&!open){const hn=String(mine.notes[r.id]||"");det=`<tr class="cbdet cbopen"><td colspan="${cols}"><p class="cbwhyfull">${C&&cwhy?esc(cwhy):"No reason from Claude."}</p>${active?`<textarea rows="1" class="cbnotein" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Your note">${esc(hn)}</textarea>`:hn.trim()?`<p class="cbmynotero">${esc(hn)}</p>`:""}</td></tr>`}
+    else if(active&&cbNoteOpen===k)det=`<tr class="cbdet"><td colspan="${cols}"><div class="cbmynote">${me?cbAv(me):""}<textarea rows="2" data-cbnote="${r.id}" aria-label="Your note on ${esc(r.label)}" placeholder="Why this mark">${esc(mine.notes[r.id]||"")}</textarea><button type="button" class="btn" data-cb="note" data-crit="${r.id}">Done</button></div></td></tr>`;
+    const tr=`<tr class="${cmp?"cbrow":""}${open?" open":""}${sel?" cbsel":""}" data-cb="${cmp?"row":"x"}" data-crit="${r.id}" id="cbr-${r.id}"><th scope="row" class="cbcritc">${crit}</th><td class="cbcl">${C?cbMk(cv,r):`<span class="cbmk na">–</span>`}</td>${cells.join("")}${extra}</tr>`;
     return gHead(r)+tr+det}).join("");
   const agM=Object.fromEntries(R.map(r=>[r.id,ag[r.id]?ag[r.id].mark:null]));
   const pct=m=>{const p=cbPct(it.kind,m,it);return p==null?"–":fmt(p)+"%"};
@@ -6685,11 +6702,11 @@ function cbGridHtml(it){
   else if(!cmp)status=`<span><b class="num">${subd.length} of ${G.length}</b> submitted.</span>${dots}<span class="r">${edit?`<button type="button" class="btn" data-cb="editdone">Done</button>`:`<button type="button" class="btn" data-cb="edit">Edit my marks</button>`}<button type="button" class="btn primary" data-cb="compare">Compare all</button></span>`;
   else status=`<span><b>Compare.</b> <span class="num" id="cbToSettle">${toSettle}</span> of ${need} rows to settle.</span>${dots}<span class="r"><button type="button" class="btn" data-cb="compare">Hide compare</button>${edit?`<button type="button" class="btn" data-cb="editdone">Done</button>`:`<button type="button" class="btn" data-cb="edit">Edit my marks</button>`}<button type="button" class="btn primary" data-cb="lock"${allAgreed&&!cbLockRun&&db?"":" disabled"}>Lock agreed score</button></span>`;
   const meta=`<div class="cbmeta"><span class="hint num">${it.n?`Week ${esc(weekLabel(it.week))} · ${it.i+1} of ${it.n}`:"Calibration"}</span><span data-cbhere="${esc(ik)}">${cbHereHtml(ik)}</span></div>`;
-  return `<div class="cbgrid" id="cbGrid" data-ik="${esc(ik)}" data-stage="${lk?"agreed":cmp?"compare":iSub?"submitted":"scoring"}">${meta}<div class="cbstatus${lk?" agreed":""}" role="status">${status}</div>
+  return `<div class="cbgrid" id="cbGrid" data-ik="${esc(ik)}" data-stage="${lk?"agreed":cmp?"compare":iSub?"submitted":"scoring"}"><div class="cbstatus${lk?" agreed":""}" role="status">${status}</div>
     <div class="cbscroll"><table class="cbsc"><thead>${head}</thead><tbody>${rows}</tbody>${tot}</table></div>${lk?cbOutcome(it,R,C,lk,subd):""}</div>`}
 function cbOutcome(it,R,C,lk,subd){const M=cbLkMarks(it.ik,lk),off=C?R.filter(r=>String(C.marks[r.id])!==String(M[r.id])):[];
   const per=subd.map(u=>{const d=cbSub(u,it.ik);return [u,R.filter(r=>String((d.marks||{})[r.id])===String(M[r.id])).length]});
-  return `<div class="cbout">${C?`<div class="cboutc" id="cbSent"><h3>Sent to the coach</h3><ul>${off.length?off.map(r=>`<li>${esc(r.label)}: Claude ${esc(chMarkL(C.marks[r.id]))}, agreed ${esc(chMarkL(M[r.id]))}</li>`).join(""):"<li>Claude matched every agreed mark.</li>"}</ul></div>`:""}
+  return `<div class="cbout">${C?`<div class="cboutc" id="cbSent"><h3>Sent to the coach</h3><ul>${off.length?off.map(r=>`<li>${esc(r.label)}: Claude ${esc(scL(C.marks[r.id],r))}, agreed ${esc(scL(M[r.id],r))}</li>`).join(""):"<li>Claude matched every agreed mark.</li>"}</ul></div>`:""}
     <div class="cboutc" id="cbWho"><h3>Who matched the agreed mark</h3><ul>${per.map(([u,n])=>`<li>${u===myId?"You":esc(cbName(u))}: ${n} of ${R.length}</li>`).join("")}${C?`<li>Claude: ${R.length-off.length} of ${R.length}</li>`:""}</ul></div></div>`}
 /* repaint the grid in place, keeping focus and the caret */
 function cbFocusKey(root){const f=document.activeElement;if(!f||!root||!root.contains(f))return null;const D=f.dataset||{};
@@ -7059,10 +7076,10 @@ function cbPanelOpen(it,crit,keep){const r=cbRubric(it.kind,it).find(x=>x.id===c
   cbPanel={ik:it.ik,crit};if(!cbPanelEl){cbPanelEl=document.createElement("aside");cbPanelEl.id="cbPanel";cbPanelEl.className="chpanel cbpanel";cbPanelEl.setAttribute("aria-labelledby","cbpTitle")}
   const v=$("#view-chat");if(v&&cbPanelEl.parentNode!==v)v.append(cbPanelEl);cbPanelEl.hidden=false;cbPanelEl.innerHTML=cbPanelHtml(it,r);document.body.classList.add("chp-on");
   if(mcp)cbLoadTx(it);
-  const h=$("#cbpTitle");if(h)h.focus({preventScroll:true});document.querySelectorAll('#view-chat [data-cb="panel"]').forEach(b=>b.setAttribute("aria-expanded",String(b.dataset.crit===crit)))}
+  const h=$("#cbpTitle");if(h)h.focus({preventScroll:true});document.querySelectorAll('#view-chat [data-cb="panel"]').forEach(b=>b.setAttribute("aria-expanded",String(b.dataset.crit===crit)));setTimeout(cbPaint,0)}
 function cbPanelClose(refocus){if(!cbPanel)return;const P=cbPanel;cbPanel=null;if(cbPanelEl){cbPanelEl.hidden=true;cbPanelEl.innerHTML=""}
   if(!(typeof chPanel!=="undefined"&&chPanel))document.body.classList.remove("chp-on");
-  document.querySelectorAll('#view-chat [data-cb="panel"]').forEach(b=>b.setAttribute("aria-expanded","false"));
+  document.querySelectorAll('#view-chat [data-cb="panel"]').forEach(b=>b.setAttribute("aria-expanded","false"));setTimeout(cbPaint,0);
   if(refocus){const b=$(`#view-chat [data-cb="panel"][data-crit="${P.crit}"]`);if(b)b.focus({preventScroll:true})}}
 function renderCalibTab(){const st=$("#st-calib");if(!st)return;const n=cbRoundItems().filter(it=>!cbSub(myId,it.ik)&&!(cbItems[it.ik]||{}).locked).length;st.textContent=n?String(n):""}
 function renderCalib(){cbPresence();renderCalibTab();if(cbPanel&&(tab!=="chat"||!callSel))cbPanelClose();const v=$("#view-calib");if(!v)return;
