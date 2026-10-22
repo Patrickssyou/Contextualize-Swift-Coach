@@ -1560,8 +1560,12 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbsa h3{margin:0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px}
 .cbilist{list-style:none;margin:0;padding:4px 6px}
 /* the case type tag sits on a second line under the title, so the title keeps its width */
-.cbirow{display:grid;grid-template-columns:16px minmax(0,1fr) 56px minmax(84px,auto) auto auto;grid-template-areas:"ic t d m dots st" ". ct ct ct dots st";gap:2px 10px;align-items:center;padding:6px;border-radius:8px;font-size:13.5px}
-.cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t}.cbirow>.cbidate{grid-area:d}.cbirow>.cbimeta{grid-area:m}.cbirow>.cbict{grid-area:ct}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st}
+.cbirow{display:grid;grid-template-columns:16px minmax(0,1fr) 48px 64px 52px auto 84px;grid-template-areas:"ic t d ty sc dots st" ". ct d ty sc dots st";gap:1px 12px;align-items:center;padding:8px 6px;border-radius:8px;font-size:13.5px}
+.cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t}.cbirow>.cbidate{grid-area:d}.cbirow>.cbitype{grid-area:ty}.cbirow>.cbiscore{grid-area:sc}.cbirow>.cbict{grid-area:ct}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:stretch;text-align:center}
+.cbirow .cbidate,.cbirow .cbitype{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.cbirow .cbiscore{text-align:right;font-size:13px;font-weight:700;white-space:nowrap}
+.cbisv.great,.cbisv.good{color:var(--s3)}.cbisv.okay{color:var(--s2)}.cbisv.needs_work,.cbisv.ok{color:var(--s2)}.cbisv.miss,.cbisv.bad{color:var(--s1)}
+.cbirow .cttag{background:none;border:0;padding:0;font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted)}
 .cbirow+.cbirow{border-top:1px solid var(--line)}
 .cbirow .cblink{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbidate{color:var(--muted);font-size:12.5px}
@@ -1569,8 +1573,8 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbkic{display:inline-grid;place-items:center;color:var(--muted)}
 .cbkic.call{color:var(--tp)}
 .cbsub{margin:8px 0 6px;font-size:12px;color:var(--muted);font-weight:700}
-@media (max-width:560px){.cbirow{grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:"ic t t" ". d m" ". ct ct" ". dots st";gap:6px 10px}.cbirow>.cbict:empty{display:none}
-  .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t;white-space:normal}.cbirow>.cbidate{grid-area:d}.cbirow>.cbimeta{grid-area:m;text-align:right}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:end}}
+@media (max-width:560px){.cbirow{grid-template-columns:16px minmax(0,1fr) auto auto;grid-template-areas:"ic t t sc" ". d ty ty" ". ct ct ct" ". dots st st";gap:6px 10px}.cbirow>.cbict:empty{display:none}
+  .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t;white-space:normal}.cbirow>.cbidate{grid-area:d}.cbirow>.cbitype{grid-area:ty}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:end}}
 /* the checklist, grouped by SA */
 .cbrgrp>ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 .cbrsa{display:block;padding:8px 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
@@ -6984,6 +6988,9 @@ const cbTalk=q=>{const c=(q||{}).chain;return c&&c.talkSec!=null?c.talkSec:cbLeg
 /* the other people on a case: the legs taken by someone else from a team (SA, CRT, CSR) */
 function cbTeam(q){return [...new Set(cbLegs(q).filter(l=>!isGraded(l)&&l.group&&GROUP_TAG[l.group]).map(l=>shortWho(l.who||"")).filter(Boolean))]}
 /* what an item row says beside its title: Claude's score for a chat, the call type and length for a call */
+/* the round row's own columns: type (Chat, or the call kind and talk time) and Claude's score */
+const cbITypeL=it=>it.kind==="chat"?"Chat":`${cbKindL(it.q||{})} ${dur(cbTalk(it.q||{}))}`;
+const cbIScore=it=>{const p=it.kind==="chat"?(a=>a&&a.pct!=null?a.pct:it.aiPct)(chatAud[it.key]):cbCGPct(it);return p==null?`<span class="tkmut">–</span>`:`<span class="cbisv ${chVB(p)}">${esc(fmt(p))}%</span>`};
 function cbItemMeta(it){if(it.kind==="chat"){const a=chatAud[it.key],p=a&&a.pct!=null?a.pct:it.aiPct;return p==null?`<span class="tkmut">Claude –</span>`:`<span>Claude <b class="num">${esc(fmt(p))}%</b></span>`}
   const q=it.q||{},p=cbCGPct(it);
   return `<span>${esc(cbKindL(q))} · <span class="num">${esc(dur(cbTalk(q)))}</span> · ${p==null?`<span class="tkmut">Claude –</span>`:`Claude <b class="num">${esc(fmt(p))}%</b>`}</span>`}
@@ -7028,7 +7035,7 @@ const cbP=p=>p==null?"–":Math.round(p)+"%";
 const cbStageHtml=s=>s==="agreed"?`<span class="pill good">Agreed</span>`:s==="settle"?`<span class="pill ok">To settle</span>`:`<span class="pill none">Scoring</span>`;
 function cbIRow(it,G){const st=cbStage(it);
   return `<li class="cbirow" data-ik="${esc(it.ik)}" data-kind="${it.kind}">${cbKic(it.kind)}<button type="button" class="cblink" data-cb="open" data-ik="${esc(it.ik)}">${esc(it.title)}</button>
-    <span class="cbidate num">${esc(cbDay(it.at)||"–")}</span><span class="cbimeta">${cbItemMeta(it)}</span><span class="cbict">${ctTag(ctOf(it.kind,it.key))}</span>
+    <span class="cbidate num">${esc(cbDay(it.at)||"–")}</span><span class="cbitype num">${esc(cbITypeL(it))}</span><span class="cbiscore num">${cbIScore(it)}</span><span class="cbict">${ctTag(ctOf(it.kind,it.key))}</span>
     <span class="cbdots">${G.map(u=>`<span class="cbdot ${cbColor(u)}${cbSub(u,it.ik)?" done":""}" title="${esc(cbName(u))}${cbSub(u,it.ik)?" · submitted":cbPend(u)?" · hasn't opened it":""}">${esc(cbIni(u))}</span>`).join("")}</span>${cbStageHtml(st)}</li>`}
 function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),started=cbRoundStarted(items);cbCGLoadRound();
   const mine=items.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,nx=cbNextItem(items);
