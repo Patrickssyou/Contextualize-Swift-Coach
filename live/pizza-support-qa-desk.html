@@ -1237,6 +1237,8 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 
 /* ---------- 2 EVIDENCE: What happened beside the key sources; the timeline and every fold behind one toggle ---------- */
 .ev2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px}
+.evside{margin-top:12px}
+.tkev .evfull{margin-top:14px}
 .evsrcs{display:flex;flex-direction:column;gap:8px;min-width:0}
 .evrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
 .evic{width:28px;height:28px;border-radius:8px;background:var(--soft);display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--muted);flex:none}
@@ -2528,7 +2530,7 @@ const RUBRIC_V4 = [
       "The right action for the case type, taken and carried out correctly, money exact; promised only what will happen",
       "As 3, promptly, with the outcome confirmed on the call"]},
   {id:"longterm",group:"resolution",label:"Long-term solution",w:5,na:"a one-off with nothing the client could prevent or do themselves next time. A change the client could make in CMA (a menu price, item or modifier) is never N/A",
-    desc:"Showed the client how to avoid it next time: how to do it themselves in CMA (a menu price change is self-servable; doing it for the client without showing how scores low), or flagged the repeat issue or fix to the right owner.",
+    desc:"Showed the client how to avoid it next time: how to do it themselves in CMA (a menu price change is self-servable; doing it for the client without showing how scores low), or flagged the repeat issue or fix to the right owner. A Slack thread that suggests a fix or enhancement to the right team counts as flagging it.",
     lv:["A repeat or self-servable issue and nothing done for next time (e.g. changed a menu price for the client without showing how)",
       "Mentioned it only when asked, gave unclear or wrong steps, or raised it to the wrong owner",
       "Mentioned what the client can do (or what will be fixed) but didn't walk through it or action it",
@@ -2542,7 +2544,7 @@ const RUBRIC_V4 = [
       "Right team, right tag, and a description of what was asked and what was done",
       "As 3, and the next person can act without asking anything (order, amount, owner, next step)"]},
   {id:"ownership",group:"resolution",label:"Ownership",w:10,na:"the case was fully closed then and there (on the call or in the chat): nothing left to follow up, nothing promised for later, no other team needed",
-    desc:"Followed the case through: chased what was pending, tagged the right team, and pulled in another team or the lead when needed, with a summary and a recommendation; didn't hand off what Support could fix. Scored only when something was left to follow up, a promise was made for later, or another team should have been involved; then 0 if nobody followed it up. A case fully closed then and there is N/A.",
+    desc:"Followed the case through: chased what was pending, tagged the right team, and pulled in another team or the lead when needed, with a summary and a recommendation; didn't hand off what Support could fix. Scored only when something was left to follow up, a promise was made for later, or another team should have been involved; then 0 if nobody followed it up. A case fully closed then and there is N/A. Read the SLACK threads: an escalation there counts as pulling in another team or the lead; judge whether it went to the right channel and people, with a summary and a recommendation, and whether it was needed (escalating what Support could fix scores low).",
     lv:["Dropped it: nothing followed up, a needed escalation not made, or handed off what Support could fix",
       "Tagged someone with no summary, or the follow-up left with nobody named",
       "The pending step done or chased, but late; or another team or the lead was pulled in with a summary but no recommendation",
@@ -5303,17 +5305,25 @@ const chTag=(e,src)=>{const o=e&&typeof e==="object"?e:{message:String(e)};retur
 async function chatSlack(c,ctl){
   try{
     const day=String(c.at||"").slice(0,10);if(!day||!mcp)return [];
-    const name=String(c.restaurant||"").replace(/"/g,"").trim(),keywords=name?['"'+name+'"']:c.code?[c.code]:[];if(!keywords.length)return [];
-    const after=String(Math.floor(etToUtcMs(Date.parse(addDaysU(day,-1)+"T00:00:00Z"))/1000)),before=String(Math.floor(etToUtcMs(Date.parse(addDaysU(day,2)+"T00:00:00Z"))/1000)-1);
-    if(ctl&&ctl.signal.aborted)throw {code:"cancelled"};
-    const res=await mcp.callTool(SLACK,"slack_search_public",{keywords,after,before,include_context:false,response_format:"detailed",limit:20});
-    const hits=new Map();parseSlackSearch(payloadText(res,"results")).forEach(r=>{if(/^proj-flag|alert/i.test(r.channel))return;const k=r.channelId+"/"+r.threadTs;if(!hits.has(k))hits.set(k,r)});
+    const name=String(c.restaurant||"").replace(/"/g,"").trim(),sid=String(c.sid||"");
+    const after=String(Math.floor(etToUtcMs(Date.parse(addDaysU(day,-1)+"T00:00:00Z"))/1000)),before=String(Math.floor(etToUtcMs(Date.parse(addDaysU(day,5)+"T00:00:00Z"))/1000)-1);
+    /* the chat's own number first (any date), then the restaurant by name and by code in the window */
+    const Q=[sid?{keywords:[sid],sid:true}:null,name?{keywords:['"'+name+'"'],after,before}:null,c.code?{keywords:[c.code],after,before}:null].filter(Boolean);
+    const hits=new Map();
+    for(const q of Q){if(ctl&&ctl.signal.aborted)throw {code:"cancelled"};
+      let res;try{res=await mcp.callTool(SLACK,"slack_search_public",Object.assign({include_context:false,response_format:"detailed",limit:20},{keywords:q.keywords},q.after?{after:q.after,before:q.before}:{}))}catch(e){continue}
+      parseSlackSearch(payloadText(res,"results")).forEach(r=>{const t=String(r.text||"");
+        if(/^proj-flag|alert/i.test(r.channel)||/queue alert|wonders aux|Dev review tasks/i.test(t))return;
+        if(q.sid&&!new RegExp("\\b"+sid+"\\b").test(t))return;
+        const k=r.channelId+"/"+r.threadTs,h=hits.get(k);if(!h)hits.set(k,Object.assign({},r,{bySid:!!q.sid}));else if(q.sid)h.bySid=true})}
     const out=[];
-    for(const r of [...hits.values()].sort((a,b)=>b.replies-a.replies).slice(0,5)){
+    for(const r of [...hits.values()].sort((a,b)=>(b.bySid-a.bySid)||(b.replies-a.replies)).slice(0,5)){
       if(ctl&&ctl.signal.aborted)throw {code:"cancelled"};
       let th={text:capText(r.text,700),author:r.author,replies:[]};
       if(r.replies>0||r.threadTs!==r.ts){try{th=parseSlackThread(payloadText(await mcp.callTool(SLACK,"slack_read_thread",{channel_id:r.channelId,message_ts:r.threadTs,response_format:"concise"}),"messages"))}catch(e){}}
-      out.push({channel:r.channel,author:th.author||r.author||"",text:slackClean(th.text),at:new Date(etWall(Number(r.threadTs)*1000)).toISOString().slice(0,19),ts:r.threadTs,url:safeUrl(r.url),
+      /* a bare bot post for the chat with no replies says nothing */
+      if(!th.replies.length&&/Wira Bot|We have a new WIRA chat/i.test(String(th.author||"")+" "+String(th.text||"")))continue;
+      out.push({channel:r.channel,author:th.author||r.author||"",text:slackClean(th.text),at:new Date(etWall(Number(r.threadTs)*1000)).toISOString().slice(0,19),ts:r.threadTs,url:safeUrl(r.url),why:r.bySid?"names this chat":"",
         replies:th.replies.slice(0,12).map(x=>({who:x.who,text:slackClean(x.text)}))})}
     return out.sort((a,b)=>String(a.at).localeCompare(String(b.at)));
   }catch(e){if(e&&e.code==="cancelled")throw e;throw {code:"slack_failed",message:String((e&&e.message)||"")}}
@@ -5734,7 +5744,7 @@ function chEvRows(c,a){const R=[],code=a.code||c.code||"";
   return R.slice(0,5+out.length)}
 /* which chats have "Timeline and full sources" open (per chat, kept across repaints) */
 const chEvMore=new Set();
-function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).length,out=[],src=[];
+function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).length,out=[],src=[];
   src.push(chFold(c,"chat","Chat",`${chPl(msgs.length,"message")}${nInt?` · ${nInt} internal`:""}`,`<ol class="bubbles" id="cs-chat">${msgs.map(m=>chBubble(m,"cm")).join("")||`<li class="hint">No messages.</li>`}</ol>`,!a));
   const fl=chFieldList(c&&c.fields);if(fl.length)src.push(chFold(c,"fields","WIRA form",fl.map(([k])=>k||"Field").join(", "),chFieldsHtml(c)));
   if(a){const canPick=!!(db&&mcp&&sampleFn)&&!chatRun,pickOpen=chatPickOpen===String(c.sid),os=a.orders||[];
@@ -5759,7 +5769,8 @@ function chEvidence(c,a){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).l
   if(!a)return `<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`;
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
-  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
+  const A0=a.analysis||{},f0=A0.fault||{},side=inTicket?[A0.request?`<div class="tkblk"><h5>Request</h5><p>${esc(A0.request)}</p></div>`:"",f0.why?`<div class="tkblk"><h5>Fault · ${esc(CH_FAULT[f0.who]||f0.who||"–")}</h5><p>${esc(f0.why)}</p></div>`:""].filter(Boolean).join(""):"";
+  out.push(`<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:`<p class="tkmut">No summary.</p>`}${side?`<div class="tkside evside">${side}</div>`:""}</div>
     <div class="evsrcs" id="evSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
       <button type="button" class="evmore" id="evMore" aria-expanded="${more}" aria-controls="evFull">Timeline and full sources</button></div></div>
     <div class="evfull" id="evFull"${more?"":" hidden"}>${chStrip(c,a)}<div class="evsrc">${src.join("")}</div></div>`);
@@ -5850,7 +5861,8 @@ function chTkFields(c,a){const A=a.analysis||{},f=A.fault||{},code=a.code||c.cod
     ["First reply",chFrHtml(c,a)],
     ["Closed",c.closedAt?`<span class="num">${esc(when(c.closedAt))}</span>`:`<span class="tkmut">Not closed${c.status?" · "+esc(chStatusL(c)):""}</span>`],
     ["Started by",esc(chInit(c))],
-    ["Recordings",recs.length?`<span class="tkrecs">${recs.map(l=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec" title="${esc([chOut(l)?"Outbound call by "+chOutWho(l):l.agent,when(l.at),l.sec?dur(l.sec):"",chOut(l)?l.why:""].filter(Boolean).join(" · "))}"${chOut(l)?' data-link="sa_outbound"':""}>▶ Call ${l.i+1}${chOut(l)?" · outbound":""}${l.at?` <span class="num tkmut">(${esc(chClock(l.at,chDay(c)))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`]];
+    ["Recordings",recs.length?`<span class="tkrecs">${recs.map(l=>`<a href="${esc(recUrl(l.id))}" target="_blank" rel="noopener" class="tklink tkrec" title="${esc([chOut(l)?"Outbound call by "+chOutWho(l):l.agent,when(l.at),l.sec?dur(l.sec):"",chOut(l)?l.why:""].filter(Boolean).join(" · "))}"${chOut(l)?' data-link="sa_outbound"':""}>▶ Call ${l.i+1}${chOut(l)?" · outbound":""}${l.at?` <span class="num tkmut">(${esc(chClock(l.at,chDay(c)))})</span>`:""}</a>`).join("")}</span>`:`<span class="tkmut">None linked</span>`],
+    ["Slack",(a.slack||[]).length?`<span class="tkrecs">${a.slack.map(t=>{const u=safeUrl(t.url),lbl=`#${esc(t.channel||"slack")}${(t.replies||[]).length?` <span class="num tkmut">(${(t.replies||[]).length})</span>`:""}`,ti=esc([t.author,when(t.at),t.why].filter(Boolean).join(" · "));return u?`<a href="${esc(u)}" target="_blank" rel="noopener" class="tklink" title="${ti}">${lbl} ↗</a>`:`<span title="${ti}">${lbl}</span>`}).join("")}</span>`:`<span class="tkmut">None found</span>`]];
   return `<dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`}
 /* the Timing block: the chat's times, a strip of its status changes sized by minutes, the totals per side, and why there is no time per reply */
 const CH_TM_NOTE="WIRA doesn't record a time for each message, so only the first reply can be timed.";
@@ -5872,7 +5884,7 @@ function chTimingHtml(c,a){const t=chTim(c,a);if(!t)return "";
     strip=`<div class="tmstrip" role="img" aria-label="${esc(S.map(s=>[lab(s),mins(s)].filter(Boolean).join(" ")).join(", then "))}">${S.map(s=>`<span class="tmseg on-${esc(s.on||"x")}${s.ongoing?" now":""}" style="flex-grow:${grow(s)}" title="${esc(lab(s)+" · "+chClock(s.at,day)+(mins(s)?" · "+mins(s):""))}"></span>`).join("")}</div>
       <ol class="tmlegend">${S.map(s=>`<li class="tmst on-${esc(s.on||"x")}${s.ongoing?" now":""}"><i aria-hidden="true"></i><b>${esc(lab(s))}</b><span class="num tmmin">${esc(mins(s))}</span><span class="num tmat">${esc(chClock(s.at,day))}</span></li>`).join("")}</ol>
       <dl class="tmtot">${[["On Support's side",t.waitingOnSupportMin,"support"],["On the client's side",t.waitingOnClientMin,"client"],["In handoff",t.waitingOnHandoffMin,"handoff"]].map(([k,v,on])=>`<div class="tmtc on-${on}"><dt>${k}</dt><dd class="num">${chNum(v)?esc(chHm(v)):"–"}</dd></div>`).join("")}</dl>`}
-  return `<section class="tksec tktiming" id="tkTiming"><div class="tkch"><h3 class="tkh">Timing</h3>${chSlow(c,a)?`<span class="slowb">Slow first reply</span>`:""}</div>${stats}${strip}<p class="tmnote">${ae?((r=>r&&r.late?`AE started this chat. WIRA's status didn't change until ${chHm(r.statusMin)} after the AE's message, so the SA's first reply can't be timed.`:"AE started this chat. First reply is the SA's first reply after the AE's message, timed by WIRA's first status change.")(aeFirstReply(t.opened||c.at,t.states))):CH_TM_NOTE}</p></section>`}
+  return `<section class="tksec tktiming" id="tkTiming"><div class="tkch"><h3 class="tkh">Timing</h3>${chSlow(c,a)?`<span class="slowb">Slow first reply</span>`:""}</div>${stats}${strip}<p class="tmnote">${ae?((r=>r&&r.late?`AE started this chat. WIRA's status didn't change until ${chHm(r.statusMin)} after the AE's message, so the SA's first reply can't be timed.`:"")(aeFirstReply(t.opened||c.at,t.states))):""}</p></section>`}
 function chTimingText(c,a){const t=chTim(c,a);if(!t)return [];const day=String(t.opened||c.at||"").slice(0,10),S=Array.isArray(t.states)?t.states:[],m=chFirstMin(c,a),w=chWiraSays(c,a);
   const L=["","Timing",`Opened: ${chClock(t.opened||c.at,"")}`,chIsAe(c,a)?`AE opened: ${chClock(t.opened||c.at,day)}`:`First client message: ${chClock(t.firstClientAt,day)}`,
     `First reply: ${chClock(chFirstAt(c,a,t),day)}${m!=null?` · ${chFrt(m)}`:""}${chSlow(c,a)?" (slow)":""}${w!=null?` · WIRA says ${chFrt(w)}`:""}`,
@@ -5938,11 +5950,11 @@ function chTicket(c,a,d){const A=a.analysis||{},F=chFindings(c,a),pct=chScore(d.
       <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"–")}</span><span class="tkpct num" id="tkPct">${pct==null?"–":fmt(pct)+"%"}</span><span id="tkPrio" class="tkprio">${chPrio(pr)}</span></div></header>
     ${chTkTabs(c)}
     <div class="tkbody" id="tkPan-ticket" role="tabpanel" aria-labelledby="tkTab-ticket"${chTkTab==="ticket"?"":" hidden"}>${chTkFields(c,a)}
-      ${chWhatHtml(a)}
+      <section class="tksec tkev" id="tkEv">${chEvidence(c,a,true)}</section>
       ${chTimingHtml(c,a)}
       ${chCompHtml(c,a)}</div>
     ${chTkChat(c)}
-    <footer class="tkfoot"><p>Filed by Swift Coach. Disagree with a mark? Contest it. Every contest teaches the coach.</p><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
+    <footer class="tkfoot"><span></span><button type="button" class="btn small" id="tkCopy">Copy ticket</button></footer>`}
 /* live: a finding mark or a scorecard mark repaints the ticket in place (focus and open model messages kept) */
 /* a focused control's selector, so a repaint can put focus back */
 function chFocusSel(root){const f=document.activeElement;if(!f||!root||!root.contains(f))return "";const D=f.dataset||{};
@@ -6012,12 +6024,12 @@ function renderChatAudit(force){const v=$("#view-chat");if(!v)return;
   const d=chatDraft(sid),pct=a?chScore(d.scores):null,vd=chV(pct,d.scores),o=a&&(a.orders||[])[0];
   /* four sections: 1 the ticket (on top), 2 Evidence, 3 Scorecard, 4 Coaching */
   const evAns=a?[(T=>T?chCaseL(T.id):"")(ctOf("chat",sid)),o?`Ticket ${o.ticket||"?"}`:"No order",chPl((a.calls||[]).length,"call")].filter(Boolean).join(" · "):chPl((c.msgs||[]).length,"message");
-  const secs=[chSec("cs-ev",2,"Evidence",evAns,chEvidence(c,a),"ref")];
+  const secs=a?[]:[chSec("cs-ev",2,"Evidence",evAns,chEvidence(c,a),"ref")];
   if(a){const cal=chCalItem(c),lk=cal&&typeof cbLockedChat==="function"?cbLockedChat(sid):null;
-    if(cal)secs.push(chSec("cs-score",3,"Scorecard",lk&&vd?`Agreed · ${vd.label} · ${fmt(pct)}%`:`Claude ${vd?vd.label+" · ":""}${fmt(pct)}%`,cbGridHtml(cal),lk?"done cbsc-sec":"cbsc-sec"),
-      chSec("cs-coach",4,"Coaching",lk?"From the agreed score":"After the agreed score",chCoachBody(c,a,rv,d),lk?"done":""));
-    else secs.push(chSec("cs-score",3,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
-      chSec("cs-coach",4,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
+    if(cal)secs.push(chSec("cs-score",2,"Scorecard",lk&&vd?`Agreed · ${vd.label} · ${fmt(pct)}%`:`Claude ${vd?vd.label+" · ":""}${fmt(pct)}%`,cbGridHtml(cal),lk?"done cbsc-sec":"cbsc-sec"),
+      chSec("cs-coach",3,"Coaching",lk?"From the agreed score":"After the agreed score",chCoachBody(c,a,rv,d),lk?"done":""));
+    else secs.push(chSec("cs-score",2,"Scorecard",vd?`${vd.label} · ${fmt(pct)}%`:"",`<div class="ccrits">${chScorecard(a,d)}</div>`,rv?"done":""),
+      chSec("cs-coach",3,"Coaching",rv?"Saved "+stampOf(rv.at):"Not saved",chCoach(c,a,rv,d),rv?"done":""))}
   const pn=$("#tkPan-chat"),top=pn&&pn.closest("[data-sid]")&&pn.closest("[data-sid]").dataset.sid===sid?pn.scrollTop:0;
   const rit=typeof cbRoundItem==="function"?cbRoundItem(c):null,board=`<aside class="panel board cverdict" id="chatBoard" aria-live="polite">${chBoard(c,a,rv,d)}</aside>`;
   v.innerHTML=nav+`<div class="cdesk${a?" has-tk":""}${rit?" has-rail":""}">${a?`<article class="${chTicketCls(c,a,d)}" id="cTicket" data-sid="${esc(sid)}" aria-label="QA ticket">${chTicket(c,a,d)}</article>`:""}${rit?`<div class="cside">${board}${cbRailBox(rit.ik)}</div>`:board}<div class="ccol">${secs.join("")}</div></div>`;
@@ -7008,7 +7020,7 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLo
   return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span>${ctTicketHtml("call",it.key,true)}</div>
     <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
-    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></div>
+    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl><section class="tksec tkev" id="tkEv">${cbEvidenceHtml(it)}</section></div>
     <div class="tkchat cbtxpan" id="cbTkPan-tx" role="tabpanel" aria-labelledby="cbTkTab-tx" tabindex="0"${cbTkTab==="tx"?"":" hidden"}>${cbTxHtml(q)}</div>`}
 /* "Claude's score 82.5%", or "Not graded yet" */
 function cbClScoreHtml(it,id,cls){const p=cbCGPct(it),C=cbClaude(it);
@@ -7062,9 +7074,8 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   if(!it){if(cbPanel)cbPanelClose();v.innerHTML=nav+`<div class="panel empty">${queueReady||!db?`Call ${esc(callSel)} isn't in the queue.`:"Loading…"} <button type="button" class="btn small" data-go="calib">Open the round</button></div>`;return}
   if(cbPanel&&cbPanel.ik!==it.ik)cbPanelClose();
   const pct=lk?lk.pct:null,vd=cbLockV(it,lk);
-  const secs=[chSec("cs-ev",2,"Evidence",[cbKindL(it.q),cbLegs(it.q).length>1?cbLegs(it.q).length+" calls":"Single call"].join(" · "),cbEvidenceHtml(it),"ref"),
-    chSec("cs-score",3,"Scorecard",lk?`Agreed · ${vd?vd.label+" · ":""}${fmt(pct)}%`:"Not agreed yet",cbGridHtml(it),lk?"done cbsc-sec":"cbsc-sec"),
-    chSec("cs-coach",4,"Coaching",lk?"From the agreed score":cbClaude(it)?"Claude's draft":"After the agreed score",cbCoachHtml(it),lk?"done":"")];
+  const secs=[chSec("cs-score",2,"Scorecard",lk?`Agreed · ${vd?vd.label+" · ":""}${fmt(pct)}%`:"Not agreed yet",cbGridHtml(it),lk?"done cbsc-sec":"cbsc-sec"),
+    chSec("cs-coach",3,"Coaching",lk?"From the agreed score":cbClaude(it)?"Claude's draft":"After the agreed score",cbCoachHtml(it),lk?"done":"")];
   v.innerHTML=nav+`<div class="cdesk has-tk${inR?" has-rail":""}"><article class="panel qticket" id="cTicket" data-call="${esc(it.key)}" aria-label="QA ticket">${cbTicketHtml(it)}</article>${inR?`<div class="cside">${cbBoardHtml(it)}${cbRailBox(it.ik)}</div>`:cbBoardHtml(it)}<div class="ccol">${secs.join("")}</div></div>`;
   {const n=$("#chNav");if(n)n._h=chNavHtml();const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.ik)}
   if(cbTkTab==="tx")cbLoadTx(it);
