@@ -1241,6 +1241,7 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 .evrf.wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 28px;margin:0 0 14px}
 .evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
 .evcards .evrow{margin:0}
+.evlinks{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
 .tlog{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
 .lg-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--line)}
 .lg-list,.lg-rows{list-style:none;margin:0;padding:0}
@@ -5730,11 +5731,11 @@ function chTlCalls(a,c,tl){const fact=t=>`<li id="cf-${esc(t.id)}" class="fact $
 /* the ticket log (MGR tool call-log style): the timeline grouped by source in order; a call's group opens with its direction, agent, time and recording */
 function chLog(c,a){const tl=((a.facts||{}).timeline)||[];if(!tl.length)return "";const calls=chCallsN(a),G=[];
   const os=a.orders||[],grp=src=>{const x=String(src||"").trim();if(!x||/^(M\d+|Header|Chat|WIRA chat)\b/i.test(x)||/^M\d+/.test(x))return "WIRA chat";
-    const o=/^O(\d+)$/.exec(x);if(o){const od=os[+o[1]-1];return od?`Order ${od.ticket||"?"}`:"Order"}return x.replace(/^Task\s*/i,"Task ")};
+    const o=/^O(\d+)$/.exec(x);if(o){const od=os[+o[1]-1];return od?`Order ${chTkL(od)}`:"Order"}const tk=/^Task\s*#?(\d+)/i.exec(x);if(tk){const t=(a.tasks||[]).find(y=>String(y.sid)===tk[1]);return t?`${chTaskL(t)} ${tk[1]}`:"Task "+tk[1]}return x};
   tl.forEach(t=>{const k=grp(t.src);const g=G[G.length-1];if(g&&g.k===k)g.rows.push(t);else G.push({k,rows:[t]})});
   const hm=w=>{const m=/(\d{1,2}):(\d{2})/.exec(String(w||""));if(!m)return "";let h=+m[1];const ap=h>=12?"PM":"AM";h=h%12||12;return h+":"+m[2]+" "+ap};
   const head=g=>{const m=/^Call\s*#?(\d+)/i.exec(g.k),l=m?calls.find(x=>x.i+1===+m[1]):null;
-    if(l){const dir=chOut(l)||l.dir==="out"?"Outbound":"Inbound";return `<span class="lg-src">Call ${l.i+1}</span><span class="lg-meta">${dir} · ${esc(chOut(l)?chOutWho(l):l.agent||"Unknown")}${l.at?" · "+esc(chClock(l.at,chDay(c))):""}${l.sec?" · "+esc(dur(l.sec)):""}</span>${l.id?`<a class="lg-link" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}`}
+    if(l){return `<span class="lg-src">Call ${l.i+1} · ${esc(chCallL(c,l))}</span><span class="lg-meta">${esc(chOut(l)?chOutWho(l):l.agent||"Unknown")}${l.at?" · "+esc(chClock(l.at,chDay(c))):""}${l.sec?" · "+esc(dur(l.sec)):""}</span>${l.id?`<a class="lg-link" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}`}
     return `<span class="lg-src">${esc(g.k)}</span>`};
   const n=tl.length;let i=0;
   return `<section class="tlog" aria-label="Ticket log"><header class="lg-hd"><span>Ticket log</span><span class="num tkmut">${chPl(n,"event")}</span></header><ol class="lg-list">${G.map(g=>`<li class="lg-g"><div class="lg-gh">${head(g)}</div><ol class="lg-rows">${g.rows.map(t=>{i++;const internal=t.kind==="internal"||/internal/i.test(String(t.kind||""));
@@ -5787,16 +5788,25 @@ function chStrip(c,a){const A=a.analysis||{},f=A.fault||{},b=A.bucket||{},ae=A.a
   it.sort((x,y)=>(x[2]?1:0)-(y[2]?1:0));
   return it.length?`<dl class="evstrip" id="evStrip">${it.map(([k,v,w])=>`<div class="evi${w?" wide":""}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join("")}</dl>`:""}
 /* the 3–5 sources that matter, one line each: the order (status and GreenDot), the call (recording), the WIRA ticket, the Slack thread */
-function chEvRows(c,a){const R=[],code=a.code||c.code||"";
-  (a.orders||[]).slice(0,2).forEach(o=>R.push({k:"order",ic:"O",t:`Order ${o.ticket||"?"}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total)].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",l:"GreenDot ↗"}));
-  const CN=(a.calls||[]).map((l,i)=>Object.assign({i},l)),out=CN.filter(chOut);
-  CN.filter(l=>!chOut(l)).slice(0,2).forEach(l=>R.push({k:"call",ic:"C",t:`Call ${l.i+1} · ${l.dir==="out"?"Outbound":"Inbound"}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
-  out.forEach(l=>R.push({k:"call",link:"sa_outbound",n:l.i+1,ic:"C",t:`Call ${l.i+1} · Outbound by ${chOutWho(l)}`,s:[l.sec?dur(l.sec):"",chClock(l.at,chDay(c))].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true,why:String(l.why||"")}));
-  const t=(a.tasks||[])[0];
-  if(t)R.push({k:"wira",ic:"W",t:"WIRA ticket",s:[t.intent||t.project,capFirst(String(t.status||""))].filter(Boolean).join(" · ")||t.title||"",u:safeUrl(t.url)||wiraUrl(t.sid),l:"Open ↗"});
-  else R.push({k:"wira",ic:"W",t:"WIRA chat",s:[String(c.sid),chStatusL(c)].filter(Boolean).join(" · "),u:safeUrl(c.url||a.url)||wiraUrl(c.sid),l:"Open ↗"});
+/* who was on the other end of a call: the restaurant (client) when the number is the restaurant's own or the SA dialed the restaurant, else the customer */
+function chParty(c,l){const own=new Set(((c&&c.msgs)||[]).filter(m=>m.role==="client").map(m=>String(m.author||"").replace(/\D/g,"").slice(-4)).filter(x=>x.length===4));
+  return (l.phone4&&own.has(String(l.phone4)))||l.match==="restaurant"?"client":"customer"}
+const chCallL=(c,l)=>{const out=chOut(l)||l.dir==="out",p=chParty(c,l);return out?`Outbound call to ${p}`:`Inbound ${p} call`};
+const chTkL=o=>{const t=String((o&&o.ticket)||"?");return /^\d+$/.test(t)?"C"+t:t};
+const chTaskL=t=>/self[-\s]?resolved/i.test(String(t.project||""))?"Self-resolved task":t.parent?"Child task":"Task";
+function chEvRows(c,a){const R=[],code=a.code||c.code||"",CN=(a.calls||[]).map((l,i)=>Object.assign({i},l)),used=new Set();
+  /* an order and the call that placed it are one source */
+  (a.orders||[]).slice(0,2).forEach(o=>{const ids=new Set((o.callIds||[]).map(String)),pc=CN.find(l=>ids.has(String(l.id))&&!(chOut(l)||l.dir==="out"))||CN.find(l=>ids.has(String(l.id)));
+    if(pc)used.add(pc.i);
+    R.push({k:"order",ic:"O",t:`Order ${chTkL(o)}`,tags:chOrdTags(o),s:[capFirst(String(o.type||"").toLowerCase()),money(o.total),pc?`placed on Call ${pc.i+1} · ${pc.agent||""}`:""].filter(Boolean).join(" · "),u:o.id?chGdOrder(code,o.id):"",l:"GreenDot ↗",
+      u2:pc&&pc.id?recUrl(pc.id):"",l2:"▶ Recording"})});
+  const rest=CN.filter(l=>!used.has(l.i)),sao=rest.filter(chOut),oth=rest.filter(l=>!chOut(l));
+  oth.slice(0,3).forEach(l=>R.push({k:"call",ic:"C",t:`Call ${l.i+1} · ${chCallL(c,l)}`,s:[l.agent,chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true}));
+  sao.forEach(l=>R.push({k:"call",link:"sa_outbound",n:l.i+1,ic:"C",t:`Call ${l.i+1} · ${chCallL(c,l)}`,s:[chOutWho(l),chClock(l.at,chDay(c)),l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",rec:true,why:String(l.why||"")}));
+  /* the tasks made from the chat (child first), the self-resolved task, others */
+  (a.tasks||[]).slice().sort((x,y)=>(y.parent?1:0)-(x.parent?1:0)).slice(0,3).forEach(t=>R.push({k:"wira",ic:"T",t:`${chTaskL(t)} ${t.sid}`,s:[t.intent||t.project,capFirst(String(t.status||""))].filter(Boolean).join(" · ")||t.title||"",u:safeUrl(t.url)||wiraUrl(t.sid),l:"Open ↗"}));
   const sl=(a.slack||[])[0];if(sl)R.push({k:"slack",ic:"S",t:"Slack thread",s:[`#${sl.channel}`,(sl.replies||[]).length?chPl(sl.replies.length,"reply","replies"):""].filter(Boolean).join(" · "),u:safeUrl(sl.url),l:"Open ↗"});
-  return R.slice(0,5+out.length)}
+  return R}
 /* which chats have "Timeline and full sources" open (per chat, kept across repaints) */
 const chEvMore=new Set();
 function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.internal).length,out=[],src=[];
@@ -5825,7 +5835,7 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
   const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join("");
-  const srcRows=rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span>${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("");
+  const srcRows=rows.map(r=>`<div class="evrow" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}</span>${r.why?`<span class="evwhyl">${esc(r.why)}</span>`:""}</span><span class="evlinks">${r.u2?`<a class="evlink rec" href="${esc(r.u2)}" target="_blank" rel="noopener">${r.l2}</a>`:""}${r.u?`<a class="evlink${r.rec?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</span></div>`).join("");
   if(inTicket){const log=chLog(c,a),fx=chFacts(a,c),ci=fx.indexOf('<div class="fhd"><span class="lbl-sm">SA claims'),rest=ci>=0?fx.slice(ci):"",F2=a.facts||{},ncl=(F2.claims||[]).length,npr=(F2.promises||[]).length;
     out.push(`${rf?`<dl class="evrf wide">${rf}</dl>`:""}<div class="evcards" id="evSrcs">${srcRows}</div>
       ${log||(br.length?`<ul class="evbrief" id="evBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:A0.summary?`<p class="tkp">${esc(A0.summary)}</p>`:"")}
