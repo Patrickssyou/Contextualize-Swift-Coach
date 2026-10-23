@@ -3355,9 +3355,9 @@ function chatAnalysisPrompt(k,F,policy,cal,lessons){const sa=k.chat.sa||"the SA"
     ...EVIDENCE_RULES,
     NO_PRONOUNS,
     ``,`Reply with only a JSON object:`,
-    `{"caseType": "${CASE_TYPES.map(t=>t.id).join(" | ")}", "request": "what the client asked for, under 20 words",`,
+    `{"caseType": "${CASE_TYPES.map(t=>t.id).join(" | ")}", "request": "what the client asked for, under 12 words",`,
     ` "summary": "what happened, 2-3 sentences",`,
-    ` "fault": {"who": "tarro | restaurant | customer | shared_tarro | shared_other | unclear | none", "why": "one sentence", "cites": ["F2"]},`,
+    ` "fault": {"who": "tarro | restaurant | customer | shared_tarro | shared_other | unclear | none", "parties": ["who shares it when shared: tarro | restaurant | customer"], "why": "under 15 words", "cites": ["F2"]},`,
     ` "bucket": {"id": "one of: ${(P.buckets||[]).map(b=>b.id).join(" | ")||"none"}", "why": "one sentence", "cites": []},`,
     ` "affectedOrder": "O1 or empty", "selfDelivery": false, "deliveryFee": null,`,
     ` "ideal": {"client": "what the ideal SA tells and gives the client, under 40 words", "customer": "under 25 words, or empty"},`,
@@ -3450,7 +3450,7 @@ function cleanChatAnalysis(x,F,policy){if(!x||typeof x!=="object"||Array.isArray
   const amt=so.amount==null||so.amount===""?null:Number(String(so.amount).replace(/[$,]/g,""));
   const caseType=caseTypeId(x.caseType),comp=!caseType||caseType==="compensation";
   /* added fields: caseType (one of CASE_TYPES, "" when the reply has none) and request. Buckets, the affected order and the SA's offer only count on a compensation case */
-  return {caseType,request:chS(x.request,200),summary:chS(x.summary,700),fault:{who:FAULTS.includes(low(f.who))?low(f.who):"unclear",why:chS(f.why,300),cites:cites(f.cites)},
+  return {caseType,request:chS(x.request,200),summary:chS(x.summary,700),fault:{who:FAULTS.includes(low(f.who))?low(f.who):"unclear",parties:(Array.isArray(f.parties)?f.parties:[]).map(low).filter(v=>["tarro","restaurant","customer"].includes(v)),why:chS(f.why,300),cites:cites(f.cites)},
     bucket:{id:comp&&bucketIds.includes(low(b.id))?low(b.id):"",why:chS(b.why,300),cites:cites(b.cites)},
     affectedOrder:comp&&/^O\d+$/i.test(String(x.affectedOrder||"").trim())?String(x.affectedOrder).trim().toUpperCase():"",
     selfDelivery:x.selfDelivery===true,deliveryFee:Number(x.deliveryFee)>0?r2(x.deliveryFee):null,
@@ -5071,6 +5071,16 @@ const chVB=(pct,on)=>{const v=chV(pct,on);return v?CH_VB[v.id]:"none"};
 const chVBid=id=>id&&CH_VB[id]||"none";
 const CH_MARK={right:"✓",partly:"~",wrong:"✗"},CH_MARK_L={right:"Right",partly:"Partly",wrong:"Wrong"};
 const CH_CHECK={supported:["✓","Supported"],contradicted:["✗","Contradicted"],cant_check:["?","Can't check"]};
+/* the ticket's Request and Fault lines: the first sentence, cut at a clause near n characters */
+function chShort(s,n){s=String(s||"").trim().replace(/\s*\([^)]*\)/g,"").replace(/\s+/g," ");const m=s.match(/^.+?[.!?](?=\s|$)/);if(m&&m[0].length>=20)s=m[0];if(s.length<=n)return s.replace(/[.]$/,"");
+  const cut=s.slice(0,n),i=Math.max(cut.lastIndexOf(", "),cut.lastIndexOf("; "),cut.lastIndexOf(" — "),cut.lastIndexOf(" but "),cut.lastIndexOf(" and "));return (i>n*.5?cut.slice(0,i):cut.slice(0,cut.lastIndexOf(" "))).replace(/[,;.]$/,"")+"…"}
+/* who is at fault, as pills: a shared fault shows each party (Agent = the Tarro side) */
+const CH_PARTY={tarro:"Agent",restaurant:"Restaurant",customer:"Customer"};
+function chFaultParties(f){f=f||{};const w=f.who;if(Array.isArray(f.parties)&&f.parties.length>1)return f.parties;
+  if(w==="shared_tarro"||w==="shared_other"){const t=String(f.why||"").toLowerCase(),o=/customer/.test(t)&&!/restaurant|store|staff|manager/.test(t)?"customer":"restaurant";return w==="shared_tarro"||/tarro|agent|\bsa\b/.test(t)?["tarro",o]:[o,/customer/.test(t)?"customer":"restaurant"].filter((v,i,a)=>a.indexOf(v)===i)}
+  return CH_PARTY[w]?[w]:null}
+function chFaultPills(f){const P=chFaultParties(f);if(!P)return `<span class="pill ${chFaultCls(f.who)}">${esc(CH_FAULT[f.who]||f.who||"–")}</span>`;
+  return P.map(p=>`<span class="pill ${chFaultCls(p)}">${esc(CH_PARTY[p])}</span>`).join(P.length>1?`<span class="tkmut">+</span> `:"")}
 const CH_FAULT={tarro:"Tarro",restaurant:"Restaurant",customer:"Customer",shared_tarro:"Shared (Tarro could have caught it)",shared_other:"Shared",unclear:"Unclear",none:"No fault"};
 const CH_CASE={compensation:"Compensation",order_issue:"Order issue",customer_recovery:"Customer credit",contact_customer:"Contact customer",menu_setup:"Menu setup",
   hours_service:"Hours / service",device_printer:"Printer / device",billing_payment:"Billing",order_admin:"Order admin",how_to:"How-to",other:"Other"};
@@ -5889,7 +5899,7 @@ function chEvidence(c,a,inTicket){const msgs=c.msgs||[],nInt=msgs.filter(m=>m.in
   if(!a)return `<div class="evsrc"><h3 class="evh">Sources</h3>${src.join("")}</div>`;
   /* What happened (the brief, up to 5) beside the key sources; the timeline and every source fold open on request */
   const br=chBrief(a).slice(0,5),rows=chEvRows(c,a),more=chEvMore.has(String(c.sid));
-  const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(A0.request)}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd><span class="pill ${chFaultCls(f0.who)}">${esc(CH_FAULT[f0.who]||f0.who||"–")}</span>${f0.why?` ${esc(f0.why)}`:""}</dd></div>`:""].filter(Boolean).join("");
+  const A0=a.analysis||{},f0=A0.fault||{},rf=[A0.request?`<div class="evrf-r"><dt>Request</dt><dd>${esc(chShort(A0.request,90))}</dd></div>`:"",A0.fault?`<div class="evrf-r"><dt>Fault</dt><dd>${chFaultPills(f0)}${f0.why?` ${esc(chShort(f0.why,90))}`:""}</dd></div>`:""].filter(Boolean).join("");
   const srcRows=rows.map(r=>{const pc=r.pc?` · placed on Call ${r.pc.n}${r.pc.who?" · "+esc(r.pc.who):""}`:"",tag=r.u?"a":"div",
       at=r.u?` href="${esc(r.u)}" target="_blank" rel="noopener"`:"";
     return `<${tag} class="evrow${r.u?" evcard":""}" data-ek="${r.k}"${r.link?` data-link="${esc(r.link)}" data-n="${r.n}"`:""}${at}><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tags||""}<span class="evs">${esc(r.s)}${pc}</span></span></${tag}>`}).join("");
