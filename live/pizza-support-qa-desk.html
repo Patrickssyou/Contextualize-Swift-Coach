@@ -2200,12 +2200,16 @@ function casePrompt(c){
     `This is a CASE: several agents worked it (${c.team.join(", ")}). It is graded as a team. In "actionTaken", say briefly who did what. "faultAgent" is what ${first} told the caller; if others told the caller something different, say so in "faultWhy".`]:[]);
   return head.join("\n")+"\n\n"+caseEvidence(c);
 }
+/* reference legs: calls the audited agent wasn't on, kept only to check what really happened */
+const REF_WHY={order:"the earlier call from this number, e.g. where the order was taken; the audited agent was not on it",parent:"the colleague's call the audited agent was brought into; the audited agent was not on it",
+  "":"the audited agent was not on this call"};
+const REF_RULE=(sa)=>`- REFERENCE calls: ${sa} was not on the calls marked REFERENCE (the earlier order call, the agent who answered before the transfer, or the colleague's call ${sa} was brought into). Grade ${sa} as if they had no context beyond their own calls and what the caller or colleague told them. Use REFERENCE calls only to check what really happened: what was ordered, what was said before, who was at fault. Never credit or mark down ${sa} for anything said or done on a REFERENCE call, and don't expect ${sa} to know what was said there unless someone told them.`;
 function caseEvidence(c){const legs=c.legs||[],tasks=c.tasks||[];
   let budget=60000;
   const calls=legs.map((l,i)=>{const t0=ldTs(l.at),dir=l.dir==="in"?"inbound from":l.dir==="out"?"outbound to":"with";
     let tx=String(l.text||"").trim();if(tx.length>8000)tx=tx.slice(0,8000)+" …";if(tx.length>budget)tx=tx.slice(0,Math.max(0,budget))+" …";budget-=tx.length;
     const party=l.party==="caller"?"the caller":l.party||"unknown";
-    return `\nCALL ${i+1} · ${isNaN(t0)?"":clock12u(t0)+" ET · "}${dur(l.sec)} · ${l.graded?"GRADED · ":""}${l.who||"Unknown"}, ${dir} ${party}\n${tx||"[no transcript]"}`});
+    return `\nCALL ${i+1} · ${isNaN(t0)?"":clock12u(t0)+" ET · "}${dur(l.sec)} · ${l.graded?"GRADED · ":""}${l.ref?`REFERENCE (${REF_WHY[l.refWhy]||"the audited agent was not on this call"}) · `:""}${l.who||"Unknown"}, ${dir} ${party}\n${tx||"[no transcript]"}`});
   const tk=tasks.length?tasks.map(k=>{const f=[];
       const kt=ldTs(k.at);f.push(`\nTASK ${k.id} · created ${isNaN(kt)?"":clock12u(kt)+" ET, "}${whenTask(k)} · ${k.by?`created by ${k.by}`:"creator not recorded"} · category ${k.cat||"none"}${k.intent?` · intent ${k.intent}`:""} · status ${k.status||"unknown"}${k.pri?` · priority ${k.pri}`:""}`);
       f.push(`Title: ${k.title||""}`);if(k.desc)f.push(`Description: ${capText(k.desc,1500)}`);
@@ -2243,6 +2247,7 @@ function factsPrompt(c){
     `- If a line can't be placed on one speaker with confidence, set "who" to "unclear". An "unclear" fact is fine; a fact on the wrong person is a serious error. A line is not the agent's just because it follows the agent's line.`,
     `- For transfers and hand-offs, record who handed the phone to whom ("Store hands the phone to the owner").`,
     `- The call bullets follow the same rules.`,
+    ...((c.legs||[]).some(l=>l.ref)?[`- Calls marked REFERENCE are calls ${first} was not on. Record their facts too, with src "Call N (reference)", so a reviewer can check what really happened.`]:[]),
     ``,`Reply with only a JSON object:`,
     `{"calls": [{"n": 1, "bullets": ["3 to 5 bullets for this call, each under 15 words, in order: who called and why, what was reported, what the agent did, how the call ended"]}],`,
     ` "timeline": [{"src": "Call 1 | Task T123 | Slack", "when": "5:04 PM", "who": "who said or did it, or unclear", "kind": "said | did", "what": "the fact, under 20 words"}],`,
@@ -2271,7 +2276,7 @@ function analysisPrompt(c,F){
     `- A claim made by one party is not proof. Weigh who said what.`,
     `- A fact whose speaker is "unclear" can't show what a particular person said; don't use it for "faultAgent" or "promised".`,
     `- A promise is "kept" only if a later fact shows it was done; "not_kept" if the record covers the time it was due and it wasn't done; otherwise "cant_tell".`,
-    `- Write plainly and briefly, the way a QA lead fills in a form. Refer to people by name or role, never as he or she.`].concat(team?[`- This is a team case (${c.team.join(", ")}). In "actionTaken" say briefly who did what. "faultAgent" is what ${first} told the caller; if others told the caller something different, say so in "faultWhy".`]:[]).concat([
+    `- Write plainly and briefly, the way a QA lead fills in a form. Refer to people by name or role, never as he or she.`,`- Facts from a "(reference)" call happened on a call ${first} wasn't on: use them to check what really happened, but "actionTaken", "promised" and "faultAgent" are only about ${first}'s own calls.`].concat(team?[`- This is a team case (${c.team.join(", ")}). In "actionTaken" say briefly who did what. "faultAgent" is what ${first} told the caller; if others told the caller something different, say so in "faultWhy".`]:[]).concat([
     ``,`Reply with only a JSON object with exactly these keys:`,
     `{"summary": "what happened, in order, in 2-3 short sentences",`,
     ` "rootCause": "what went wrong and why, in 1-2 sentences; if nothing went wrong, what the caller needed",`,
@@ -2672,7 +2677,7 @@ function callInput(q,transcripts){q=q||{};
   if(transcripts&&!Array.isArray(transcripts)&&typeof transcripts==="object")Object.entries(transcripts).forEach(([k,v])=>txOf.set(String(k),typeof v==="string"?v:String((v&&v.text)||"")));
   const src=Array.isArray(q.legs)&&q.legs.length?q.legs:((q.chain&&q.chain.legs)||[]);
   const all=src.filter(l=>l&&l.id).map(l=>{const text=txOf.get(String(l.id))||String(l.text||"");
-    return {id:String(l.id),at:l.at,sec:l.sec,who:l.who,login:l.login,group:l.group,graded:!!(l.graded??l.own),dir:l.dir,party:l.party,text,talk:text?legTalk(text):(l.talk||"silent")}});
+    return {id:String(l.id),at:l.at,sec:l.sec,who:l.who,login:l.login,group:l.group,graded:!!(l.graded??l.own),ref:!!l.ref,refWhy:l.refWhy||"",dir:l.dir,party:l.party,text,talk:text?legTalk(text):(l.talk||"silent")}});
   const legs=all.filter(l=>l.talk==="talk"),team=q.type==="case"?(Array.isArray(q.team)&&q.team.length?q.team:caseTeam(legs)):[];
   return {agent:q.agent,type:q.type||"call",kind:q.kind||(q.type==="mgr"?"MGR":"CL"),restaurant:q.restaurantName||q.restaurant||"",code:q.restaurantId||q.code||"",date:q.callDate||q.date||"",
     legs,setAside:all.length-legs.length,tasks:Array.isArray(q.tasks)?q.tasks:[],slack:Array.isArray(q.slack)?q.slack:[],followUp:q.followUp||"",
@@ -2704,6 +2709,7 @@ function callGradePrompt(c,F,A,items,lessons){
     `- Use the transcripts only to judge how things were said (opening, tone, empathy, clarity, the close) and to check a fact. Transcripts are machine speech-to-text with no speaker labels; the agent answers under an alias and often as the restaurant ("Pete's Pizza, how can I help?"). A fact whose speaker is "unclear" can't count for or against ${first}.`,
     `- Voicemail and no-answer calls were set aside and are not shown. A call with no transcript tells you nothing.`,
     ...CALL_RULES(sa,team),
+    ...(legs.some(l=>l.ref)?[REF_RULE(sa)]:[]),
     `- ${first} works in GreenDot (tickets, payments, menu, settings) and can play recordings that aren't here. Don't mark ${first} down for a check this record can't show; only for what the facts show went wrong. An action ${first} said on the call was done or would be done now ("I'll process the refund", "I updated the ticket") counts as done unless a later fact shows it wasn't; never lower a score only because the record can't confirm it was carried out.`,
     `- WIRA tasks are matched by restaurant and time. A task on this restaurant created during or just after the call and about this request is ${first}'s ticket even when its creator isn't recorded; score ${tk?tk.id:"the ticket criterion"} on what it says. One about another issue is not this call's ticket.`,
     ...(v3?[`- Score each flaw once: a defense or conclusion in the opening is first; a check skipped or a claim that doesn't hold up is investigation; a wrong root cause or a wrong account of fault given to the caller is diagnosis; the wrong action or next step is path; a wrong or unrecorded amount is accuracy; a needless handoff or a missing or thin escalation is escalation; a repeat issue not flagged is prevention; the ticket is documentation; an unclear explanation or a missing close is clarity; attitude (respect, warmth, defensiveness, empathy, dead air) is tone; a missed CMA walk-through is selfserve. A promise Tarro or the store won't keep, or one the policy doesn't allow, is path, not tone.`,
@@ -7230,7 +7236,7 @@ function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.
   const cs=CL?cbCites(CL,r.id):[],cited=cs.map(id=>GF.find(f=>String(f.id)===id)).filter(Boolean);
   return `<header class="chphd"><div class="chpttl"><h2 id="cbpTitle" tabindex="-1">${esc(r.label)}</h2></div><button type="button" class="chpx" data-cb="pclose" aria-label="Close">×</button></header>
     <section class="chpview" aria-label="Transcript">${cited.length?`<ol class="cbfacts cbcited">${cited.map(cbFactLi).join("")}</ol>`:""}
-      ${legs.length?legs.map((l,i)=>`<div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
+      ${legs.length?legs.map((l,i)=>`<div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}${l.ref?` <span class="tkmut">· Reference${l.refWhy==="order"?" · earlier call":l.refWhy==="parent"?" · colleague\u2019s call":""}</span>`:""}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
 function cbPanelOpen(it,crit,keep){const r=cbRubric(it.kind,it).find(x=>x.id===crit);if(!r)return;
   if(cbPanel&&cbPanel.ik===it.ik&&cbPanel.crit===crit){if(!keep)cbPanelClose(true);return}
   cbPanel={ik:it.ik,crit};if(!cbPanelEl){cbPanelEl=document.createElement("aside");cbPanelEl.id="cbPanel";cbPanelEl.className="chpanel cbpanel";cbPanelEl.setAttribute("aria-labelledby","cbpTitle")}
