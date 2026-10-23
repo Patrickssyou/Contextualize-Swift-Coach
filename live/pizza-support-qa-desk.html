@@ -1610,10 +1610,20 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t}.cbirow>.cbidate{grid-area:d}.cbirow>.cbitype{grid-area:ty}.cbirow>.cbiscore{grid-area:sc}.cbirow>.cbict{grid-area:ct}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:stretch;text-align:center}
 .cbirow .cbidate,.cbirow .cbitype{font-size:12.5px;color:var(--muted);white-space:nowrap}
 .cbirow .cbiscore{text-align:right;font-size:13px;font-weight:700;white-space:nowrap}
+.lrcards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.lrcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.lrcard.off{opacity:.55}
+.lrch{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.lrlink{border:0;background:none;padding:0;font:inherit;font-weight:700;font-size:15px;color:var(--accent);cursor:pointer}
+.lrlink:hover{text-decoration:underline}
+.lrsc{margin-left:auto;font-size:13px}
+.lrwhy{margin:4px 0 0;font-size:13.5px;line-height:1.5}
+.lrnotes{list-style:none;margin:4px 0 0;padding:0;font-size:13px;line-height:1.5;color:var(--ink)}
+.lrnotes b{font-weight:600;color:var(--muted)}
 .lrles{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.lrles li{padding:10px 2px;border-top:1px solid var(--line)}
-.lrles li:first-child{border-top:0}
-.lrles li.off{opacity:.55}
+.lrles>li{padding:10px 2px;border-top:1px solid var(--line)}
+.lrles>li:first-child{border-top:0}
+.lrnotes li{padding:1px 0}
 .lrlh{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:14px}
 .lrmk{font-size:13px;color:var(--ink)}
 .lrles p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:var(--ink)}
@@ -6575,7 +6585,7 @@ function lrnChatHtml(){const head=`<div class="bhd"><h2>Chat history</h2></div>`
   return head+pick+`<div class="chist" role="table" id="lrHist"><div class="chr chh" role="row"><span role="columnheader">Checkpoint</span><span role="columnheader" class="n">Score</span><span role="columnheader">Verdict</span><span role="columnheader" class="n">Change</span><span role="columnheader">Priority</span><span role="columnheader">Case type</span><span role="columnheader">Fault</span></div>
     ${tr||`<div class="chr"><span class="tkmut">Not in any checkpoint.</span></div>`}${you}</div><div class="row"><button type="button" class="btn small" data-lopen="${esc(lrnChat)}">Open audit</button></div>`}
 /* what Claude learned from agreed scores: each criterion where the panel moved Claude's mark (or kept it with a better reason), with the reason. Newest first */
-let lrnCL=null,lrnCLAt=0;
+let lrnCL=null,lrnCLAt=0,lrnCGAsk=false;
 function lrnCallLessonsLoad(){if(!db||Date.now()-lrnCLAt<15000)return;lrnCLAt=Date.now();db.collection(CL_ROOT).get().then(s=>{lrnCL=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));if(tab==="learn")$("#lrLessons").innerHTML=lrnLessonsHtml();cbTeachBackfill()}).catch(()=>{})}
 /* candidate calls locked before Joana's and Lourdes's agreed marks could teach: write their lessons once */
 let cbTBDone=false;
@@ -6586,14 +6596,26 @@ async function cbTeachBackfill(){if(cbTBDone||!amOwner||!db||!lrnCL)return;cbTBD
     try{await cbCallLocked(it,R,cbLkMarks(it.ik,lk),A,subd,lk.at||new Date().toISOString())}catch(e){}}
   lrnCLAt=0;lrnCallLessonsLoad()}
 function lrnLessonsHtml(){const L=chLessons.filter(l=>l.kind!=="not").map(l=>Object.assign({src:"chat"},l)).concat((lrnCL||[]).map(l=>Object.assign({src:"call"},l)))
-    .filter(l=>l.kind==="contest"||l.kind==="reinforce").sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+    .filter(l=>l.kind==="contest"||l.kind==="reinforce");
   const day=at=>{const t=Date.parse(at);return isNaN(t)?"":new Date(t).toLocaleDateString("en-US",{month:"short",day:"numeric"})};
-  const where=l=>{if(l.src==="chat"){const c=chatBy(l.sid);return (c&&c.restaurant)||("Chat "+l.sid)}const q=(queueAll||[]).find(d=>String(d.id)===String(l.queueId));return (q&&q.restaurantName)||"Call"};
-  const mk=v=>{const m=String(v==null?"":v).match(/^(\d+)\/(\d+)$/);return m?String(Number(m[1])+(Number(m[2])===4?1:0)):v==="na"?"N/A":String(v==null?"–":v)};
+  const mk=v=>{const m=String(v==null?"":v).match(/^(\d+)\/(\d+)$/);return m?String(Number(m[1])+(Number(m[2])===4?1:0)):v==="na"||v==="N/A"?"N/A":String(v==null?"–":v)};
+  /* one card per agreed item: its agreed score next to Claude's, then each row the panel taught */
+  const G=new Map();L.forEach(l=>{const ik=l.src==="chat"?"chat_"+l.sid:"call_"+l.queueId;if(!G.has(ik))G.set(ik,{ik,src:l.src,sa:l.sa,week:l.week,at:l.at,rows:[]});const g=G.get(ik);g.rows.push(l);if(String(l.at||"")>String(g.at||""))g.at=l.at});
+  const cards=[...G.values()].sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))).map(g=>{const it=cbItemByIk(g.ik),lk=(cbItems[g.ik]||{}).locked,ok=lessonOk(g.rows[0]);
+    const name=g.src==="chat"?((chatBy(g.ik.slice(5))||{}).restaurant||"Chat "+g.ik.slice(5)):(((queueAll||[]).find(d=>String(d.id)===g.ik.slice(5))||{}).restaurantName||(it&&it.title)||"Call");
+    const cp=it?(g.src==="call"?cbCGPct(it):(a=>a&&a.pct!=null?a.pct:null)(chatAud[it.key])):null;
+    const subd=cbGraderIds().filter(u=>cbSub(u,g.ik));
+    const R=it?cbRubric(it.kind,it):[],ord=id=>{const k=R.findIndex(r=>r.id===id);return k<0?99:k};
+    const rows=g.rows.slice().sort((a,b)=>ord(a.crit)-ord(b.crit)).map(l=>{const raw=subd.map(u=>[u,String((((cbSub(u,g.ik)||{}).notes)||{})[l.crit]||"").trim()]).filter(x=>x[1]),notes=raw.map(([u,n])=>`<li><b>${esc(cbName(u))}:</b> ${esc(n)}</li>`);
+      let why=String(l.reason||"").trim();if(why&&raw.length&&why===[...new Set(raw.map(x=>x[1]))].join(" · "))why="";
+      return `<li><div class="lrlh"><b>${esc(l.label||l.crit||"")}</b><span class="lrmk">${l.kind==="contest"?`Claude <span class="num">${esc(mk(l.from))}</span> → agreed <span class="num">${esc(mk(l.to))}</span>`:`Kept <span class="num">${esc(mk(l.to))}</span>, better reason`}</span></div>
+        ${why&&why!=="All matched"?`<p class="lrwhy">${esc(why)}</p>`:""}${notes.length?`<ul class="lrnotes">${notes.join("")}</ul>`:(why==="All matched"||!why)?`<p class="hint">All three gave ${esc(mk(l.to))}. No notes.</p>`:""}</li>`}).join("");
+    return `<li class="lrcard${ok?"":" off"}"><div class="lrch"><button type="button" class="lrlink" data-lropen="${esc(g.ik)}">${esc(name)}</button><span class="hint">${esc([g.sa,g.src==="call"?"Call":"Chat",day(g.at)].filter(Boolean).join(" · "))}${ok?"":" · not used"}</span>
+      <span class="lrsc">${lk&&lk.pct!=null?`Agreed <b class="num">${esc(fmt(lk.pct))}%</b>`:""}${cp!=null?` <span class="tkmut num">Claude ${esc(fmt(cp))}%</span>`:""}</span></div><ol class="lrles">${rows}</ol></li>`});
+  const miss=[...G.values()].filter(g=>g.src==="call"&&!cbCG.has(g.ik.slice(5))).map(g=>g.ik.slice(5));
+  if(db&&miss.length&&!lrnCGAsk){lrnCGAsk=true;Promise.all(miss.map(k=>db.doc(CG_ROOT+"/"+k).get().then(x=>cbCG.set(k,x&&x.exists?(x.data()||null):null)).catch(()=>cbCG.set(k,null)))).then(()=>{if(tab==="learn")$("#lrLessons").innerHTML=lrnLessonsHtml()})}
   const used=L.filter(lessonOk).length;
-  return `<div class="bhd"><h2>What Claude learned</h2><span class="hint num">${chPl(used,"lesson")} used in the next grades</span></div>${L.length?`<ol class="lrles">${L.slice(0,60).map(l=>`<li class="${lessonOk(l)?"":"off"}">
-    <div class="lrlh"><b>${esc(l.label||l.crit||"")}</b><span class="lrmk">${l.kind==="contest"?`Claude <span class="num">${esc(mk(l.from))}</span> → agreed <span class="num">${esc(mk(l.to))}</span>`:`Kept <span class="num">${esc(mk(l.to))}</span>, better reason`}</span><span class="hint">${esc([where(l),l.sa,l.src==="call"?"Call":"Chat",day(l.at)].filter(Boolean).join(" · "))}${lessonOk(l)?"":" · not used"}</span></div>
-    <p>${esc(String(l.reason||"").trim()||"No reason given.")}</p></li>`).join("")}</ol>`:`<p class="lrp">Nothing yet. Lock an agreed score and every row where you moved Claude's mark shows here with your reason.</p>`}`}
+  return `<div class="bhd"><h2>What Claude learned</h2><span class="hint num">${chPl(G.size,"agreed item")} · ${chPl(used,"lesson")} used in the next grades</span></div>${cards.length?`<ol class="lrcards">${cards.join("")}</ol>`:`<p class="lrp">Nothing yet. Lock an agreed score and every row where you moved Claude's mark shows here with your reason.</p>`}`}
 function renderLearn(){const v=$("#view-learn");if(!v||tab!=="learn")return;
   if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="learn"><section class="panel lpanel" id="lrLessons"></section><section class="panel lpanel" id="lrRound"></section><section class="panel lpanel" id="lrChart" hidden></section><section class="panel lpanel" id="lrCps"></section><section class="panel lpanel" id="lrChat"></section></div>`}
   if(!db){$("#lrRound").innerHTML=`<div class="bhd"><h2>Rounds</h2></div><p class="lrp">Sign in to claude.ai to run rounds.</p>`}else $("#lrRound").innerHTML=lrnRoundHtml();
@@ -6602,7 +6624,7 @@ function renderLearn(){const v=$("#view-learn");if(!v||tab!=="learn")return;
   $("#lrLessons").innerHTML=lrnLessonsHtml();lrnCallLessonsLoad();
   const f=document.activeElement&&document.activeElement.id==="lrPick";$("#lrChat").innerHTML=lrnChatHtml();if(f){const p=$("#lrPick");if(p)p.focus({preventScroll:true})}
   lrnLoadGrades()}
-$("#view-learn").addEventListener("click",e=>{const o=e.target.closest("[data-lopen]");if(o){openChat(o.dataset.lopen,lrnWeek());return}
+$("#view-learn").addEventListener("click",e=>{const lr=e.target.closest("[data-lropen]");if(lr){cbOpenItem(lr.dataset.lropen);return}const o=e.target.closest("[data-lopen]");if(o){openChat(o.dataset.lopen,lrnWeek());return}
   const b=e.target.closest("button");if(b&&b.id==="lrDraw")return});
 $("#view-learn").addEventListener("change",e=>{if(e.target.id==="lrPick"){lrnChat=e.target.value;renderLearn()}});
 $("#view-learn").addEventListener("toggle",e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.cp){if(d.open)lrnCpOpen.add(d.dataset.cp);else lrnCpOpen.delete(d.dataset.cp)}},true);
