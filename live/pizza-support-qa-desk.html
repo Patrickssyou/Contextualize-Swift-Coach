@@ -2164,7 +2164,7 @@ function cleanAiFacts(x){if(!x||typeof x!=="object"||Array.isArray(x))return nul
   if(!out.rootCause&&!out.summary)return null;
   if(out.faultCorrect==="no_error"&&!out.errorType)out.errorType="";
   return out}
-const KIND_TEXT={CL:"the restaurant client called support",MGR:"a call routed to the manager line",DE:"a delivery call",SME:"a call routed to the subject-matter-expert line (an escalation from another agent or a caller who needs an expert)"};
+const KIND_TEXT={CL:"the restaurant client called support",MGR:"a call routed to the manager line",DE:"a delivery call",SME:"a call routed to the subject-matter-expert line (an escalation from another agent or a caller who needs an expert)",OT:"an order-taking call on the restaurant's own line (a customer placing an order or asking about one)"};
 function clock12u(ms){const d=new Date(ms),h=d.getUTCHours(),m=d.getUTCMinutes();return (h%12||12)+":"+String(m).padStart(2,"0")+(h<12?" AM":" PM")}
 function dur(s){s=Math.max(0,Math.round(Number(s)||0));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
 function whenTask(k){const m=k.min;return k.when==="before"?`${m} min before the first call`:k.when==="after"?(m<1?"right after the last call":`${m} min after the last call`):k.leg?`during call ${k.leg}`:"between calls"}
@@ -7047,7 +7047,7 @@ async function cbGrSave(){if(!db||!amOwner)return;const seen=new Set(),L=[];
 const CB_IC={chat:`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.5 3.5a1.5 1.5 0 0 1 1.5-1.5h8a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 12 11H7.2L4.5 13.6V11H4a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   call:`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.6 2.2h1.9l1 3-1.4 1a7.6 7.6 0 0 0 3.7 3.7l1-1.4 3 1v1.9a1.4 1.4 0 0 1-1.5 1.4A10.6 10.6 0 0 1 3.2 3.7a1.4 1.4 0 0 1 1.4-1.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`};
 const cbKic=k=>`<span class="cbkic ${k}" role="img" aria-label="${k==="call"?"Call":"Chat"}">${CB_IC[k]}</span>`;
-const cbKindL=q=>{q=q||{};return q.kind?String(q.kind):q.type==="mgr"?"MGR / DE":"CL"};
+const cbKindL=q=>{q=q||{};return q.kind==="OT"?"Order":q.kind?String(q.kind):q.type==="mgr"?"MGR / DE":"CL"};
 const cbDay=at=>{const d=String(at||"").slice(0,10);return /^\d{4}-\d\d-\d\d$/.test(d)?shortDate(d):""};
 function cbLegs(q){q=q||{};const lc=liveChain(q.chain);if(lc&&lc.legs.length)return lc.legs;return q.callId?[{id:q.callId,at:(q.callDate||"")+"T"+(q.callTime||"00:00"),sec:q.durationSec,who:q.agent,own:true,graded:true}]:[]}
 const cbTalk=q=>{const c=(q||{}).chain;return c&&c.talkSec!=null?c.talkSec:cbLegs(q).reduce((t,l)=>t+(Number(l.sec)||0),0)||(q||{}).durationSec||0};
