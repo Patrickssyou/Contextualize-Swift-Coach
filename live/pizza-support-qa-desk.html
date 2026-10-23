@@ -1299,6 +1299,7 @@ a.evcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .legtag.ref{background:var(--soft);color:var(--muted);font-weight:600}
 .evrow.main{border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
 .cbtxleg.main{border:2px solid var(--accent);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
+mark.cbq{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);box-shadow:0 0 0 2px var(--accent);border-radius:3px;padding:0 1px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .cbpleg+.cbpleg{margin-top:14px}
 .cbpleg.main{border:2px solid var(--accent);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
 .evrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
@@ -2733,7 +2734,7 @@ function callGradePrompt(c,F,A,items,lessons){
     ...CALL_CASE_RULES(),
     ``,`Reply with only a JSON object:`,
     `{"caseType": "${CALL_CASE_TYPES.map(t=>t.id).join(" | ")}", "caseWhy": "one sentence citing F#",`,
-    ` "criteria": {${(items||[]).map(it=>`"${it.id}": {"why": "one sentence", "cites": ["F1"], "score": ${it.na?`"0-${hi} or na`:`"0-${hi}`}${noTask&&it===tk?' or unknown"':'"'}}`).join(", ")}},`,
+    ` "criteria": {${(items||[]).map(it=>`"${it.id}": {"why": "one sentence", "cites": ["F1"], "quote": {"call": 1, "text": "the exact words from that call's transcript the mark rests on, copied character for character, 4-25 words; empty when nothing in a transcript shows it"}, "score": ${it.na?`"0-${hi} or na`:`"0-${hi}`}${noTask&&it===tk?' or unknown"':'"'}}`).join(", ")}},`,
     ` "wentWell": ["up to 3 things ${first} did well, each under 20 words, each tied to a fact"],`,
     ` "fixes": [{"id": "criterion id scored below ${v3?"3 (the bar)":"3"}", "what": "what ${first} did, under 25 words", "should": "what ${first} should do next time, under 30 words, with the words to say when it helps"}],`,
     ` "summary": "1-2 sentences on the overall handling"}`,
@@ -2753,17 +2754,18 @@ function cleanCallGrade(x,items,F){if(!x||typeof x!=="object"||Array.isArray(x))
   const ids=new Set(((F&&F.timeline)||[]).map(t=>t.id).concat(((F&&F.promises)||[]).map(p=>p.id)));
   const okCites=(a,why)=>[...new Set((Array.isArray(a)?a:typeof a==="string"?a.split(/[\s,;]+/):[]).concat(String(why||"").match(/\b[FP]\d+\b/g)||[])
     .map(v=>String(v).trim().toUpperCase()))].filter(v=>ids.has(v)).slice(0,8);
-  const scores={},reasons={},cites={};
+  const scores={},reasons={},cites={},quotes={};
   (items||[]).forEach(it=>{if(!it||!it.id)return;const id=String(it.id),{lo,hi}=itemScale(it),v=get(id,"score","scores"),why=get(id,"why","reasons");
     const isNa=typeof v==="string"&&/^\s*(n\/?a|not applicable)\s*$/i.test(v),num=v===null||v===""||typeof v==="boolean"?NaN:Number(v);
     if(isNa){if(it.na)scores[id]="na"}else if(!isNaN(num))scores[id]=Math.max(lo,Math.min(hi,Math.round(num)));
     const r=capText(typeof why==="string"?why:"",300);if(r)reasons[id]=r;
-    const c=okCites(get(id,"cites","cites"),r);if(c.length)cites[id]=c});
+    const c=okCites(get(id,"cites","cites"),r);if(c.length)cites[id]=c;
+    const qq=get(id,"quote","quotes");if(qq&&typeof qq==="object"&&String(qq.text||"").trim())quotes[id]={call:Number(qq.call)||1,text:capText(String(qq.text),300)}});
   if(!Object.keys(scores).length)return null;
   const known=new Set((items||[]).map(it=>String(it.id))),sv=v=>capText(typeof v==="string"?v:v==null?"":String(v),300);
   const fixes=(Array.isArray(x.fixes)?x.fixes:[]).filter(f=>f&&typeof f==="object"&&known.has(String(f.id||f.criterion||"").trim())).slice(0,6)
     .map(f=>({id:String(f.id||f.criterion).trim(),what:sv(f.what),should:sv(f.should)})).filter(f=>f.what||f.should);
-  return {...cleanCaseFields(x),scores,reasons,cites,wentWell:(Array.isArray(x.wentWell)?x.wentWell:[]).map(t=>capText(typeof t==="string"?t:"",200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,3),
+  return {...cleanCaseFields(x),scores,reasons,cites,quotes,wentWell:(Array.isArray(x.wentWell)?x.wentWell:[]).map(t=>capText(typeof t==="string"?t:"",200).replace(/^[-•*]\s*/,"")).filter(Boolean).slice(0,3),
     fixes,summary:capText(typeof x.summary==="string"?x.summary:"",400)}}
 /* the case type alone, from the pass-1 facts, so calls graded before caseType existed can be classified without a regrade.
    c: a queue doc or callInput; F: the facts. Reply {caseType, caseWhy}. */
@@ -5498,7 +5500,7 @@ async function gradeOneChat(c,ctl,orderIds,fresh){
       try{return await sampleFn.json(prompt,o)}catch(e){throw chTag(e,"ai")}},
     policy:chatPolicyDoc||CHAT_POLICY_EMPTY,
     cal:chatCal.slice().sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))),
-    lessons:chLessonsSorted().slice(0,CHAT.lessonMax||20),
+    lessons:chLessonsSorted().filter(l=>l.week!==CAND_WEEK).slice(0,CHAT.lessonMax||20),
     slack:ch=>chatSlack(ch,ctl),
     isStop:e=>!!e&&(e.code==="cancelled"||chatIsAccess(e)),
     step:(id,st,note)=>{if(!chatRun||chatRun.sid!==sid)return;chatRun.steps[id]={st,note:note||""};if(st==="run")chatRun.step=id;paintRun()}};
@@ -6925,7 +6927,9 @@ async function cbLock(it){const ik=it.ik,R=cbRubric(it.kind,it),subd=cbGraderIds
     const doc=Object.assign({},cbItems[ik]||{},{kind:it.kind,key:it.key,round:it.round??null,locked});
     await db.doc("calibItems/"+ik).set(doc);cbItems[ik]=doc;
     let msg=`Locked ${v?v.label+" ":""}${fmt(pct)}%`;
-    if(it.kind==="chat"){const x=await cbChatLocked(it,R,marks,A,subd,pct,v,at);msg+=x}
+    /* the SA candidates pool is scored, never learned from (its calls include order-taking lines) */
+    if((it.week||it.round)===CAND_WEEK){}
+    else if(it.kind==="chat"){const x=await cbChatLocked(it,R,marks,A,subd,pct,v,at);msg+=x}
     else if(it.kind==="call")msg+=await cbCallLocked(it,R,marks,A,subd,at);
     toast(msg)}
   catch(e){toast(e&&e.code==="invalid_argument"?"You can't save to this QA Desk.":"Couldn't lock. Try again.")}
@@ -7170,8 +7174,38 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
 
 /* ---------- a call in the Audit tab: Ticket → Evidence → Scorecard → Coaching, like a chat ---------- */
 let cbAuditSig="";
-function cbTxBody(l){if(!l.id)return `<span class="hint">No recording id.</span>`;const t=txCache.get(String(l.id));
-  if(t==null)return mcp?`<span class="hint">Loading…</span>`:`<span class="hint">Transcripts need Lightdash.</span>`;return t.trim()?esc(t):`<span class="hint">No transcript for this call.</span>`}
+function cbTxBody(l,hl){if(!l.id)return `<span class="hint">No recording id.</span>`;const t=txCache.get(String(l.id));
+  if(t==null)return mcp?`<span class="hint">Loading…</span>`:`<span class="hint">Transcripts need Lightdash.</span>`;return t.trim()?cbMarkText(t,hl):`<span class="hint">No transcript for this call.</span>`}
+/* the quote Claude based a mark on, boxed in the transcript: matched loosely (case, punctuation and spacing ignored), else by its first and last words */
+function cbFindSpan(t,q){const N=[],idx=[];for(let i=0;i<t.length;i++){const ch=t[i].toLowerCase();if(/[a-z0-9]/.test(ch)){N.push(ch);idx.push(i)}else if(N.length&&N[N.length-1]!==" "){N.push(" ");idx.push(i)}}
+  const ns=N.join(""),nq=String(q||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();if(nq.length<6)return null;
+  const at=(x,from)=>ns.indexOf(x,from||0),end=k=>idx[Math.min(k,idx.length-1)]+1;
+  let k=at(nq);if(k>=0)return [idx[k],end(k+nq.length-1)];
+  const w=nq.split(" ");if(w.length<6)return null;const a=w.slice(0,4).join(" "),b=w.slice(-4).join(" "),i=at(a);if(i<0)return null;const j=at(b,i);
+  if(j>=0&&j-i<nq.length*2+40)return [idx[i],end(j+b.length-1)];return [idx[i],end(i+a.length-1)]}
+function cbMarkText(t,hl){const sp=(hl||[]).map(q=>cbFindSpan(t,q)).filter(Boolean).sort((x,y)=>x[0]-y[0]);if(!sp.length)return esc(t);
+  let o="",p=0;sp.forEach(([a,b])=>{if(a<p)return;o+=esc(t.slice(p,a))+`<mark class="cbq">${esc(t.slice(a,b))}</mark>`;p=b});return o+esc(t.slice(p))}
+/* the quotes of one criterion, by leg id: the grade's own quotes, else ones found afterwards (cbQuoteRun) */
+const cbQ=new Map();
+function cbQuotesOf(it,crit){const C=cbClaude(it),legs=cbLegs(it.q).filter(l=>l.id),Q=(C&&C.g&&C.g.quotes)||cbQ.get(String(it.key))||{},x=Q[crit];if(!x||!x.text)return {};
+  const l=legs[(Number(x.call)||1)-1];return l?{[String(l.id)]:[x.text]}:{}}
+/* a grade made before quotes: one short Claude pass finds them in the transcripts, saved on the grade doc */
+const cbQRun=new Set();
+async function cbQuoteRun(it){const key=String(it.key),C=cbClaude(it);if(!C||!sampleFn||cbQRun.has(key)||(C.g&&C.g.quotes)||cbQ.has(key))return;
+  const legs=cbLegs(it.q).filter(l=>l.id);if(!legs.length||legs.some(l=>!txCache.has(String(l.id))))return;cbQRun.add(key);
+  const R=cbRubric("call",it).filter(r=>C.marks[r.id]!==undefined&&C.marks[r.id]!=="na");
+  const prompt=[`A QA coach graded one support call. For each criterion below, find the exact words in the transcripts that the mark rests on.`,
+    `Copy them character for character from the transcript (4-25 words). Prefer the audited agent's own call. Use "" when no line in a transcript shows it (e.g. a WIRA ticket criterion).`,``,
+    `CRITERIA`,...R.map(r=>`- ${r.id} · ${r.label} · mark ${C.marks[r.id]} · reason: ${String((C.why||{})[r.id]||"")}`),``,
+    ...legs.map((l,i)=>`CALL ${i+1}${cbMainLeg(legs,l)?" (AUDITED)":l.ref?" (reference)":""} · ${l.who||""}\n${capText(txCache.get(String(l.id))||"",6000)}`),``,
+    `Reply with only a JSON object: {"quotes": {${R.map(r=>`"${r.id}": {"call": 1, "text": ""}`).join(", ")}}}`].join("\n");
+  try{const x=await sampleFn.json(prompt,{modelTier:"default"}),Q={};const src=(x&&x.quotes)||{};
+    R.forEach(r=>{const v=src[r.id];if(v&&String(v.text||"").trim())Q[r.id]={call:Number(v.call)||1,text:capText(String(v.text),300)}});
+    cbQ.set(key,Q);try{await db.doc(CG_ROOT+"/"+key).update({quotes:Q})}catch(e){}
+    if(cbPanel&&cbPanel.ik===it.ik)cbPanelPaintTx(it)}catch(e){cbQRun.delete(key)}}
+function cbPanelPaintTx(it){if(!cbPanelEl||!cbPanel)return;const H=cbQuotesOf(it,cbPanel.crit);
+  cbPanelEl.querySelectorAll("[data-txid]").forEach(el=>{const l=cbLegs(it.q).find(x=>String(x.id)===el.dataset.txid);if(l)el.innerHTML=cbTxBody(l,H[String(l.id)])});
+  const m=cbPanelEl.querySelector("mark.cbq");if(m)m.scrollIntoView({block:"center",behavior:"smooth"})}
 function cbTxHtml(q){const legs=cbLegs(q);if(!legs.length)return `<p class="tkmut">No recording.</p>`;
   return legs.map((l,i)=>`<section class="cbtxleg${cbMainLeg(legs,l)?" main":""}"><h4><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b>${cbLegTag(legs,l)}<span class="num tkmut">${esc([l.at?clock12(String(l.at).slice(11,16)):"",l.sec?dur(l.sec):""].filter(Boolean).join(" · "))}</span>${l.id?`<a class="tklink tkrec" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}</h4><div class="txtext" data-txid="${esc(l.id||"")}">${cbTxBody(l)}</div></section>`).join("")}
 async function cbLoadTx(it){const legs=cbLegs(it.q).filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));if(!mcp||!legs.some(l=>!txCache.has(l.id)))return;
@@ -7257,12 +7291,12 @@ function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.
   const cs=CL?cbCites(CL,r.id):[],cited=cs.map(id=>GF.find(f=>String(f.id)===id)).filter(Boolean);
   return `<header class="chphd"><div class="chpttl"><h2 id="cbpTitle" tabindex="-1">${esc(r.label)}</h2></div><button type="button" class="chpx" data-cb="pclose" aria-label="Close">×</button></header>
     <section class="chpview" aria-label="Transcript">${cited.length?`<ol class="cbfacts cbcited">${cited.map(cbFactLi).join("")}</ol>`:""}
-      ${legs.length?legs.map((l,i)=>`<div class="cbpleg${legs.length>1&&cbMainLeg(legs,l)?" main":""}"><div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}${legs.length>1?cbLegTag(legs,l):""}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div></div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
+      ${legs.length?legs.map((l,i)=>`<div class="cbpleg${legs.length>1&&cbMainLeg(legs,l)?" main":""}"><div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}${legs.length>1?cbLegTag(legs,l):""}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l,cbQuotesOf(it,r.id)[String(l.id)])}</div></div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
 function cbPanelOpen(it,crit,keep){const r=cbRubric(it.kind,it).find(x=>x.id===crit);if(!r)return;
   if(cbPanel&&cbPanel.ik===it.ik&&cbPanel.crit===crit){if(!keep)cbPanelClose(true);return}
   cbPanel={ik:it.ik,crit};if(!cbPanelEl){cbPanelEl=document.createElement("aside");cbPanelEl.id="cbPanel";cbPanelEl.className="chpanel cbpanel";cbPanelEl.setAttribute("aria-labelledby","cbpTitle")}
   const v=$("#view-chat");if(v&&cbPanelEl.parentNode!==v)v.append(cbPanelEl);cbPanelEl.hidden=false;cbPanelEl.innerHTML=cbPanelHtml(it,r);document.body.classList.add("chp-on");
-  if(mcp)cbLoadTx(it);
+  if(mcp)cbLoadTx(it).then(()=>{cbPanelPaintTx(it);cbQuoteRun(it)});else setTimeout(()=>cbPanelPaintTx(it),0);
   const h=$("#cbpTitle");if(h)h.focus({preventScroll:true});document.querySelectorAll('#view-chat [data-cb="panel"]').forEach(b=>b.setAttribute("aria-expanded",String(b.dataset.crit===crit)));setTimeout(cbPaint,0)}
 function cbPanelClose(refocus){if(!cbPanel)return;const P=cbPanel;cbPanel=null;if(cbPanelEl){cbPanelEl.hidden=true;cbPanelEl.innerHTML=""}
   if(!(typeof chPanel!=="undefined"&&chPanel))document.body.classList.remove("chp-on");
@@ -7310,7 +7344,7 @@ function cbGRMsg(e){const c=e&&e.code;if(c==="no_text")return "No transcript for
   return aiErr(e)}
 const cbCanGrade=()=>!!(cbGradeFn()&&db&&mcp&&sampleFn);
 async function cbCallLessons(){if(!db)return [];try{const s=await db.collection(CL_ROOT).get();
-  return s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))).slice(0,20)}catch(e){return []}}
+  return s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).filter(l=>l.week!==CAND_WEEK).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))).slice(0,20)}catch(e){return []}}
 async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {code:"error",src:"run"};
   const q=it.q||{},guard=()=>{if(ctl.signal.aborted)throw {code:"cancelled",src:"run"}},step=s=>{if(cbGR){cbGR.step=s;cbGRPaint()}};
   const all=cbLegs(q),legs=all.filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));
@@ -7325,7 +7359,7 @@ async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {cod
   const R=await fn(c,deps);guard();
   const G=(R&&R.G)||{};if(!G.scores||typeof G.scores!=="object")throw {code:"ai_shape",src:"ai"};
   const ids=items.map(x=>x.id),pick=o=>Object.fromEntries(ids.filter(id=>o&&o[id]!==undefined).map(id=>[id,o[id]]));
-  const doc=clone({v:G.v||(R&&R.v)||1,at:new Date().toISOString(),by:myId||null,items:ids,scores:pick(G.scores),reasons:pick(G.reasons),cites:pick(G.cites),
+  const doc=clone({v:G.v||(R&&R.v)||1,at:new Date().toISOString(),by:myId||null,items:ids,scores:pick(G.scores),reasons:pick(G.reasons),cites:pick(G.cites),quotes:pick(G.quotes||{}),
     wentWell:Array.isArray(G.wentWell)?G.wentWell:[],fixes:Array.isArray(G.fixes)?G.fixes:[],summary:String(G.summary||""),caseType:String(G.caseType||""),caseWhy:String(G.caseWhy||""),F:(R&&R.F)??null,A:(R&&R.A)??null});
   try{await db.doc(CG_ROOT+"/"+it.key).set(doc)}catch(e){throw chTag(e,"db")}
   cbCG.set(String(it.key),doc);cbGRErr.delete(String(it.key))}
