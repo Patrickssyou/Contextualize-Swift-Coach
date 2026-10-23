@@ -1294,11 +1294,19 @@ a.evcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .evtl[open]>summary{margin-bottom:8px}
 .tkev .evfull{margin-top:14px}
 .evsrcs{display:flex;flex-direction:column;gap:8px;min-width:0}
+.legtag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;vertical-align:1px;white-space:nowrap}
+.legtag.main{background:var(--accent);color:var(--on-accent)}
+.legtag.ref{background:var(--soft);color:var(--muted);font-weight:600}
+.evrow.main{border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
+.cbtxleg.main{border:2px solid var(--accent);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.cbpleg+.cbpleg{margin-top:14px}
+.cbpleg.main{border:2px solid var(--accent);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
 .evrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
 .evic{width:28px;height:28px;border-radius:8px;background:var(--soft);display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--muted);flex:none}
 .evt{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px}
 .evt b{font-size:14px}
-.evt .evs,.evt>span:not(.ostat){font-size:12px;color:var(--muted);flex-basis:100%;overflow-wrap:anywhere}
+.evt .evs,.evt>span:not(.ostat):not(.legtag){font-size:12px;color:var(--muted);flex-basis:100%;overflow-wrap:anywhere}
+.evt>.legtag{margin-left:2px}
 .evlink{font-size:13px;font-weight:600;white-space:nowrap}
 .evmore{align-self:flex-start;font-size:13px;color:var(--accent);font-weight:600;border:0;background:none;padding:2px 0}
 .evmore::after{content:" ▸";display:inline-block;transition:transform .15s}
@@ -7165,7 +7173,7 @@ let cbAuditSig="";
 function cbTxBody(l){if(!l.id)return `<span class="hint">No recording id.</span>`;const t=txCache.get(String(l.id));
   if(t==null)return mcp?`<span class="hint">Loading…</span>`:`<span class="hint">Transcripts need Lightdash.</span>`;return t.trim()?esc(t):`<span class="hint">No transcript for this call.</span>`}
 function cbTxHtml(q){const legs=cbLegs(q);if(!legs.length)return `<p class="tkmut">No recording.</p>`;
-  return legs.map((l,i)=>`<section class="cbtxleg"><h4><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b><span class="num tkmut">${esc([l.at?clock12(String(l.at).slice(11,16)):"",l.sec?dur(l.sec):""].filter(Boolean).join(" · "))}</span>${l.id?`<a class="tklink tkrec" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}</h4><div class="txtext" data-txid="${esc(l.id||"")}">${cbTxBody(l)}</div></section>`).join("")}
+  return legs.map((l,i)=>`<section class="cbtxleg${cbMainLeg(legs,l)?" main":""}"><h4><span class="num idx">${i+1}</span><b>${esc(shortWho(l.who||"Unknown"))}</b>${cbLegTag(legs,l)}<span class="num tkmut">${esc([l.at?clock12(String(l.at).slice(11,16)):"",l.sec?dur(l.sec):""].filter(Boolean).join(" · "))}</span>${l.id?`<a class="tklink tkrec" href="${esc(recUrl(l.id))}" target="_blank" rel="noopener">▶ Recording</a>`:""}</h4><div class="txtext" data-txid="${esc(l.id||"")}">${cbTxBody(l)}</div></section>`).join("")}
 async function cbLoadTx(it){const legs=cbLegs(it.q).filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));if(!mcp||!legs.some(l=>!txCache.has(l.id)))return;
   try{await fetchTx(legs)}catch(e){legs.forEach(l=>{if(!txCache.has(l.id))txCache.set(l.id,"")})}
   document.querySelectorAll("#view-chat [data-txid]").forEach(el=>{const l=legs.find(x=>x.id===el.dataset.txid);if(l)el.innerHTML=cbTxBody(l)})}
@@ -7185,12 +7193,15 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLo
 /* "Claude's score 82.5%", or "Not graded yet" */
 function cbClScoreHtml(it,id,cls){const p=cbCGPct(it),C=cbClaude(it);
   return `<span class="${cls}" id="${id}">${cbAv("claude")}<span>Claude's score</span>${C?`<b class="num">${p==null?"–":esc(fmt(p))+"%"}</b>`:`<span class="tkmut">${cbCG.has(String(it.key))||!db?"Not graded yet":"…"}</span>`}</span>`}
+/* the call being audited (the sampled leg), and a short tag for each leg */
+const cbMainLeg=(legs,l)=>!!(l&&(l.sampled||(!legs.some(x=>x.sampled)&&legs.indexOf(l)===0)));
+const cbLegTag=(legs,l)=>cbMainLeg(legs,l)?`<span class="legtag main">Audited call</span>`:l&&l.ref?`<span class="legtag ref">Reference${l.refWhy==="order"?" · earlier call":l.refWhy==="parent"?" · colleague\u2019s call":""}</span>`:"";
 function cbBrief(q){const A=validAi(q.aiFacts),F=(A&&A.facts)||{},B=[];if(A&&A.summary)B.push(A.summary);
   Object.values(F.calls||{}).forEach(L=>(Array.isArray(L)?L:[]).forEach(x=>B.push(String(x))));
   if(B.length<2)(F.timeline||[]).forEach(t=>B.push([t.who,t.what].filter(Boolean).join(" ")));
   if(!B.length&&q.summary)B.push(String(q.summary));return [...new Set(B.filter(Boolean))].slice(0,5)}
 function cbEvidenceHtml(it){const q=it.q||{},A=validAi(q.aiFacts),F=(A&&A.facts)||{},legs=cbLegs(q),T=validTasks(q.tasks)||[],SL=validSlack(q.slack)||[],O=Array.isArray(q.orders)?q.orders:[],br=cbBrief(q);
-  const rows=legs.map((l,i)=>({ic:"▶",t:`Call ${i+1}`,s:[shortWho(l.who||""),l.at?clock12(String(l.at).slice(11,16)):"",l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",k:"call"}))
+  const rows=legs.map((l,i)=>({ic:"▶",t:`Call ${i+1}`,main:cbMainLeg(legs,l),tag:cbLegTag(legs,l),s:[shortWho(l.who||""),l.at?clock12(String(l.at).slice(11,16)):"",l.sec?dur(l.sec):""].filter(Boolean).join(" · "),u:l.id?recUrl(l.id):"",l:"▶ Recording",k:"call"}))
     .concat(T.map(t=>({ic:"W",t:t.title||"WIRA task",s:[t.id,t.status].filter(Boolean).join(" · "),u:safeUrl(t.url)||wiraUrl(t.id),l:"Open ↗",k:"task"})))
     .concat(SL.map(t=>({ic:"#",t:"#"+(t.channel||"slack"),s:String(t.text||"").slice(0,90),u:safeUrl(t.url),l:"Open ↗",k:"slack"})))
     .concat(O.map(o=>({ic:"$",t:"Order "+(o.ticket||o.id||""),s:[o.total!=null?"$"+o.total:"",o.status].filter(Boolean).join(" · "),u:"",l:"",k:"order"})))
@@ -7200,7 +7211,7 @@ function cbEvidenceHtml(it){const q=it.q||{},A=validAi(q.aiFacts),F=(A&&A.facts)
     ${(F.timeline||[]).length?`<h4 class="evh">Timeline</h4><ol class="cbfacts">${F.timeline.map(t=>`<li><span class="num fid">${esc(t.id||"")}</span><span>${t.when?`<span class="num hint">${esc(t.when)}</span> `:""}<b>${esc(t.who||"")}</b> ${esc(t.what||"")}</span></li>`).join("")}</ol>`:""}
     ${T.length?`<h4 class="evh">WIRA tasks</h4><div class="cxbox">${T.map(t=>`<div class="task"><div class="thead"><a class="tid" href="${esc(safeUrl(t.url)||wiraUrl(t.id))}" target="_blank" rel="noopener">${esc(t.id)} ↗</a>${t.status?`<span>${esc(t.status)}</span>`:""}</div><div class="ttitle">${esc(t.title||"")}</div>${t.desc?`<div class="hint">${esc(t.desc)}</div>`:""}</div>`).join("")}</div>`:""}`;
   return `<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="cbEvBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
-    <div class="evsrcs" id="cbEvSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow" data-ek="${r.k}"><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b><span class="evs">${esc(r.s)}</span></span>${r.u?`<a class="evlink${r.k==="call"?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
+    <div class="evsrcs" id="cbEvSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow${r.main?" main":""}" data-ek="${r.k}"><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tag||""}<span class="evs">${esc(r.s)}</span></span>${r.u?`<a class="evlink${r.k==="call"?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
       <button type="button" class="evmore" id="cbEvMore" data-cb="evmore" aria-expanded="${cbEvMore}" aria-controls="cbEvFull">Timeline and full sources</button></div></div>
     <div class="evfull" id="cbEvFull"${cbEvMore?"":" hidden"}>${full}</div>`}
 /* coaching from the agreed marks: what went well (full-mark rows), one card per row below full marks with its agreed note */
@@ -7246,7 +7257,7 @@ function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.
   const cs=CL?cbCites(CL,r.id):[],cited=cs.map(id=>GF.find(f=>String(f.id)===id)).filter(Boolean);
   return `<header class="chphd"><div class="chpttl"><h2 id="cbpTitle" tabindex="-1">${esc(r.label)}</h2></div><button type="button" class="chpx" data-cb="pclose" aria-label="Close">×</button></header>
     <section class="chpview" aria-label="Transcript">${cited.length?`<ol class="cbfacts cbcited">${cited.map(cbFactLi).join("")}</ol>`:""}
-      ${legs.length?legs.map((l,i)=>`<div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}${l.ref?` <span class="tkmut">· Reference${l.refWhy==="order"?" · earlier call":l.refWhy==="parent"?" · colleague\u2019s call":""}</span>`:""}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
+      ${legs.length?legs.map((l,i)=>`<div class="cbpleg${legs.length>1&&cbMainLeg(legs,l)?" main":""}"><div class="chpvh"><h3 class="chph">${legs.length>1?"Call "+(i+1):"Transcript"}${legs.length>1?cbLegTag(legs,l):""}</h3></div><div class="txtext" data-txid="${esc(l.id)}">${cbTxBody(l)}</div></div>`).join(""):`<p class="tkmut">No transcript.</p>`}</section>`}
 function cbPanelOpen(it,crit,keep){const r=cbRubric(it.kind,it).find(x=>x.id===crit);if(!r)return;
   if(cbPanel&&cbPanel.ik===it.ik&&cbPanel.crit===crit){if(!keep)cbPanelClose(true);return}
   cbPanel={ik:it.ik,crit};if(!cbPanelEl){cbPanelEl=document.createElement("aside");cbPanelEl.id="cbPanel";cbPanelEl.className="chpanel cbpanel";cbPanelEl.setAttribute("aria-labelledby","cbpTitle")}
