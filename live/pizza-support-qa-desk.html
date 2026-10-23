@@ -7287,7 +7287,7 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   if(cbPanel&&cbPanelEl){v.append(cbPanelEl);const r=cbRubric("call",it).find(x=>x.id===cbPanel.crit);if(r)cbPanelEl.innerHTML=cbPanelHtml(it,r)}}
 
 /* the call panel: the rubric item's levels, then the call's facts (or its transcript) */
-function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.g.F):[],legs=cbLegs(q).filter(l=>l.id);
+function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.g.F):[],all=cbLegs(q).filter(l=>l.id),legs=all.filter(l=>cbMainLeg(all,l));
   const cs=CL?cbCites(CL,r.id):[],cited=cs.map(id=>GF.find(f=>String(f.id)===id)).filter(Boolean);
   return `<header class="chphd"><div class="chpttl"><h2 id="cbpTitle" tabindex="-1">${esc(r.label)}</h2></div><button type="button" class="chpx" data-cb="pclose" aria-label="Close">×</button></header>
     <section class="chpview" aria-label="Transcript">${cited.length?`<ol class="cbfacts cbcited">${cited.map(cbFactLi).join("")}</ol>`:""}
