@@ -1610,6 +1610,43 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .cbirow>.cbkic{grid-area:ic}.cbirow>.cblink{grid-area:t}.cbirow>.cbidate{grid-area:d}.cbirow>.cbitype{grid-area:ty}.cbirow>.cbiscore{grid-area:sc}.cbirow>.cbict{grid-area:ct}.cbirow>.cbdots{grid-area:dots}.cbirow>.pill{grid-area:st;justify-self:stretch;text-align:center}
 .cbirow .cbidate,.cbirow .cbitype{font-size:12.5px;color:var(--muted);white-space:nowrap}
 .cbirow .cbiscore{text-align:right;font-size:13px;font-weight:700;white-space:nowrap}
+.srwrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:860px){.srwrap{grid-template-columns:minmax(0,1fr)}}
+.srnav{padding:12px;position:sticky;top:12px}.srnh{font-size:14px;margin:2px 4px 10px}
+.srnav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.srpick{width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:1px;font:inherit;color:var(--ink);cursor:pointer}
+.srpick span{font-size:12.5px;color:var(--muted)}.srpick:hover{background:var(--soft)}
+.srpick[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.srmain{padding:16px 18px;min-width:0}
+.srhd{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px}.srhd h2{margin:0 0 2px;font-size:20px}
+.srread{border-left:3px solid var(--accent);padding:8px 12px;background:color-mix(in srgb,var(--accent) 6%,var(--panel));border-radius:8px;margin-bottom:14px}
+.srread p{margin:4px 0;font-size:14.5px;line-height:1.55}.srread ul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.5}
+.srfind ol{list-style:none;margin:6px 0 14px;padding:0;display:flex;flex-direction:column;gap:6px}
+.srfind li{display:grid;grid-template-columns:52px 96px minmax(0,1fr);gap:8px;align-items:baseline;font-size:14px;line-height:1.45;padding:6px 8px;border-radius:8px;background:var(--soft)}
+.srfind li.f-bad{background:var(--s1-soft);box-shadow:inset 3px 0 0 var(--s1)}.srfind li.f-good{background:var(--s3-soft);box-shadow:inset 3px 0 0 var(--s3)}.srfind li span{color:var(--ink)}.srfind li .srsrc{color:var(--muted)}
+.srjump{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-align:left}
+.srsrc{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.srcrit dl{margin:6px 0 14px;display:grid;gap:6px}.srcrit dl>div{display:grid;grid-template-columns:170px minmax(0,1fr);gap:10px;font-size:14px;line-height:1.45}
+.srcrit dt{font-weight:600}.srcrit dd{margin:0}
+@media (max-width:620px){.srfind li{grid-template-columns:44px minmax(0,1fr)}.srsrc{display:none}.srcrit dl>div{grid-template-columns:minmax(0,1fr)}}
+.srstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:4px 0 12px}
+.srst{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}.srst b{font-size:18px}.srst.warn b{color:var(--s1)}
+.srfig{margin:0 0 14px}.srfig figcaption{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.srleg{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.srleg i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:8px}
+.srleg i.a,.srfig circle.a{background:var(--accent);fill:var(--accent)}.srleg i.c,.srfig circle.c{background:var(--s2);fill:var(--s2)}
+.srfig svg{width:100%;height:auto;display:block;background:var(--soft);border-radius:10px}
+.srfig circle{cursor:pointer;opacity:.85}.srfig circle.f{stroke:var(--s1);stroke-width:2}
+.srz{stroke:var(--line);stroke-dasharray:3 3}.srtk{font-size:10px;fill:var(--muted)}.srsc{stroke:var(--ink);opacity:.35}
+.srtl{list-style:none;margin:6px 0 0;padding:0;max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.srtl li{display:grid;grid-template-columns:48px 108px minmax(0,1fr);gap:8px;padding:5px 10px;font-size:13.5px;line-height:1.45;border-top:1px solid var(--line)}
+.srtl li:first-child{border-top:0}.srtl .srts{color:var(--muted)}.srtl .srwho{font-weight:600;font-size:12.5px}
+.srl.agent .srwho{color:var(--accent)}.srl.caller .srwho{color:var(--s2)}.srl.other .srwho{color:var(--muted)}
+.srs{background:var(--soft)}.srs .srwho{color:var(--muted);font-weight:600}.srs .srtx{color:var(--ink)}
+.srs.k-idle{background:var(--s1-soft)}
+.srtl li.hit{outline:2px solid var(--accent);outline-offset:-2px}
+.srl.flag{background:color-mix(in srgb,var(--s1) 6%,transparent)}.srflag{margin-left:6px;font-size:11px;font-weight:700;color:var(--s1)}
+.srlim{margin-top:10px}
+.srimp{margin-top:14px;padding:10px 14px}.srimp summary{cursor:pointer;font-size:13px;color:var(--muted)}.srimp textarea{width:100%;margin:8px 0;font:12px ui-monospace,monospace}
 .lrcards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .lrcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
 .lrcard.off{opacity:.55}
@@ -1717,6 +1754,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
   <div class="subtabs" role="tablist" aria-label="Audits" id="sub-chats">
     <button type="button" role="tab" data-tab="calib" aria-selected="true"><span class="tn"><span>1</span></span>Round<span class="tst num" id="st-calib"></span></button>
     <button type="button" role="tab" data-tab="chat" aria-selected="false"><span class="tn"><span>2</span></span>Audit<span class="tst num" id="st-chat"></span></button>
+    <button type="button" role="tab" data-tab="sr" aria-selected="false">Screen record + voice recognition audits</button>
     <button type="button" role="tab" data-tab="chats" aria-selected="false">Dashboard<span class="count" id="chCount"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
@@ -1733,6 +1771,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
   <section id="view-chat" hidden></section>
   <section id="view-calib" hidden></section>
   <section id="view-learn" hidden></section>
+  <section id="view-sr" hidden></section>
   <section id="view-brain" hidden></section>
 
   <!-- 1 SNAPSHOT: the week's pool of calls -->
@@ -3858,10 +3897,10 @@ function banner(m){const b=$("#banner");b.hidden=!m;b.textContent=m||""}
 /* ---------- tabs & week ---------- */
 /* Areas: Chats (default: 1 Queue → 2 Audit, plus Learning and Brain), Calls (parked: 1 Snapshot (queue) → 2 Calls → 3 Facts), Results, Database.
    Results and Database are call views, so the call steps stay in reach there. "score" is the old Scorecard tab: it opens Calls. "chat/<sid>" opens that chat in Audit. */
-const TABS=["chats","chat","calib","learn","brain","queue","calls","facts","results","data"];
+const TABS=["chats","chat","calib","sr","learn","brain","queue","calls","facts","results","data"];
 /* one Audits area: Round, Audit, Dashboard, Learning, Brain; the old call screens (Snapshot, Calls, Facts) sit behind "Call tools" with their own row */
 const CALL_TOOLS=["queue","calls","facts"];
-const AREA_OF={chats:"chats",chat:"chats",calib:"chats",learn:"chats",brain:"chats",queue:"chats",calls:"chats",facts:"chats",results:"results",data:"data"};
+const AREA_OF={chats:"chats",chat:"chats",calib:"chats",sr:"chats",learn:"chats",brain:"chats",queue:"chats",calls:"chats",facts:"chats",results:"results",data:"data"};
 const lastTab={chats:"calib",results:"results",data:"data"};
 function setTab(t){if(t==="score")t="calls";if(t==="round")t="calib";if(!TABS.includes(t))t="calib";tab=t;const area=AREA_OF[t];lastTab[area]=t;
   document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
@@ -7578,7 +7617,66 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
   if(typeof chCiteOpen==="function")chCiteOpen(crit,key)});
 
 /* ---------- render ---------- */
+/* ---------- SCREEN RECORD + VOICE AUDITS: a test of 6 calls. Each srAudits/<queueId> doc holds the GreenDot screen replay boiled down to a
+   timeline (clicks, typing, panels, idle stretches), the timed captions with voice measures (pitch, loudness, pace) split by speaker,
+   and Claude's read of what the screen and voice show that the transcript alone doesn't. ---------- */
+let srDocs=null,srSel="",srOff=null;
+/* the import bridge for the test: a GreenDot tab (logged in) posts each call's extracted screen and voice data here; the owner's page saves it raw to srRaw/<callId> for Claude to read and audit */
+window.addEventListener("message",async e=>{let h="";try{h=new URL(e.origin).hostname}catch(_){return}if(!/(^|\.)letsdowonders\.io$/.test(h))return;const m=e.data;if(!m||m.type!=="srRaw"||!m.id||!m.data)return;
+  if(!db||!amOwner){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:!db?"no db":"not owner"},e.origin)}catch(_){}return}
+  try{await db.doc("srRaw/"+String(m.id).replace(/[^\w-]/g,"")).set({id:m.id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(m.data)});e.source.postMessage({type:"srAck",id:m.id,ok:true},e.origin)}
+  catch(err){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:String(err&&err.code||err).slice(0,80)},e.origin)}catch(_){}}});
+function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr")renderSR()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
+const srT=t=>{t=Math.max(0,Number(t)||0);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`};
+const SR_K={click:"Clicked",dblclick:"Double-clicked",type:"Typed",panel:"Screen",page:"Page",load:"Screen",idle:"No activity"};
+function srChart(d){const L=(d.lines||[]).filter(l=>l.f0),dur=Number(d.dur)||Math.max(1,...(d.lines||[]).map(l=>l.e||0));if(!L.length)return "";
+  const W=640,H=150,P=28,x=t=>P+(W-P-8)*Math.min(1,t/dur),am=Number((d.stats||{}).agentF0)||L[0].f0,st=f=>12*Math.log2(f/am),ys=L.map(l=>st(l.f0)),lo=Math.min(-8,...ys),hi=Math.max(8,...ys),y=v=>8+(H-8-18)*(1-(v-lo)/(hi-lo));
+  const ticks=[];for(let t=0;t<=dur;t+=dur>240?60:30)ticks.push(t);
+  return `<figure class="srfig"><figcaption><span class="lbl-sm">Pitch over the call</span><span class="srleg"><i class="a"></i>Agent<i class="c"></i>Caller</span></figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pitch of each line, agent and caller">
+      <line x1="${P}" x2="${W-8}" y1="${y(0)}" y2="${y(0)}" class="srz"/>${ticks.map(t=>`<text x="${x(t)}" y="${H-4}" class="srtk">${srT(t)}</text>`).join("")}
+      <text x="2" y="${y(0)+4}" class="srtk">avg</text>
+      ${(d.screen||[]).filter(s=>s.k==="click"||s.k==="type").map(s=>`<line x1="${x(s.t)}" x2="${x(s.t)}" y1="${H-20}" y2="${H-14}" class="srsc"/>`).join("")}
+      ${L.map(l=>`<circle cx="${x((l.t+l.e)/2)}" cy="${y(st(l.f0))}" r="${l.flag?4:3}" class="${l.who==="agent"?"a":"c"}${l.flag?" f":""}" data-srjump="${l.t}"><title>${srT(l.t)} ${esc(l.who)}: ${esc(String(l.txt||"").slice(0,80))} · ${l.f0} Hz</title></circle>`).join("")}
+    </svg><p class="hint">Each dot is one line, placed by its pitch against the agent's average. Ticks along the bottom are clicks and typing on screen.</p></figure>`}
+function srStats(d){const S=d.stats||{},c=(k,v,s,cls)=>`<div class="srst${cls?" "+cls:""}"><span class="lbl-sm">${k}</span><b class="num">${v}</b>${s?`<span class="hint">${s}</span>`:""}</div>`;
+  const sd=Number(S.agentF0sd),tone=isNaN(sd)?"":sd<2?"flat":sd<4.5?"normal":"lively";
+  return `<div class="srstats">${c("Agent talk",S.agentTalkPct!=null?S.agentTalkPct+"%":"–",S.callerTalkPct!=null?`caller ${S.callerTalkPct}%`:"")}
+    ${c("Agent pitch range",isNaN(sd)?"–":sd.toFixed(1)+" st",tone,tone==="flat"?"warn":"")}
+    ${c("Agent pace",S.agentWps!=null?S.agentWps+" w/s":"–",S.callerWps!=null?`caller ${S.callerWps} w/s`:"")}
+    ${c("Screen idle",S.idleSec!=null?srT(S.idleSec):"–",S.idleN?`${S.idleN} stretch${S.idleN===1?"":"es"} of 12 s+`:"")}
+    ${c("On-screen actions",S.actions!=null?S.actions:"–",S.typed?`${S.typed} typed`:"")}</div>`}
+function srTimeline(d){const R=[].concat((d.lines||[]).map(l=>({t:l.t,kind:"line",l})),(d.screen||[]).map(s=>({t:s.t,kind:"scr",s}))).sort((a,b)=>a.t-b.t||(a.kind==="line"?-1:1));
+  return `<ol class="srtl" id="srTl">${R.map(r=>r.kind==="line"?`<li class="srl ${r.l.who}${r.l.flag?" flag":""}" data-t="${r.t}"><span class="num srts">${srT(r.t)}</span><span class="srwho">${r.l.who==="agent"?esc(d.alias||"Agent"):r.l.who==="other"?"Store":"Caller"}</span><span class="srtx">${esc(r.l.txt||"")}${r.l.flag?`<span class="srflag">${esc(r.l.flag)}</span>`:""}</span></li>`
+    :`<li class="srs k-${r.s.k}" data-t="${r.t}"><span class="num srts">${srT(r.t)}</span><span class="srwho">${esc(SR_K[r.s.k]||r.s.k)}</span><span class="srtx">${esc(r.s.l||"")}${r.s.v?` <b>“${esc(r.s.v)}”</b>`:""}${r.s.k==="idle"&&r.s.d?` <span class="hint">${Math.round(r.s.d)} s</span>`:""}</span></li>`).join("")}</ol>`}
+function srDetail(d){const A=d.audit||{};
+  const F=(A.findings||[]).slice().sort((a,b)=>a.t-b.t);
+  return `<header class="srhd"><div><h2>${esc(d.restaurant||"Call")}</h2><span class="hint">${esc([d.sa,d.kind,d.date,d.dur?srT(d.dur):""].filter(Boolean).join(" · "))}</span></div>
+      ${d.callId?`<a class="btn small" href="${esc(recUrl(d.callId))}" target="_blank" rel="noopener">▶ Open in GreenDot</a>`:""}</header>
+    ${A.summary?`<section class="srread"><h3 class="lbl-sm">What the screen and voice add</h3><p>${esc(A.summary)}</p>${(A.adds||[]).length?`<ul>${A.adds.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}</section>`:""}
+    ${F.length?`<section class="srfind"><h3 class="lbl-sm">Moments</h3><ol>${F.map(f=>`<li class="f-${esc(f.tone||"note")}"><button type="button" class="num srjump" data-srjump="${f.t}">${srT(f.t)}</button><span class="srsrc">${esc(f.src==="screen"?"Screen":f.src==="voice"?"Voice":"Screen + voice")}</span><span>${esc(f.text)}${f.crit?` <span class="hint">· ${esc(f.crit)}</span>`:""}</span></li>`).join("")}</ol></section>`:""}
+    ${(A.crit||[]).length?`<section class="srcrit"><h3 class="lbl-sm">For the scorecard</h3><dl>${A.crit.map(c=>`<div><dt>${esc(c.label)}</dt><dd>${esc(c.note)}</dd></div>`).join("")}</dl></section>`:""}
+    ${srStats(d)}${srChart(d)}
+    <section class="srtlw"><h3 class="lbl-sm">Call and screen, second by second</h3>${srTimeline(d)}</section>
+    ${A.limits?`<p class="hint srlim">${esc(A.limits)}</p>`:""}`}
+/* owner only: paste the extracted data ({callId: data}) to save it raw to srRaw/<callId> for Claude to audit */
+const srImportHtml=()=>amOwner?`<details class="panel srimp"><summary>Import extracted data</summary><textarea id="srImpTx" rows="3" placeholder="Paste here"></textarea><button type="button" class="btn" id="srImpGo">Save</button><span class="hint" id="srImpMsg"></span></details>`:"";
+async function srImport(){const tx=$("#srImpTx"),msg=$("#srImpMsg");if(!tx||!db)return;let o;try{o=JSON.parse(tx.value)}catch(e){msg.textContent="Not valid JSON.";return}
+  let n=0;for(const [id,d] of Object.entries(o||{})){if(!/^[0-9a-f-]{36}$/.test(id))continue;try{await db.doc("srRaw/"+id).set({id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(d)});n++}catch(e){msg.textContent="Couldn't save "+id.slice(0,8)+": "+String(e&&e.code||e).slice(0,60);return}}
+  msg.textContent=`Saved ${n} call${n===1?"":"s"}.`;tx.value=""}
+document.addEventListener("click",e=>{if(e.target&&e.target.id==="srImpGo")srImport()});
+function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;
+  if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
+  if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
+  const d=srDocs.find(x=>x.id===srSel)||srDocs[0];
+  v.innerHTML=`<div class="srwrap"><nav class="panel srnav" aria-label="Calls"><h2 class="srnh">Screen + voice · test</h2><ul>${srDocs.map(x=>`<li><button type="button" class="srpick" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc(x.restaurant||"")}</span><span class="hint num">${esc([x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button></li>`).join("")}</ul></nav>
+    <article class="panel srmain">${srDetail(d)}</article></div>${srImportHtml()}`}
+document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;renderSR();return}
+  const j=e.target.closest("[data-srjump]");if(j&&$("#view-sr")&&!$("#view-sr").hidden){const t=Number(j.dataset.srjump),rows=[...document.querySelectorAll("#srTl li")];const r=rows.find(x=>Number(x.dataset.t)>=t-0.5)||rows[rows.length-1];
+    if(r){rows.forEach(x=>x.classList.remove("hit"));r.classList.add("hit");r.scrollIntoView({block:"center",behavior:"smooth"})}}});
+
 function renderAll(){
+  if(tab==="sr"&&typeof renderSR==="function")renderSR();
   $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
   renderBoard();renderQueue();renderData();renderResults();renderExportStatus();renderChats();renderGame();if(typeof renderCalib==="function")renderCalib();
 }
