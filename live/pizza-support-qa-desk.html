@@ -1722,6 +1722,24 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srpaste{margin:8px 0;padding:18px;border:1.5px dashed var(--line);border-radius:10px;text-align:center;color:var(--muted);font-size:13px;cursor:text}.srpaste:focus{border-color:var(--accent);outline:none;color:var(--accent)}
 @media (max-width:620px){.srstage{aspect-ratio:4/3}.srnow{padding:18px 16px}.srrate button{padding:6px 7px}.srpico{width:22px;height:22px}.sri{width:12px;height:12px}}
 .srstage.norec{aspect-ratio:auto;height:280px}
+.srcalls{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding-bottom:2px}
+.srcall{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font:inherit;color:var(--ink);cursor:pointer;min-width:150px}
+.srcall span{font-size:12px;color:var(--muted);white-space:nowrap}.srcall:hover{border-color:var(--muted)}
+.srcall[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}.srcall[aria-pressed="true"] b{color:var(--accent)}
+.srwrap{display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:14px;align-items:start}
+.srlog{position:sticky;top:12px;display:flex;flex-direction:column;max-height:calc(100vh - 24px)}
+.srlog .lg-list{overflow-y:auto;flex:1 1 auto;overscroll-behavior:contain}
+.srlog .lg-gh{position:sticky;top:0;z-index:1}
+.srlr{grid-template-columns:52px minmax(0,1fr)}
+.srlt{border:0;background:none;padding:0;font:inherit;font-size:12px;color:var(--accent);cursor:pointer;text-align:left;font-weight:600}.srlt:hover{text-decoration:underline}
+.srlr.agent .lg-w b{color:var(--accent)}.srlr.caller .lg-w b{color:var(--s2)}.srlr.k-idle{background:var(--s1-soft)}
+.srlog.hlon .srlr.out{opacity:.45}
+.srlr.now{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.srlmg{border-top:0!important}.srlmg .lg-rows{padding:2px 0}
+.srlm{margin:2px 8px;border-radius:8px;background:var(--soft)}.srlm.t-good{background:var(--s3-soft)}.srlm.t-bad{background:var(--s1-soft)}
+.srlm .lg-w b{margin-right:4px}.srli{width:13px;height:13px;vertical-align:-2px;margin-right:5px}
+.srlm.t-good .srli,.srlm.t-good .lg-w b{color:var(--s3)}.srlm.t-bad .srli,.srlm.t-bad .lg-w b{color:var(--s1)}.srlm.t-note .srli,.srlm.t-note .lg-w b{color:var(--accent)}
+@media (max-width:900px){.srwrap{grid-template-columns:minmax(0,1fr)}.srlog{position:static;max-height:70vh;order:2}}
 .lrcards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .lrcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
 .lrcard.off{opacity:.55}
@@ -7917,7 +7935,6 @@ function srDetail(d){const A=d.audit||{};
     ${F.length?`<section class="srfind"><h3 class="lbl-sm">Moments</h3><ol>${F.map(f=>`<li class="f-${esc(f.tone||"note")}" data-srcid="${esc(srCritId(f.crit))}"><button type="button" class="num srjump" data-srjump="${f.t}">${srT(f.t)}</button><span class="srsrc">${esc(f.src==="screen"?"Screen":f.src==="voice"?"Voice":"Screen + voice")}</span><span>${esc(f.text)}${f.crit?` <span class="hint">· ${esc(f.crit)}</span>`:""}</span></li>`).join("")}</ol></section>`:""}
     ${!d.grade&&(A.crit||[]).length?`<section class="srcrit"><h3 class="lbl-sm">For the scorecard</h3><dl>${A.crit.map(c=>`<div><dt>${esc(c.label)}</dt><dd>${esc(c.note)}</dd></div>`).join("")}</dl></section>`:""}
     ${srStats(d)}
-    <section class="srtlw"><h3 class="lbl-sm">Call and screen, second by second</h3>${srTimeline(d)}</section>
     ${A.limits?`<p class="hint srlim">${esc(A.limits)}</p>`:""}`}
 /* owner only: paste the extracted data ({callId: data}) to save it raw to srRaw/<callId> for Claude to audit */
 const srImportHtml=()=>amOwner?`<details class="panel srimp"><summary>Import extracted data</summary><textarea id="srImpTx" rows="3" placeholder="Paste here"></textarea><button type="button" class="btn" id="srImpGo">Save</button><span class="hint" id="srImpMsg"></span></details>`:"";
@@ -8012,7 +8029,7 @@ function srPaint(){const d=srDoc(),pl=$("#srPlay");if(!d||!pl||pl.dataset.id!==d
   const M=srP.media&&srP.media.id===d.id&&srP.media.ready;const n=$("#srNow"),r=$("#srRep");
   if(r)r.hidden=!M;if(n){n.hidden=!!M;if(!M)n.innerHTML=srP.media&&srP.media.id===d.id&&srP.media.err?`<p class="dim">${esc(srP.media.err)}</p>`:srP.media&&srP.media.id===d.id&&!srP.media.ready?`<p class="dim">Loading recording…</p>`:srNowHtml(d,t)}
   if(M){const o=$("#srRepCap");if(o)o.innerHTML=srNowCap(d,t)}
-  document.querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5))}
+  document.querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5));srLogPaint(t)}
 function srNowCap(d,t){let l=null;for(const x of d.lines||[]){if(+x.t<=t+.2)l=x;else break}if(!l||t>(+l.e||+l.t)+1.5)return "";return `<span class="${l.who}">${esc(l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller")}</span>${esc(l.txt||"")}`}
 const srClipAt=(cl,t)=>cl.findIndex(c=>t>=c.s-.05&&t<c.e);
 function srTick(){if(!srP.playing)return;const d=srDoc();if(!d){srPause();return}const now=performance.now(),dt=Math.min(.25,(now-srP.last)/1000);srP.last=now;
@@ -8064,7 +8081,7 @@ document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#
   if(e.target.closest("#srPP")){srP.playing?srPause():srPlay();return}
   const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);return}
   const st=e.target.closest("[data-srstep]");if(st){const d=srDoc(),F=((d.audit||{}).findings||[]).map(f=>+f.t).sort((a,b)=>a-b),dir=+st.dataset.srstep;const n=dir>0?F.find(t=>t>srP.t+1):F.slice().reverse().find(t=>t<srP.t-5);if(n!=null)srSeek(Math.max(0,n-4),srP.playing);return}
-  const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);return}
+  const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=$("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}
   const rt=e.target.closest("[data-srrate]");if(rt){srP.rate=+rt.dataset.srrate;document.querySelectorAll("#srPlay [data-srrate]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.srrate===srP.rate));srMediaSync(srP.playing);return}
   if(e.target.closest("[data-srbar]")){srSeek(srBarT(e),false);return}});
 document.addEventListener("mousemove",e=>{const b=e.target.closest&&e.target.closest("#srPlay [data-srbar]"),h=$("#srHover");if(!h)return;if(!b){h.hidden=true;return}const r=b.getBoundingClientRect(),f=(e.clientX-r.left)/r.width;h.hidden=false;h.style.left=(f*100)+"%";h.textContent=srT(f*srDur(srDoc()))});
@@ -8083,12 +8100,35 @@ document.addEventListener("paste",async e=>{const z=e.target.closest&&e.target.c
     say("Saved for "+(doc.sa||"call")+".");if(srP.id===doc.id){srMediaDrop()}}
   catch(err){say("Couldn't save: "+String(err&&(err.code||err.message)||err).slice(0,80))}});
 
+/* the call log (MGR tool style): what was said and done on screen, grouped by source, each time a button that jumps the player there */
+function srLogRows(d){const A=d.audit||{},R=[];
+  (d.lines||[]).forEach(l=>R.push({t:+l.t||0,src:"voice",who:l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller",cls:l.who||"",txt:l.txt||"",flag:l.flag||""}));
+  (d.screen||[]).filter(s=>s.k!=="load"&&s.k!=="page"&&(s.l||s.v||s.k==="idle")).forEach(s=>R.push({t:+s.t||0,src:"screen",who:SR_K[s.k]||s.k,cls:"k-"+s.k,txt:(s.l||"")+(s.v?` “${s.v}”`:"")+(s.k==="idle"&&s.d?` · ${Math.round(s.d)} s`:"")}));
+  (A.findings||[]).forEach(f=>R.push({t:+f.t||0,src:"moment",f}));
+  return R.sort((a,b)=>a.t-b.t||(a.src==="moment"?-1:b.src==="moment"?1:0))}
+function srLogHtml(d){const R=srLogRows(d),cl=srClips(d),inC=t=>!cl.length||cl.some(c=>t>=c.s-.5&&t<=c.e+.5),G=[];
+  R.forEach(r=>{const g=G[G.length-1];if(g&&g.src===r.src&&r.src!=="moment")g.rows.push(r);else G.push({src:r.src,rows:[r]})});
+  const row=r=>{const out=inC(r.t)?"":" out";
+    if(r.src==="moment"){const f=r.f,k=srKind(f);return `<li class="lg-r srlr srlm k-${k} t-${esc(f.tone||"note")}${out}" data-t="${r.t}"><button type="button" class="lg-t num srlt" data-srlog="${r.t}">${srT(r.t)}</button><span class="lg-w">${srSvgI(k,"sri srli")}<b>${esc(SR_KL[k])}</b> ${esc(f.text)}</span></li>`}
+    return `<li class="lg-r srlr ${esc(r.cls)}${r.flag?" flag":""}${out}" data-t="${r.t}"><button type="button" class="lg-t num srlt" data-srlog="${r.t}">${srT(r.t)}</button><span class="lg-w"><b>${esc(r.who)}</b> ${esc(r.txt)}${r.flag?` <span class="srflag">${esc(r.flag)}</span>`:""}</span></li>`};
+  const head=g=>{if(g.src==="moment")return "";const a=g.rows[0].t,b=g.rows[g.rows.length-1].t;
+    return `<div class="lg-gh"><span class="lg-src">${g.src==="voice"?"Call":"Screen"}</span><span class="lg-meta num">${srT(a)}${b>a+1?"–"+srT(b):""}</span></div>`};
+  return `<aside class="panel tlog srlog${srP.hl?" hlon":""}" id="srLog" aria-label="Call log"><header class="lg-hd"><span>Call log</span><span class="num tkmut">${R.length} events</span></header>
+    <ol class="lg-list" id="srLogL">${G.map(g=>`<li class="lg-g${g.src==="moment"?" srlmg":""}">${head(g)}<ol class="lg-rows">${g.rows.map(row).join("")}</ol></li>`).join("")}</ol></aside>`}
+/* keep the row being played lit, and in view while playing */
+function srLogPaint(t){const L=$("#srLogL");if(!L)return;const rows=L.querySelectorAll(".srlr");let cur=null;for(const r of rows){if(+r.dataset.t<=t+.25)cur=r;else break}
+  if(srP.logRow===cur)return;if(srP.logRow&&srP.logRow.isConnected)srP.logRow.classList.remove("now");srP.logRow=cur;if(!cur)return;cur.classList.add("now");
+  if(srP.playing&&!L.matches(":hover")){const a=cur.getBoundingClientRect(),b=L.getBoundingClientRect();if(a.top<b.top||a.bottom>b.bottom)L.scrollTop+=a.top-b.top-b.height/3}}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-srlog]");if(!b)return;const d=srDoc();if(!d)return;const t=+b.dataset.srlog,cl=srClips(d);
+  if(srP.hl&&cl.length&&!cl.some(c=>t>=c.s-.5&&t<=c.e+.5)){srP.hl=false;const h=$("#srHL");if(h)h.setAttribute("aria-pressed","false");const g=$("#srLog");if(g)g.classList.remove("hlon")}
+  srSeek(t,true)});
+
 function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
   if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
   if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
   const d=srDocs.find(x=>x.id===srSel)||srDocs[0];
-  v.innerHTML=`<div class="srwrap"><nav class="panel srnav" aria-label="Calls"><h2 class="srnh">Screen + voice · test</h2><ul>${srDocs.map(x=>`<li><button type="button" class="srpick" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc(x.restaurant||"")}</span><span class="hint num">${esc([x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button></li>`).join("")}</ul></nav>
-    <article class="panel srmain">${srDetail(d)}</article></div>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
+  v.innerHTML=`<nav class="srcalls" aria-label="Calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>
+    <div class="srwrap">${srLogHtml(d)}<article class="panel srmain">${srDetail(d)}</article></div>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
 document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;renderSR();return}
   const j=e.target.closest("[data-srjump]");if(j&&$("#view-sr")&&!$("#view-sr").hidden){const t=Number(j.dataset.srjump),rows=[...document.querySelectorAll("#srTl li")];const r=rows.find(x=>Number(x.dataset.t)>=t-0.5)||rows[rows.length-1];
     if(r){rows.forEach(x=>x.classList.remove("hit"));r.classList.add("hit")}
