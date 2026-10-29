@@ -1722,6 +1722,13 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srpaste{margin:8px 0;padding:18px;border:1.5px dashed var(--line);border-radius:10px;text-align:center;color:var(--muted);font-size:13px;cursor:text}.srpaste:focus{border-color:var(--accent);outline:none;color:var(--accent)}
 @media (max-width:620px){.srstage{aspect-ratio:4/3}.srnow{padding:18px 16px}.srrate button{padding:6px 7px}.srpico{width:22px;height:22px}.sri{width:12px;height:12px}}
 .srstage.norec{aspect-ratio:auto;height:280px}
+.srsec{display:flex;flex-direction:column;gap:10px}.srsec .srplay{margin:0}
+.srmoms{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.srmoms li{display:grid;grid-template-columns:44px 18px minmax(0,1fr);gap:6px;align-items:baseline;padding:6px 10px;border-radius:8px;background:var(--soft);font-size:13.5px;line-height:1.45}
+.srmoms li.t-good{background:var(--s3-soft)}.srmoms li.t-bad{background:var(--s1-soft)}.srmoms li>span{color:var(--ink)}
+.srmoms li.t-good b,.srmoms li.t-good .srli{color:var(--s3)}.srmoms li.t-bad b,.srmoms li.t-bad .srli{color:var(--s1)}.srmoms li.t-note b,.srmoms li.t-note .srli{color:var(--accent)}
+.srmoms li.now{box-shadow:inset 3px 0 0 var(--accent)}
+.srmain .srplay{margin-bottom:10px}.srmain .srmoms{margin-bottom:14px}
 .srcalls{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding-bottom:2px}
 .srcall{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font:inherit;color:var(--ink);cursor:pointer;min-width:150px}
 .srcall span{font-size:12px;color:var(--muted);white-space:nowrap}.srcall:hover{border-color:var(--muted)}
@@ -7634,7 +7641,7 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLo
   return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span>${ctTicketHtml("call",it.key,true)}</div>
     <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
-    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl><section class="tksec tkev" id="tkEv">${cbEvidenceHtml(it)}</section></div>
+    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>${srAuditSec(it)}<section class="tksec tkev" id="tkEv">${cbEvidenceHtml(it)}</section></div>
     <div class="tkchat cbtxpan" id="cbTkPan-tx" role="tabpanel" aria-labelledby="cbTkTab-tx" tabindex="0"${cbTkTab==="tx"?"":" hidden"}>${cbTxHtml(q)}</div>`}
 /* "Claude's score 82.5%", or "Not graded yet" */
 function cbClScoreHtml(it,id,cls){const p=cbCGPct(it),C=cbClaude(it),lk=(cbItems[it.ik]||{}).locked;
@@ -7685,7 +7692,7 @@ function cbBoardHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLoc
 function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="undefined"&&chPanel)chPanelClose();
   const lk=(cbItems[it?it.ik:""]||{}).locked,inR=it&&cbInRound(it.ik);
   if(it)cbCGWatch(it.key);const ck=String(callSel||"");
-  const sig=JSON.stringify([callSel,week,!!it,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
+  const sig=JSON.stringify([callSel,week,!!it,typeof srDocs!=="undefined"&&srDocs?(srDocs.find(x=>x.id===String(callSel))||{}).at||srDocs.length:0,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
     cbCG.has(ck),cbCGSig(cbCG.get(ck)),ctSig("call",ck),cbGraders.has(myId),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun)]);
   if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();cbGRPaint();return}
   cbAuditSig=sig;const nav=`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
@@ -7697,7 +7704,8 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   v.innerHTML=nav+`<div class="cdesk has-tk${inR?" has-rail":""}"><article class="panel qticket" id="cTicket" data-call="${esc(it.key)}" aria-label="QA ticket">${cbTicketHtml(it)}</article>${inR?`<div class="cside">${cbBoardHtml(it)}${cbRailBox(it.ik)}</div>`:cbBoardHtml(it)}<div class="ccol">${secs.join("")}</div></div>`;
   {const n=$("#chNav");if(n)n._h=chNavHtml();const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.ik)}
   if(cbTkTab==="tx")cbLoadTx(it);
-  if(cbPanel&&cbPanelEl){v.append(cbPanelEl);const r=cbRubric("call",it).find(x=>x.id===cbPanel.crit);if(r)cbPanelEl.innerHTML=cbPanelHtml(it,r)}}
+  if(cbPanel&&cbPanelEl){v.append(cbPanelEl);const r=cbRubric("call",it).find(x=>x.id===cbPanel.crit);if(r)cbPanelEl.innerHTML=cbPanelHtml(it,r)}
+  {const sd=srDocFor(it.key);if(sd&&srQ("#srPlay"))srMount(sd)}}
 
 /* the call panel: the rubric item's levels, then the call's facts (or its transcript) */
 function cbPanelHtml(it,r){const q=it.q||{},CL=cbClaude(it),GF=CL?cbFactList(CL.g.F):[],all=cbLegs(q).filter(l=>l.id),legs=all.filter(l=>cbMainLeg(all,l));
@@ -7902,7 +7910,7 @@ window.addEventListener("message",async e=>{let h="";try{h=new URL(e.origin).hos
   if(!db||!amOwner){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:!db?"no db":"not owner"},e.origin)}catch(_){}return}
   try{await db.doc("srRaw/"+String(m.id).replace(/[^\w-]/g,"")).set({id:m.id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(m.data)});e.source.postMessage({type:"srAck",id:m.id,ok:true},e.origin)}
   catch(err){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:String(err&&err.code||err).slice(0,80)},e.origin)}catch(_){}}});
-function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr")renderSR()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
+function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr")renderSR();else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
 const srT=t=>{t=Math.max(0,Number(t)||0);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`};
 const SR_K={click:"Clicked",dblclick:"Double-clicked",type:"Typed",panel:"Screen",page:"Page",load:"Screen",idle:"No activity"};
 function srChart(d){const L=(d.lines||[]).filter(l=>l.f0),dur=Number(d.dur)||Math.max(1,...(d.lines||[]).map(l=>l.e||0));if(!L.length)return "";
@@ -7928,11 +7936,9 @@ function srTimeline(d){const R=[].concat((d.lines||[]).map(l=>({t:l.t,kind:"line
 function srDetail(d){const A=d.audit||{};
   const F=(A.findings||[]).slice().sort((a,b)=>a.t-b.t);
   return `<header class="srhd"><div><h2>${esc(d.restaurant||"Call")}</h2><span class="hint">${esc([d.sa,d.kind,d.date,d.dur?srT(d.dur):""].filter(Boolean).join(" · "))}</span></div>
-      ${d.callId?`<a class="btn small" href="${esc(recUrl(d.callId))}" target="_blank" rel="noopener">▶ Open in GreenDot</a>`:""}</header>
-    ${srPlayerHtml(d)}
-    ${A.summary?`<section class="srread"><h3 class="lbl-sm">What the screen and voice add</h3><p>${esc(A.summary)}</p>${(A.adds||[]).length?`<ul>${A.adds.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}</section>`:""}
+      <span class="row"><button type="button" class="btn small primary" data-sraudit="${esc(d.id)}">Open the audit</button>${d.callId?`<a class="btn small" href="${esc(recUrl(d.callId))}" target="_blank" rel="noopener">▶ GreenDot</a>`:""}</span></header>
+    ${srPlayerHtml(d)}${srMomentsHtml(d)}
     ${srGrade(d)}
-    ${F.length?`<section class="srfind"><h3 class="lbl-sm">Moments</h3><ol>${F.map(f=>`<li class="f-${esc(f.tone||"note")}" data-srcid="${esc(srCritId(f.crit))}"><button type="button" class="num srjump" data-srjump="${f.t}">${srT(f.t)}</button><span class="srsrc">${esc(f.src==="screen"?"Screen":f.src==="voice"?"Voice":"Screen + voice")}</span><span>${esc(f.text)}${f.crit?` <span class="hint">· ${esc(f.crit)}</span>`:""}</span></li>`).join("")}</ol></section>`:""}
     ${!d.grade&&(A.crit||[]).length?`<section class="srcrit"><h3 class="lbl-sm">For the scorecard</h3><dl>${A.crit.map(c=>`<div><dt>${esc(c.label)}</dt><dd>${esc(c.note)}</dd></div>`).join("")}</dl></section>`:""}
     ${srStats(d)}
     ${A.limits?`<p class="hint srlim">${esc(A.limits)}</p>`:""}`}
@@ -7946,6 +7952,9 @@ document.addEventListener("click",e=>{if(e.target&&e.target.id==="srImpGo")srImp
    live caption and last screen action), an activity curve (who is talking, what is clicked), icons at each moment by kind, click to
    seek, and "Highlights only" that plays ±12 s around each moment and skips the rest. Recording clips live in the artifact's asset
    store as one JSON per call ({sr, audioStart, t0, clips:[{s,e,pcm}], events}) and are pointed to by srAudits/<id>.media. ---------- */
+/* the player lives in the SR tab and in a call's Audit ticket: every lookup is scoped to the view on screen */
+const srRoot=()=>(tab==="sr"?document.getElementById("view-sr"):document.getElementById("view-chat"))||document;
+const srQ=sel=>srRoot().querySelector(sel);
 const SR_ICON={
   info:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
   solution:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>',
@@ -8023,13 +8032,13 @@ function srNowHtml(d,t){const L=d.lines||[],S=d.screen||[],F=(d.audit||{}).findi
     <div class="srnowl${live?"":" dim"}${l?" "+l.who:""}">${l?`<span class="srnoww">${esc(who)}</span><p>${esc(l.txt||"")}</p>`:`<p class="dim">…</p>`}</div>
     ${s?`<div class="srnows"><span class="num">${srT(s.t)}</span><span>${esc(SR_K[s.k]||s.k)}</span><b>${esc(s.l||"")}${s.v?` “${esc(s.v)}”`:""}</b></div>`:""}`}
 const srDoc=()=>(srDocs||[]).find(x=>x.id===srP.id);
-function srPaint(){const d=srDoc(),pl=$("#srPlay");if(!d||!pl||pl.dataset.id!==d.id)return;const dur=srDur(d),t=srP.t;
-  const h=$("#srHead");if(h)h.style.left=(Math.min(1,t/dur)*100).toFixed(3)+"%";const c=$("#srClock");if(c)c.textContent=srT(t);
-  const pp=$("#srPP");if(pp){pp.setAttribute("aria-label",srP.playing?"Pause":"Play");pp.innerHTML=srP.playing?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'}
-  const M=srP.media&&srP.media.id===d.id&&srP.media.ready;const n=$("#srNow"),r=$("#srRep");
+function srPaint(){const d=srDoc(),pl=srQ("#srPlay");if(!d||!pl||pl.dataset.id!==d.id)return;const dur=srDur(d),t=srP.t;
+  const h=srQ("#srHead");if(h)h.style.left=(Math.min(1,t/dur)*100).toFixed(3)+"%";const c=srQ("#srClock");if(c)c.textContent=srT(t);
+  const pp=srQ("#srPP");if(pp){pp.setAttribute("aria-label",srP.playing?"Pause":"Play");pp.innerHTML=srP.playing?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'}
+  const M=srP.media&&srP.media.id===d.id&&srP.media.ready;const n=srQ("#srNow"),r=srQ("#srRep");
   if(r)r.hidden=!M;if(n){n.hidden=!!M;if(!M)n.innerHTML=srP.media&&srP.media.id===d.id&&srP.media.err?`<p class="dim">${esc(srP.media.err)}</p>`:srP.media&&srP.media.id===d.id&&!srP.media.ready?`<p class="dim">Loading recording…</p>`:srNowHtml(d,t)}
-  if(M){const o=$("#srRepCap");if(o)o.innerHTML=srNowCap(d,t)}
-  document.querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5));srLogPaint(t)}
+  if(M){const o=srQ("#srRepCap");if(o)o.innerHTML=srNowCap(d,t)}
+  srRoot().querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5));srRoot().querySelectorAll(".srmoms li").forEach(li=>{const x=+li.querySelector("[data-srlog]").dataset.srlog;li.classList.toggle("now",t>=x-1&&t<=x+8)});srLogPaint(t)}
 function srNowCap(d,t){let l=null;for(const x of d.lines||[]){if(+x.t<=t+.2)l=x;else break}if(!l||t>(+l.e||+l.t)+1.5)return "";return `<span class="${l.who}">${esc(l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller")}</span>${esc(l.txt||"")}`}
 const srClipAt=(cl,t)=>cl.findIndex(c=>t>=c.s-.05&&t<c.e);
 function srTick(){if(!srP.playing)return;const d=srDoc();if(!d){srPause();return}const now=performance.now(),dt=Math.min(.25,(now-srP.last)/1000);srP.last=now;
@@ -8063,29 +8072,29 @@ async function srLoadMedia(d){if(!d||!d.media||!d.media.asset)return;if(srP.medi
     M.ready=true;srPaint();srFit();srMediaSync(srP.playing)}
   catch(e){M.err="Couldn't load the recording.";srPaint()}}
 /* an iframe that is moved in the DOM loses its document, so the replayer is rebuilt in the current stage after each render */
-function srMakeRep(M){const R=$("#srRep");if(!window.rrweb||!R||(M.events||[]).length<2)return;try{M.rep&&M.rep.destroy&&M.rep.destroy()}catch(e){}
+function srMakeRep(M){const R=srQ("#srRep");if(!window.rrweb||!R||(M.events||[]).length<2)return;try{M.rep&&M.rep.destroy&&M.rep.destroy()}catch(e){}
   R.innerHTML=`<div class="srrepin" id="srRepIn"></div><div class="srrepcap" id="srRepCap"></div>`;
-  M.rep=new rrweb.Replayer(M.events,{root:$("#srRepIn"),skipInactive:false,showWarning:false,showDebug:false,mouseTail:false,triggerFocus:false,UNSAFE_replayCanvas:false,speed:srP.rate});
+  M.rep=new rrweb.Replayer(M.events,{root:srQ("#srRepIn"),skipInactive:false,showWarning:false,showDebug:false,mouseTail:false,triggerFocus:false,UNSAFE_replayCanvas:false,speed:srP.rate});
   M.rep.on("resize",()=>srFit());M.node=R}
 function srMediaDrop(){const M=srP.media;if(!M)return;try{M.src&&M.src.stop()}catch(e){}try{M.rep&&M.rep.pause()}catch(e){}try{M.ctx&&M.ctx.close()}catch(e){}srP.media=null}
-function srFit(){const M=srP.media;if(!M||!M.rep)return;const st=$("#srStage"),w=M.rep.wrapper,ifr=M.rep.iframe;if(!st||!w||!ifr)return;
+function srFit(){const M=srP.media;if(!M||!M.rep)return;const st=srQ("#srStage"),w=M.rep.wrapper,ifr=M.rep.iframe;if(!st||!w||!ifr)return;
   const iw=+ifr.width||ifr.offsetWidth||1280,ih=+ifr.height||ifr.offsetHeight||720,sw=st.clientWidth,sh=st.clientHeight,k=Math.min(sw/iw,sh/ih);
   w.style.transform=`scale(${k})`;w.style.transformOrigin="0 0";w.style.position="absolute";w.style.left=((sw-iw*k)/2)+"px";w.style.top=((sh-ih*k)/2)+"px"}
 window.addEventListener("resize",()=>srFit());
 /* after a re-render, put the live replay node back so a db update doesn't kill playback */
 function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=0}
-  const M=srP.media;if(M&&M.id===d.id&&M.ready&&M.node&&$("#srRep")!==M.node){srMakeRep(M);srMediaSync(srP.playing)}
+  const M=srP.media;if(M&&M.id===d.id&&M.ready&&M.node&&srQ("#srRep")!==M.node){srMakeRep(M);srMediaSync(srP.playing)}
   if(d.media&&d.media.asset)srLoadMedia(d);srPaint();srFit()}
-function srBarT(e){const b=e.target.closest("[data-srbar]")||$("#srPlay [data-srbar]");const r=b.getBoundingClientRect(),d=srDoc();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*srDur(d)}
+function srBarT(e){const b=e.target.closest("[data-srbar]")||srQ("#srPlay [data-srbar]");const r=b.getBoundingClientRect(),d=srDoc();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*srDur(d)}
 document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#srPlay"))return;
   if(e.target.closest("#srPP")){srP.playing?srPause():srPlay();return}
   const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);return}
   const st=e.target.closest("[data-srstep]");if(st){const d=srDoc(),F=((d.audit||{}).findings||[]).map(f=>+f.t).sort((a,b)=>a-b),dir=+st.dataset.srstep;const n=dir>0?F.find(t=>t>srP.t+1):F.slice().reverse().find(t=>t<srP.t-5);if(n!=null)srSeek(Math.max(0,n-4),srP.playing);return}
-  const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=$("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}
-  const rt=e.target.closest("[data-srrate]");if(rt){srP.rate=+rt.dataset.srrate;document.querySelectorAll("#srPlay [data-srrate]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.srrate===srP.rate));srMediaSync(srP.playing);return}
+  const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=srQ("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}
+  const rt=e.target.closest("[data-srrate]");if(rt){srP.rate=+rt.dataset.srrate;srRoot().querySelectorAll("#srPlay [data-srrate]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.srrate===srP.rate));srMediaSync(srP.playing);return}
   if(e.target.closest("[data-srbar]")){srSeek(srBarT(e),false);return}});
-document.addEventListener("mousemove",e=>{const b=e.target.closest&&e.target.closest("#srPlay [data-srbar]"),h=$("#srHover");if(!h)return;if(!b){h.hidden=true;return}const r=b.getBoundingClientRect(),f=(e.clientX-r.left)/r.width;h.hidden=false;h.style.left=(f*100)+"%";h.textContent=srT(f*srDur(srDoc()))});
-document.addEventListener("keydown",e=>{if(tab!=="sr"||!$("#srPlay")||/input|textarea|select/i.test((e.target.tagName||"")))return;if(e.key===" "&&!e.target.closest("button")){e.preventDefault();srP.playing?srPause():srPlay()}
+document.addEventListener("mousemove",e=>{const b=e.target.closest&&e.target.closest("#srPlay [data-srbar]"),h=srQ("#srHover");if(!h)return;if(!b){h.hidden=true;return}const r=b.getBoundingClientRect(),f=(e.clientX-r.left)/r.width;h.hidden=false;h.style.left=(f*100)+"%";h.textContent=srT(f*srDur(srDoc()))});
+document.addEventListener("keydown",e=>{if((tab!=="sr"&&tab!=="chat")||!srQ("#srPlay")||/input|textarea|select/i.test((e.target.tagName||"")))return;if(e.key===" "&&!e.target.closest("button")){e.preventDefault();srP.playing?srPause():srPlay()}
   else if(e.key==="ArrowRight")srSeek(srP.t+5,false);else if(e.key==="ArrowLeft")srSeek(srP.t-5,false)});
 /* owner only: paste a recording bundle (made in a logged-in GreenDot tab) to store it in the asset store and point the audit at it */
 let srPasteNote="";const srMediaImpHtml=()=>amOwner?`<details class="panel srimp"${srPasteNote?" open":""}><summary>Add recording clips</summary><div class="srpaste" id="srPaste" tabindex="0" role="textbox" aria-label="Paste recording">Click here and paste</div><span class="hint" id="srPasteMsg">${esc(srPasteNote)}</span></details>`:"";
@@ -8116,20 +8125,29 @@ function srLogHtml(d){const R=srLogRows(d),cl=srClips(d),inC=t=>!cl.length||cl.s
   return `<aside class="panel tlog srlog${srP.hl?" hlon":""}" id="srLog" aria-label="Call log"><header class="lg-hd"><span>Call log</span><span class="num tkmut">${R.length} events</span></header>
     <ol class="lg-list" id="srLogL">${G.map(g=>`<li class="lg-g${g.src==="moment"?" srlmg":""}">${head(g)}<ol class="lg-rows">${g.rows.map(row).join("")}</ol></li>`).join("")}</ol></aside>`}
 /* keep the row being played lit, and in view while playing */
-function srLogPaint(t){const L=$("#srLogL");if(!L)return;const rows=L.querySelectorAll(".srlr");let cur=null;for(const r of rows){if(+r.dataset.t<=t+.25)cur=r;else break}
+function srLogPaint(t){const L=srQ("#srLogL");if(!L)return;const rows=L.querySelectorAll(".srlr");let cur=null;for(const r of rows){if(+r.dataset.t<=t+.25)cur=r;else break}
   if(srP.logRow===cur)return;if(srP.logRow&&srP.logRow.isConnected)srP.logRow.classList.remove("now");srP.logRow=cur;if(!cur)return;cur.classList.add("now");
   if(srP.playing&&!L.matches(":hover")){const a=cur.getBoundingClientRect(),b=L.getBoundingClientRect();if(a.top<b.top||a.bottom>b.bottom)L.scrollTop+=a.top-b.top-b.height/3}}
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-srlog]");if(!b)return;const d=srDoc();if(!d)return;const t=+b.dataset.srlog,cl=srClips(d);
-  if(srP.hl&&cl.length&&!cl.some(c=>t>=c.s-.5&&t<=c.e+.5)){srP.hl=false;const h=$("#srHL");if(h)h.setAttribute("aria-pressed","false");const g=$("#srLog");if(g)g.classList.remove("hlon")}
+  if(srP.hl&&cl.length&&!cl.some(c=>t>=c.s-.5&&t<=c.e+.5)){srP.hl=false;const h=srQ("#srHL");if(h)h.setAttribute("aria-pressed","false");const g=srQ("#srLog");if(g)g.classList.remove("hlon")}
   srSeek(t,true)});
 
+
+/* the key moments under the player: the audit's findings only, each time a button that plays from there */
+function srMomentsHtml(d){const F=((d.audit||{}).findings||[]).slice().sort((x,y)=>x.t-y.t);if(!F.length)return "";
+  return `<ol class="srmoms" aria-label="Key moments">${F.map(f=>{const k=srKind(f);return `<li class="k-${k} t-${esc(f.tone||"note")}"><button type="button" class="num srlt" data-srlog="${f.t}">${srT(f.t)}</button>${srSvgI(k,"sri srli")}<span><b>${esc(SR_KL[k])}</b> ${esc(f.text)}${f.crit?` <span class="hint">· ${esc(f.crit)}</span>`:""}</span></li>`}).join("")}</ol>`}
+/* a call's Audit ticket: the recording, when the call has a screen + voice audit (srAudits/<queueId>) */
+const srDocFor=key=>(srDocs||[]).find(x=>x.id===String(key))||null;
+function srAuditSec(it){if(typeof srListen==="function")srListen();const d=it&&srDocFor(it.key);if(!d)return "";
+  return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srPlayerHtml(d)}${srMomentsHtml(d)}</section>`}
 function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
   if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
   if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
   const d=srDocs.find(x=>x.id===srSel)||srDocs[0];
   v.innerHTML=`<nav class="srcalls" aria-label="Calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>
-    <div class="srwrap">${srLogHtml(d)}<article class="panel srmain">${srDetail(d)}</article></div>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
+    <article class="panel srmain">${srDetail(d)}</article>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
 document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;renderSR();return}
+  const oa=e.target.closest("[data-sraudit]");if(oa){const q=(queueAll||[]).find(x=>x.id===oa.dataset.sraudit);openCall(oa.dataset.sraudit,q&&q.week);return}
   const j=e.target.closest("[data-srjump]");if(j&&$("#view-sr")&&!$("#view-sr").hidden){const t=Number(j.dataset.srjump),rows=[...document.querySelectorAll("#srTl li")];const r=rows.find(x=>Number(x.dataset.t)>=t-0.5)||rows[rows.length-1];
     if(r){rows.forEach(x=>x.classList.remove("hit"));r.classList.add("hit")}
     if(j.closest(".srfind,.srgrade")){srSeek(Math.max(0,t-4),true);const pl=$("#srPlay");if(pl)pl.scrollIntoView({block:"nearest",behavior:"smooth"})}else if(r)r.scrollIntoView({block:"center",behavior:"smooth"})}});
@@ -8241,7 +8259,7 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
   L.forEach(x=>x.classList.toggle("hit",x.dataset.srcid===id));{const row=b.closest(".srcc");if(row)srToggle(row,true)}const f=L.find(x=>x.dataset.srcid===id);if(f)f.scrollIntoView({block:"center",behavior:"smooth"})});
 
 function renderAll(){
-  if(tab!=="sr"&&typeof srP!=="undefined"&&srP.playing)srPause();
+  if(!(tab==="sr"||(tab==="chat"&&callSel))&&typeof srP!=="undefined"&&srP.playing)srPause();
   if(typeof rbListen==="function")rbListen();if(tab==="rubric")renderRubric();
   if(tab==="sr"&&typeof renderSR==="function")renderSR();
   $("#wkLabel").textContent=weekLabel(week)+", "+parseIso(week).getFullYear();
