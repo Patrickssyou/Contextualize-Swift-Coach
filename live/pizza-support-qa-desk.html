@@ -8117,8 +8117,10 @@ document.addEventListener("keydown",e=>{if((tab!=="sr"&&tab!=="chat")||!srQ("#sr
   else if(e.key==="ArrowRight")srSeek(srP.t+5,false);else if(e.key==="ArrowLeft")srSeek(srP.t-5,false)});
 /* owner only: paste a recording bundle (made in a logged-in GreenDot tab) to store it in the asset store and point the audit at it */
 let srPasteNote="";const srMediaImpHtml=()=>amOwner&&srTools()?`<details class="panel srimp"${srPasteNote?" open":""}><summary>Add recording clips</summary><div class="srpaste" id="srPaste" tabindex="0" role="textbox" aria-label="Paste recording">Click here and paste</div><span class="hint" id="srPasteMsg">${esc(srPasteNote)}</span></details>`:"";
-document.addEventListener("paste",async e=>{const z=e.target.closest&&e.target.closest("#srPaste");if(!z)return;e.preventDefault();const say=s=>{srPasteNote=s;const m=$("#srPasteMsg");if(m)m.textContent=s};
-  const txt=(e.clipboardData||window.clipboardData).getData("text");let j;try{j=JSON.parse(txt)}catch(_){say("Not a recording bundle.");return}
+document.addEventListener("paste",async e=>{const z=e.target.closest&&e.target.closest("#srPaste");const txt=(e.clipboardData||window.clipboardData).getData("text");
+  /* the owner can also paste a bundle anywhere on the SR tab, with no box on screen */
+  const quiet=!z&&amOwner&&tab==="sr"&&!(e.target.closest&&e.target.closest("input,textarea,[contenteditable]"))&&/^\s*\{"kind":"srMedia"/.test(txt||"");if(!z&&!quiet)return;e.preventDefault();
+  const say=s=>{srPasteNote=z?s:"";const m=$("#srPasteMsg");if(m)m.textContent=s;if(quiet&&typeof toast==="function")toast(s)};let j;try{j=JSON.parse(txt)}catch(_){say("Not a recording bundle.");return}
   if(!j||j.kind!=="srMedia"||!/^[0-9a-f-]{36}$/.test(j.callId||"")){say("Not a recording bundle.");return}
   const doc=(srDocs||[]).find(x=>x.callId===j.callId);if(!doc){say("No audit for call "+j.callId.slice(0,8)+".");return}
   say(`Saving ${(txt.length/1048576).toFixed(1)} MB…`);
