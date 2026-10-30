@@ -1649,7 +1649,26 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srcoach{margin:14px 0;padding:16px}.srcoach.top{margin:0;padding:0}.srcoach.in{margin:22px 0 0;padding:18px 0 0;border-top:1px solid var(--line,#e5e0da)}.srcoach h3{margin:0 0 10px;font-size:16px}.srcg{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:700px){.srcg{grid-template-columns:1fr}}
 .srcl{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}.srcl li{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:start}.srcl .srmc{display:block;font-size:12px;opacity:.7}.srgtop{display:flex;gap:6px 16px;align-items:baseline;flex-wrap:wrap;margin:4px 0 8px}.srgtop b{font-size:22px}
 /* rubric document */
-.rbwrap{display:flex;flex-direction:column;gap:14px;max-width:980px}
+.rbwrap{display:flex;flex-direction:column;gap:14px;max-width:980px}.rbwrap.rbwide{max-width:none}
+.rbmx-wrap{padding:0;overflow:visible}@media (max-width:1180px){.rbmx-wrap{overflow-x:auto}}
+.rbmx{width:100%;min-width:1080px;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:12.5px;line-height:1.4}
+.rbmx th{text-transform:none;letter-spacing:normal}.rbmx thead th span{text-transform:none;letter-spacing:0}.rbmx th[scope=row] b{color:var(--ink)}
+.rbmx col.c0{width:170px}.rbmx col.cna{width:150px}
+.rbmx thead th{position:sticky;top:0;z-index:2;background:var(--panel,var(--bg));text-align:left;vertical-align:bottom;padding:10px 10px 8px;border-bottom:1px solid var(--line);font-weight:600}
+.rbmx thead th span{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:4px}
+.rbmx-h0{width:190px}.rbmx th[scope=row]{position:sticky;left:0;z-index:1;background:var(--panel,var(--bg));text-align:left;vertical-align:top;padding:10px;border-top:1px solid var(--line);width:190px}
+.rbmx-n{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px}.rbmx-n b{font-size:13.5px}.rbmx-n:hover b{color:var(--accent)}.rbmx-n .num{color:var(--muted);font-size:12px}
+.rbmx-n:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.rbmx-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.rbmx-c{vertical-align:top;padding:10px;border-top:1px solid var(--line);border-left:1px solid var(--line);color:var(--ink)}
+.rbmx-k{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:6px}.rbmx-k:first-child{margin-top:0}
+.rbmx-na{color:var(--muted)}
+.rbmx-g th{text-align:left;padding:14px 10px 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft);position:sticky;left:0}
+.rbmx-r.open th,.rbmx-r.open td{background:var(--accent-soft)}
+.rbmx-more td{padding:0 10px 12px;background:var(--accent-soft)}.rbmx-mo{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:start;padding-top:4px}.rbmx-mo p{margin:4px 0 0;font-size:13px}
+.rbmx-ed td{padding:10px;border-top:1px solid var(--line)}.rbmx-ed .rbrow{box-shadow:none;border:0}
+.rbrules>summary,.rbqs>summary{cursor:pointer;list-style:revert;margin:0}.rbrules[open]>summary,.rbqs[open]>summary{margin-bottom:8px}
+@media (max-width:700px){.rbmx-wrap{max-height:none}.rbmx-mo{grid-template-columns:minmax(0,1fr)}}
 .rbtitle{font-family:var(--f-display);font-size:22px;margin:0 0 2px;letter-spacing:-.02em}
 .rbrules,.rbqs,.rblog{padding:14px 18px}.rbrules .h2,.rbqs .h2{margin:0 0 8px}
 .rbrules ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
@@ -8318,7 +8337,7 @@ const RB_LOGIC={
   longterm:"Claude asks: could this happen again, and did the SA stop it? That means showing the client how to do it in CMA, or flagging the repeat issue to the right owner. N/A only for a true one-off; anything the client could change in CMA is never N/A. Nothing done is 1. Raised only when asked, or wrong steps, is 2. Mentioned but not walked through is 3. Walked through, or flagged with enough to act on, is 4. Confirmed the client can do it next time is 5.",
   ticket:"Claude first decides what record this case needs. CL call: a WIRA ticket, always. DE call: a saved order remark, plus a WIRA ticket when a follow-up is owed or another team must act. MGR call: a saved order remark; a WIRA ticket only when another team must act. Chat: a child task or internal note when work goes to another team, a follow-up is owed or an amount is set. Missing the record the case needed is 1. The wrong place, team or tag, or too thin to act on, is 2. The right place with a minor error is 3. The right record saying what was asked and done is 4. One the next person can act on without asking anything is 5.",
   ownership:"N/A when the case closed then and there. Otherwise Claude looks at what was left pending and whether it was chased. Dropped, or handing off what Support could fix, is 1. Tagged someone with no summary is 2. Done late, or another team pulled in without a recommendation, is 3. Done or chased, with a summary and recommendation when another team or the lead was needed, is 4. Closing the loop with the client afterwards is 5."};
-RUBRIC_V4.forEach(r=>{if(!r.logic&&RB_LOGIC[r.id])r.logic=RB_LOGIC[r.id]});
+/* "How Claude decides" notes retired Oct 30: page-only, never read by the grader, and written for the pre-v5 marks */
 const RB_FIELDS=["label","w","desc","logic","na","lv","lvCall"];
 const RB_BASE=JSON.parse(JSON.stringify(RUBRIC_V4));
 let rbDoc=null,rbOff=null,rbEdit="",rbSig="";
@@ -8341,16 +8360,22 @@ const rbLv=(lv,i)=>esc(String((lv||[])[i]||"").replace(/^As 3/,"As 4"));
 const RB_QS=[
   {q:"Documentation on DE calls: when does it need a WIRA ticket on top of the order remark?",o:["Only when a follow-up is owed or another team must act; otherwise the order remark is enough","Every refund, comp or remake","Always, the same as CL","Never; the order remark is always enough"],rec:0},
   {q:"Documentation on chats: when is a child task or internal note needed?",o:["Only when work goes to another team, a follow-up is owed, or an amount is set (as now)","Every chat needs a child task","Don't grade documentation on chats (always N/A)"],rec:0},
-  {q:"The \"How Claude decides\" lines on this page: should Claude's grading read them too?",o:["Yes, feed them into the grading passes as well as this page","No, keep them on this page only"],rec:0},
   {q:"Who can edit this rubric?",o:["You, Howard and Li Qi, with every edit logged here","Only you","You edit; Howard and Li Qi comment"],rec:0},
   {q:"After someone edits a criterion, what happens to items already graded?",o:["Flag them as graded on older wording, and regrade the current round when you press Regrade","Regrade the current round automatically","Nothing"],rec:0},
   {q:"Screen recording and voice evidence: how should it count?",o:["Raise or lower marks when it's available, as on the 6 test calls","Show it as notes only; marks come from the transcript","Only for Gathering information, Documentation and Composure"],rec:0},
   {q:"Opening spiel: what should Claude grade against?",o:["The official script per call type (send it and I'll put it in the row)","What SAs usually say (as now)"],rec:0}];
+let rbOpen="";
+function rbMxRow(r){const two=!!r.lvCall,ov=!!(rbDoc&&rbDoc.rows&&rbDoc.rows[r.id]),op=rbOpen===r.id;
+  if(rbEdit===r.id)return `<tr class="rbmx-ed"><td colspan="7">${rbRowHtml(r)}</td></tr>`;
+  const cell=i=>two?`<span class="rbmx-k">Chat</span>${rbLv(r.lv,i)}<span class="rbmx-k">Call</span>${rbLv(r.lvCall,i)}`:rbLv(r.lv,i);
+  const main=`<tr class="rbmx-r${op?" open":""}" id="rb-${r.id}"><th scope="row"><button type="button" class="rbmx-n" data-rbopen="${r.id}" aria-expanded="${op}"><b>${esc(r.label)}</b><span class="num">${esc(String(r.w))}%</span></button><span class="rbmx-tags">${r.kind?`<span class="tag">${rbKind(r)}</span>`:""}${ov?`<span class="tag rbov">Edited</span>`:""}</span></th>
+    ${[0,1,2,3,4].map(i=>`<td class="rbmx-c m${i}">${cell(i)}</td>`).join("")}<td class="rbmx-c rbmx-na">${r.na?esc(r.na):`<span class="tkmut">Always scored</span>`}</td></tr>`;
+  const more=op?`<tr class="rbmx-more"><td colspan="7"><div class="rbmx-mo"><div><span class="lbl-sm">What it measures</span><p>${esc(r.desc||"")}</p></div>${db?`<button type="button" class="btn small" data-rbedit="${r.id}">Edit</button>`:""}</div></td></tr>`:"";
+  return main+more}
 function rbRowHtml(r){const ed=rbEdit===r.id,two=!!r.lvCall,ov=!!(rbDoc&&rbDoc.rows&&rbDoc.rows[r.id]);
   if(ed)return `<article class="panel rbrow ed" id="rb-${r.id}" data-rbform="${r.id}">
     <div class="rbed"><label class="field"><span class="lbl-sm">Name</span><input name="label" value="${esc(r.label||"")}"></label><label class="field rbw"><span class="lbl-sm">Weight</span><input name="w" type="number" min="0" max="100" step="1" value="${esc(String(r.w))}"></label></div>
     <label class="field"><span class="lbl-sm">What it measures</span><textarea name="desc" rows="4">${esc(r.desc||"")}</textarea></label>
-    <label class="field"><span class="lbl-sm">How Claude decides</span><textarea name="logic" rows="4">${esc(r.logic||"")}</textarea></label>
     <label class="field"><span class="lbl-sm">N/A when</span><textarea name="na" rows="2">${esc(r.na||"")}</textarea></label>
     <table class="rblv"><thead><tr><th class="n">Mark</th><th>${two?"Chat":"Text"}</th>${two?"<th>Call</th>":""}</tr></thead><tbody>${[0,1,2,3,4].map(i=>`<tr><td class="n"><b class="cbmk ${chMarkCls(i,4)}">${i+1}</b></td><td><textarea name="lv${i}" rows="2">${rbLv(r.lv,i)}</textarea></td>${two?`<td><textarea name="lvc${i}" rows="2">${rbLv(r.lvCall,i)}</textarea></td>`:""}</tr>`).join("")}</tbody></table>
     <div class="row"><button type="button" class="btn primary" data-rbsave="${r.id}">Save</button><button type="button" class="btn" data-rbcancel="1">Cancel</button>${ov?`<button type="button" class="btn danger" data-rbreset="${r.id}">Back to default</button>`:""}<span class="hint" id="rbMsg"></span></div></article>`;
@@ -8361,11 +8386,13 @@ function rbRowHtml(r){const ed=rbEdit===r.id,two=!!r.lvCall,ov=!!(rbDoc&&rbDoc.r
 function renderRubric(){const v=$("#view-rubric");if(!v||tab!=="rubric")return;rbListen();
   const sum=k=>rubricV4(k).reduce((s,r)=>s+Number(r.w||0),0),bad=["chat","call"].filter(k=>sum(k)!==100);
   const L=(rbDoc&&Array.isArray(rbDoc.log)?rbDoc.log:[]).slice(0,12);
-  const groups=RUBRIC_GROUPS_V4.map(g=>{const R=RUBRIC_V4.filter(r=>r.group===g.id),w=R.filter(r=>r.kind!=="chat").reduce((s,r)=>s+Number(r.w||0),0);
-    return `<section class="rbgrp"><h2 class="h2">${esc(g.label)} <span class="num">${w}%</span></h2>${R.map(rbRowHtml).join("")}</section>`}).join("");
-  v.innerHTML=`<div class="rbwrap"><header class="rbtop"><div><h2 class="rbtitle">Scorecard rubric</h2><span class="hint">v5 · chats and calls${rbDoc&&rbDoc.at?` · last edit ${esc(rbWhen(rbDoc.at))}${rbDoc.by?` by ${esc(rbWho(rbDoc.by))}`:""}`:""}</span></div></header>
+  const LAB=["Completely missed it","Bare minimum, done badly","Bare minimum","What we expect of a Super Agent","Nothing else to improve on"];
+  const body=RUBRIC_GROUPS_V4.map(g=>{const R=RUBRIC_V4.filter(r=>r.group===g.id),w=R.filter(r=>r.kind!=="chat").reduce((s,r)=>s+Number(r.w||0),0);
+    return `<tr class="rbmx-g"><th colspan="7" scope="rowgroup">${esc(g.label)} <span class="num">${w}%</span></th></tr>${R.map(rbMxRow).join("")}`}).join("");
+  const groups=`<div class="panel rbmx-wrap"><table class="rbmx"><colgroup><col class="c0"><col><col><col><col><col><col class="cna"></colgroup><thead><tr><th scope="col" class="rbmx-h0">Criterion</th>${LAB.map((l,i)=>`<th scope="col" class="m${i}"><b class="cbmk ${chMarkCls(i,4)}">${i+1}</b><span>${l}</span></th>`).join("")}<th scope="col"><b class="cbmk na">N/A</b><span>Full marks when</span></th></tr></thead><tbody>${body}</tbody></table></div>`;
+  v.innerHTML=`<div class="rbwrap rbwide"><header class="rbtop"><div><h2 class="rbtitle">Scorecard rubric</h2><span class="hint">v5 · chats and calls${rbDoc&&rbDoc.at?` · last edit ${esc(rbWhen(rbDoc.at))}${rbDoc.by?` by ${esc(rbWho(rbDoc.by))}`:""}`:""}</span></div></header>
     ${bad.length?`<div class="banner">Weights add up to ${bad.map(k=>`${sum(k)}% on ${k}s`).join(" and ")}, not 100%.</div>`:""}
-    <section class="panel rbrules"><h2 class="h2">How a score is made</h2><ul>
+    <details class="panel rbrules"><summary class="h2">How a score is made</summary><ul>
       <li>Every criterion is marked 1 to 5: 1 completely missed it, 2 bare minimum but done badly, 3 bare minimum, 4 what we expect a Super Agent to do, 5 nothing else to improve on.</li>
       <li>Between two levels, take the lower one and say what was missing. Name the evidence for every mark.</li>
       <li>N/A counts as full marks, so a criterion that doesn't apply never pulls a score down.</li>
@@ -8373,9 +8400,9 @@ function renderRubric(){const v=$("#view-rubric");if(!v||tab!=="rubric")return;r
       <li>Bands: above 85% outperformed, 75–85% hitting expectations, 65–75% some gaps, below 65% not yet at standard.</li>
       <li>Coaching cards for every mark of 3 or below.</li>
       <li>Red flags (target 0 a month) are flagged on the item, not folded into a mark: compensation over the approved limit without approval, or wrong information that puts a client at risk.</li>
-      <li>Edits here apply right away to every scorecard and to Claude's next grade. Items already graded keep their marks until they're regraded.</li></ul></section>
+      <li>Edits here apply right away to every scorecard and to Claude's next grade. Items already graded keep their marks until they're regraded.</li></ul></details>
     ${groups}
-    <section class="panel rbqs"><h2 class="h2">Open questions</h2><ol>${RB_QS.map(x=>`<li><p>${esc(x.q)}</p><ol type="a">${x.o.map((o,i)=>`<li>${esc(o)}${i===x.rec?` <b class="rbrec">Recommended</b>`:""}</li>`).join("")}</ol></li>`).join("")}</ol></section>
+    <details class="panel rbqs"><summary class="h2">Open questions</summary><ol>${RB_QS.map(x=>`<li><p>${esc(x.q)}</p><ol type="a">${x.o.map((o,i)=>`<li>${esc(o)}${i===x.rec?` <b class="rbrec">Recommended</b>`:""}</li>`).join("")}</ol></li>`).join("")}</ol></details>
     ${L.length?`<details class="panel rblog"><summary>Edit history</summary><ul>${L.map(x=>`<li><span class="num">${esc(rbWhen(x.at))}</span> ${esc(rbWho(x.by)||"Someone")} · ${esc(x.label||x.id)}${x.reset?" · back to default":""}</li>`).join("")}</ul></details>`:""}</div>`}
 async function rbSave(id,reset){if(!db)return;const msg=$("#rbMsg"),f=document.querySelector(`[data-rbform="${id}"]`),r=RUBRIC_V4.find(x=>x.id===id);if(!r)return;
   const rows=Object.assign({},(rbDoc&&rbDoc.rows)||{});
@@ -8386,8 +8413,9 @@ async function rbSave(id,reset){if(!db)return;const msg=$("#rbMsg"),f=document.q
   const at=new Date().toISOString(),log=[{at,by:myId||null,id,label:reset?r.label:rows[id].label,reset:!!reset}].concat((rbDoc&&rbDoc.log)||[]).slice(0,50);
   try{const nx={rows,at,by:myId||null,log};await db.doc(RB_DOC).set(nx);rbDoc=nx;rbApply(nx);rbEdit="";toast(reset?"Back to default":"Saved");renderRubric()}
   catch(e){if(msg)msg.textContent="Couldn't save: "+String(e&&e.code||e).slice(0,60)}}
-document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-rbedit],[data-rbsave],[data-rbcancel],[data-rbreset]");if(!t)return;
-  if(t.dataset.rbedit){rbEdit=t.dataset.rbedit;renderRubric();const el=document.getElementById("rb-"+rbEdit);if(el)el.scrollIntoView({block:"start"});return}
+document.addEventListener("click",e=>{const o=e.target.closest&&e.target.closest("[data-rbopen]");if(o){rbOpen=rbOpen===o.dataset.rbopen?"":o.dataset.rbopen;renderRubric();return}
+  const t=e.target.closest&&e.target.closest("[data-rbedit],[data-rbsave],[data-rbcancel],[data-rbreset]");if(!t)return;
+  if(t.dataset.rbedit){rbEdit=t.dataset.rbedit;rbOpen="";renderRubric();const el=document.getElementById("rb-"+rbEdit);if(el)el.scrollIntoView({block:"start"});return}
   if(t.dataset.rbsave){rbSave(t.dataset.rbsave);return}if(t.dataset.rbreset){rbSave(t.dataset.rbreset,true);return}
   if(t.dataset.rbcancel){rbEdit="";renderRubric()}});
 
