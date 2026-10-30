@@ -8064,7 +8064,7 @@ function srPaint(){const d=srDoc(),pl=srQ("#srPlay");if(!d||!pl||pl.dataset.id!=
   const M=srP.media&&srP.media.id===d.id&&srP.media.ready;const n=srQ("#srNow"),r=srQ("#srRep");
   if(r)r.hidden=!M;if(n){n.hidden=!!M;if(!M)n.innerHTML=srP.media&&srP.media.id===d.id&&srP.media.err?`<p class="dim">${esc(srP.media.err)}</p>`:srP.media&&srP.media.id===d.id&&!srP.media.ready?`<p class="dim">Loading recording…</p>`:srNowHtml(d,t)}
   if(M){const o=srQ("#srRepCap");if(o)o.innerHTML=srNowCap(d,t)}
-  srRoot().querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5));srRoot().querySelectorAll(".srmoms li").forEach(li=>{const x=+li.querySelector("[data-srlog]").dataset.srlog;li.classList.toggle("now",t>=x-1&&t<=x+8)});srLogPaint(t)}
+  srRoot().querySelectorAll("#srPlay .srpin").forEach(b=>b.classList.toggle("on",Math.abs(+b.dataset.srseek-t)<2.5));if(srP.pick!=null&&(t>srP.pick+8||t<srP.pick-30))srP.pick=null;srRoot().querySelectorAll(".srmoms li").forEach(li=>{const x=+li.querySelector("[data-srlog]").dataset.srlog;li.classList.toggle("now",srP.pick!=null?Math.abs(x-srP.pick)<.01:t>=x-1&&t<=x+8)});srLogPaint(t)}
 function srNowCap(d,t){let l=null;for(const x of d.lines||[]){if(+x.t<=t+.2)l=x;else break}if(!l||t>(+l.e||+l.t)+1.5)return "";return `<span class="${l.who}">${esc(l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller")}</span>${esc(l.txt||"")}`}
 const srClipAt=(cl,t)=>cl.findIndex(c=>t>=c.s-.05&&t<c.e);
 function srTick(){if(!srP.playing)return;const d=srDoc();if(!d){srPause();return}const now=performance.now(),dt=Math.min(.25,(now-srP.last)/1000);srP.last=now;
@@ -8114,7 +8114,7 @@ function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=
 function srBarT(e){const b=e.target.closest("[data-srbar]")||srQ("#srPlay [data-srbar]");const r=b.getBoundingClientRect(),d=srDoc();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*srDur(d)}
 document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#srPlay"))return;
   if(e.target.closest("#srPP")){srP.playing?srPause():srPlay();return}
-  const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);return}
+  const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srP.pick=t;srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);srMomScroll(t);return}
   const st=e.target.closest("[data-srstep]");if(st){const d=srDoc(),F=((d.audit||{}).findings||[]).map(f=>+f.t).sort((a,b)=>a-b),dir=+st.dataset.srstep;const n=dir>0?F.find(t=>t>srP.t+1):F.slice().reverse().find(t=>t<srP.t-5);if(n!=null)srSeek(Math.max(0,n-4),srP.playing);return}
   const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=srQ("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}
   const rt=e.target.closest("[data-srrate]");if(rt){srP.rate=+rt.dataset.srrate;srRoot().querySelectorAll("#srPlay [data-srrate]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.srrate===srP.rate));srMediaSync(srP.playing);return}
@@ -8158,10 +8158,13 @@ function srLogPaint(t){const L=srQ("#srLogL");if(!L)return;const rows=L.querySel
   if(srP.playing&&!L.matches(":hover")){const a=cur.getBoundingClientRect(),b=L.getBoundingClientRect();if(a.top<b.top||a.bottom>b.bottom)L.scrollTop+=a.top-b.top-b.height/3}}
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-srlog]");if(!b)return;const d=srDoc();if(!d)return;const t=+b.dataset.srlog,cl=srClips(d);
   if(srP.hl&&cl.length&&!cl.some(c=>t>=c.s-.5&&t<=c.e+.5)){srP.hl=false;const h=srQ("#srHL");if(h)h.setAttribute("aria-pressed","false");const g=srQ("#srLog");if(g)g.classList.remove("hlon")}
-  srSeek(t,true);if(b.closest(".srcoach.in")){const pl=srQ("#srPlay");if(pl)pl.scrollIntoView({block:"center",behavior:"smooth"})}});
+  srP.pick=b.closest(".srmoms")||b.closest(".srcoach")?t:null;srSeek(t,true);if(b.closest(".srcoach.in")){const pl=srQ("#srPlay");if(pl)pl.scrollIntoView({block:"center",behavior:"smooth"})}});
 
 
 /* the key moments under the player: the audit's findings only, each time a button that plays from there */
+/* a timeline icon picks its moment in the call log: highlight it and scroll the log (not the page) to it */
+function srMomScroll(t){const ol=srRoot().querySelector(".srmoms");if(!ol)return;const li=[...ol.querySelectorAll("li")].find(l=>Math.abs(+l.querySelector("[data-srlog]").dataset.srlog-t)<.01);if(!li)return;
+  if(ol.scrollHeight>ol.clientHeight)ol.scrollTo({top:ol.scrollTop+li.getBoundingClientRect().top-ol.getBoundingClientRect().top-8,behavior:"smooth"});else li.scrollIntoView({block:"nearest",behavior:"smooth"})}
 function srMomentsHtml(d){const F=((d.audit||{}).findings||[]).slice().sort((x,y)=>x.t-y.t);
   return `<aside class="panel tlog srmlog" aria-label="Call log"><header class="lg-hd"><span>Call log</span><span class="num tkmut">${F.length} moment${F.length===1?"":"s"}</span></header>
     <ol class="lg-rows srmoms">${F.map(f=>{const k=srKind(f);return `<li class="lg-r k-${k} t-${esc(f.tone||"note")}"><button type="button" class="lg-t num srlt" data-srlog="${f.t}">${srT(f.t)}</button><span class="lg-w"><span class="srmk">${srSvgI(k,"sri srli")}<b>${esc(SR_KL[k])}</b></span>${esc(f.text)}${f.crit?`<span class="srmc">${esc(f.crit)}</span>`:""}</span></li>`}).join("")||`<li class="lg-r"><span></span><span class="lg-w tkmut">No moments.</span></li>`}</ol></aside>`}
