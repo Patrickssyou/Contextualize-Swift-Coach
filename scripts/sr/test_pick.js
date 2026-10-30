@@ -1,0 +1,14 @@
+const {chromium}=require('/home/claude/contextualize-swift-coach/node_modules/playwright');const fs=require('fs');
+const S='/tmp/claude-0/-home-claude/1b142488-5d26-5ec4-ac9b-9c6af59eb289/scratchpad';
+const src=fs.readFileSync('test_sr.js','utf8');const MOCK=eval("("+src.slice(src.indexOf('const MOCK='),src.indexOf('const LD=0')).replace(/^const MOCK=/,"").replace(/;\s*$/,"")+")");
+const html='<!doctype html><html><head><meta charset=utf8></head><body>'+fs.readFileSync(S+'/desk.html','utf8')+'</body></html>';
+(async()=>{const b=await chromium.launch(),page=await b.newPage();const errs=[];page.on('pageerror',e=>errs.push(e.message));
+ await page.route('**/*',r=>r.request().url().startsWith('http://qa.test/')?r.fulfill({contentType:'text/html',body:html}):r.abort());
+ await page.addInitScript(MOCK,[[]]);await page.goto('http://qa.test/#calib');await page.waitForTimeout(1500);
+ const out=await page.evaluate(()=>{const R=makeRoster([{name:"Brix Estrope",logins:["bestropegd"]}]);let n=0;
+   const mk=(kind,day,extra)=>{n++;const sk=kind==="CL"?"client":kind==="MGR"?"manager":"delivery_enabled";return Object.assign({calls_conversation_id:"c"+n+"-"+kind,calls_call_started_at_est:`2026-10-${day}T1${n%10}:00:00Z`,calls_call_duration_in_seconds:200,internal_users_user_login_name:"bestropegd",internal_users_full_name:"Brix Estrope",internal_users_position_name:"Pizza Super Agent",calls_call_type:"inbound_call",calls_call_skills_required:sk,calls_call_phone_detail:"+1555000"+String(1000+n),calls_restaurant_id:"r"+n,restaurants_unique_code:"R7"+n,restaurants_english_name:"Store "+n},extra||{})};
+   const raw=[mk("MGR",24),mk("MGR",25),mk("DE",26),mk("DE",27),mk("CL",23),mk("CL",28),mk("CL",29),mk("CL",30),mk("CL",22),mk("CL",31)];
+   const rows=scopeRows(normRows(raw),R);const plan=choosePicksRG("2026-10-23",rows,R,Object.assign({},PULL,{perAgent:6}),[],new Set());
+   return {elig:plan[0].eligible,kinds:plan[0].picks.map(e=>e.S.kind+"@"+etDay(e.S.t0))}});
+ console.log(JSON.stringify(out),errs);
+ const ok=out.elig===8&&out.kinds.slice(0,4).map(x=>x.split('@')[0]).join()==="CL,CL,DE,MGR"&&out.kinds.length===6;console.log(ok?'ok   pick pattern CL CL DE MGR, window Oct 23–30':'FAIL pick');if(!ok)process.exitCode=1;await b.close()})();

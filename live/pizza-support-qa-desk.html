@@ -1628,6 +1628,15 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srsrc{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .srcrit dl{margin:6px 0 14px;display:grid;gap:6px}.srcrit dl>div{display:grid;grid-template-columns:170px minmax(0,1fr);gap:10px;font-size:14px;line-height:1.45}
 .srcrit dt{font-weight:600}.srcrit dd{margin:0}
+.ghrule{margin:4px 0 12px;font-size:13px;color:var(--muted)}
+.ghtabs{display:flex;gap:6px;margin-left:auto}
+.ghsum,.ghitems{display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:10px 0}
+.ghr{display:grid;grid-template-columns:minmax(160px,1.6fr) repeat(6,minmax(70px,1fr));gap:8px;padding:8px 12px;align-items:center;border-top:1px solid var(--line);font-size:13px}
+.ghr:first-child{border-top:0}.ghh{background:var(--wash,#f6f1ec);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.ghr .n{text-align:right}.ghi{grid-template-columns:minmax(200px,2fr) minmax(60px,.7fr) repeat(var(--gn),minmax(90px,1fr))}
+.ghgap{font-size:11px;padding:1px 5px;border-radius:6px;margin-left:4px}.ghgap.ok{background:#e3f4e8;color:#17663a}.ghgap.mid{background:#fdf1dc;color:#8a5a00}.ghgap.far{background:#fde6e6;color:#a32020}
+.ghtrend{margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--wash,#f6f1ec);font-size:13px}.ghtrend.up{background:#e9f6ee}.ghtrend.down{background:#fdeeee}
+@media(max-width:700px){.ghr{grid-template-columns:1.4fr repeat(6,1fr);font-size:12px;padding:8px}.ghsum,.ghitems{overflow-x:auto}.ghi{grid-template-columns:minmax(140px,1.5fr) 56px repeat(var(--gn),minmax(80px,1fr));min-width:max-content}}
 .srgrade{margin:14px 0}
 .srgh{display:flex;align-items:center;gap:12px;margin:0 0 8px}.srgh h3{margin:0}.srgv{font-weight:600}.srgv.v-none,.srgv.v-{font-size:inherit}.srgh .btn{margin-left:auto}
 .srcoach{margin:14px 0;padding:16px}.srcoach.top{margin:0;padding:0}.srcoach.in{margin:22px 0 0;padding:18px 0 0;border-top:1px solid var(--line,#e5e0da)}.srcoach h3{margin:0 0 10px;font-size:16px}.srcg{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:700px){.srcg{grid-template-columns:1fr}}
@@ -2399,8 +2408,8 @@ function buildChain(S,rows,L,o){
 /* Candidates: the agent's inbound CL / MGR / DE calls that started in the week (Eastern), each with its linked call.
    Eligible when the agent's own talk time across the linked call is at least minSec; the rest are short and only top up an agent who'd otherwise get fewer than perAgent. */
 function candidatesFor(ag,w,rows,o){
-  const end=addDaysU(w,6),out=[];
-  rows.forEach(S=>{if(!S.kind||!ag.set.has(S.login))return;const d=etDay(S.t0);if(d<w||d>end)return;
+  const start=rgFrom(w),end=rgTo(w),out=[];
+  rows.forEach(S=>{if(!S.kind||!ag.set.has(S.login))return;const d=etDay(S.t0);if(d<start||d>end)return;
     const legs=buildChain(S,rows,ag.set,o),own=legs.reduce((t,l)=>t+(ag.set.has(l.login)?l.sec:0),0);
     out.push({S,legs,own,short:own<o.minSec,h:fnv(S.id+"|"+w)})});
   return out.sort((x,y)=>x.h-y.h||(x.S.id<y.S.id?-1:1));
@@ -2410,6 +2419,24 @@ function linkedNumbers(w,rows,R,o){
   const nums=new Set();
   R.agents.forEach(ag=>candidatesFor(ag,w,rows,o).forEach(e=>e.legs.forEach(l=>{if(isPhone(l.phone))nums.add(l.phone)})));
   return [...nums].sort();
+}
+const RG_LINES=["CL","DE","MGR","OT","SME"],RG_PATTERN=["CL","CL","DE","MGR"];
+function choosePicksRG(w,rows,R,o,existing,skip){
+  const plan=[];
+  R.agents.forEach(ag=>{
+    const mine=(existing||[]).filter(q=>q.week===w&&q.agent===ag.name),live=mine.filter(q=>!q.removed);
+    const taken=new Set(skip||[]);(existing||[]).forEach(q=>{if(q.callId)taken.add(String(q.callId))});mine.forEach(q=>((q.chain&&q.chain.legs)||[]).forEach(l=>l&&l.id&&taken.add(String(l.id))));
+    const all=candidatesFor(ag,w,rows,o),el=all.filter(e=>!e.short),short=all.filter(e=>e.short),need=Math.max(0,o.perAgent-live.length),picks=[];
+    const counts={CL:0,MGR:0,DE:0,OT:0,SME:0,short:short.length};el.forEach(e=>counts[e.S.kind]=(counts[e.S.kind]||0)+1);
+    const team=e=>e.legs.some(l=>!ag.set.has(l.login)&&["sa","pool","crt"].includes(R.groups.get(l.login)));
+    const solo=el.filter(e=>!team(e)),teamed=el.filter(team);
+    const take=(list,k)=>{for(const e of list){if(k&&e.S.kind!==k)continue;if(e.legs.some(l=>taken.has(l.id)))continue;picks.push(e);e.legs.forEach(l=>taken.add(l.id));return true}return false};
+    for(const k of RG_PATTERN){if(picks.length>=need)break;if(!take(solo,k))RG_LINES.some(k2=>take(solo,k2))}
+    for(const k of RG_LINES)while(picks.length<need&&take(solo,k)){}
+    for(const k of RG_LINES)while(picks.length<need&&take(teamed,k)){}
+    plan.push({agent:ag.name,set:ag.set,ag,picks,counts,eligible:el.length,all,live:live.length,need});
+  });
+  return plan;
 }
 /* existing: queue docs (live and removed); skip: call ids already audited, never sampled again */
 function choosePicks(w,rows,R,o,existing,skip){
@@ -3920,7 +3947,7 @@ async function pullChatWeek(w,assignees,query,ctx){
     if(rows.length<PULL.cap||a>=b)return rows;const n=Math.round((Date.parse(b)-Date.parse(a))/864e5),mid=addDaysU(a,Math.floor(n/2));
     return (await get(a,mid)).concat(await get(addDaysU(mid,1),b))};
   const seen=new Set();
-  return (await get(w,addDaysU(w,6))).map(x=>chatRow(x,ctx)).filter(c=>c.wid&&!seen.has(c.wid)&&!!seen.add(c.wid)&&isBaseChat(c))}
+  return (await get(rgFrom(w),rgTo(w))).map(x=>chatRow(x,ctx)).filter(c=>c.wid&&!seen.has(c.wid)&&!!seen.add(c.wid)&&isBaseChat(c))}
 /* a chat can be graded once the assigned SA has replied in it */
 const chatGradable = c => (c.msgs||[]).some(m=>m.role==="sa");
 /* N gradable chats per SA, in a stable random order (the same week always gives the same picks) */
@@ -4094,14 +4121,24 @@ function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function parseIso(s){const [y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
 function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)}
-const wkPre=w=>w===CAND_WEEK?"SA candidates":"Week "+esc(weekLabel(w));
-function weekLabel(s){if(s===CAND_WEEK)return "SA candidates";const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
+const wkPre=w=>ROUNDS[w]?(ROUNDS[w].pool==="candidates"?"SA candidates · ":"Current SAs · ")+esc(ROUNDS[w].label):isCandKey(w)?"SA candidates":"Week "+esc(weekLabel(w));
+function weekLabel(s){if(ROUNDS[s])return ROUNDS[s].label;if(isCandKey(s))return "SA candidates";const a=parseIso(s),b=parseIso(addDays(s,6));const mo=d=>d.toLocaleDateString("en-US",{month:"short"});return mo(a)+" "+a.getDate()+" – "+(mo(a)===mo(b)?"":mo(b)+" ")+b.getDate()}
 function shortWeek(s){return parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
 function shortDate(s){return s?parseIso(s).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}
 /* Alignment sessions: only Oct 5–11 is shown, plus the SA-candidate pool (its own round under the key CAND_WEEK). Set ONLY_WEEK to "" to bring the week picker back. */
-const ONLY_WEEK="2026-10-05",CAND_WEEK="2026-11-02",CAND_TEACH=["Joana Tormis","Lourdes Rabina"];
-/* a lesson counts unless it comes from an SA candidate other than the ones whose agreed marks teach */
-const lessonOk=l=>!l||l.week!==CAND_WEEK||CAND_TEACH.includes(l.sa);
+/* Round 2 (Oct 23–30): one key per pool. Round 1 (the Oct 5–11 SAs, Oct 12 calls and the first candidate pool) is archived: only its settled items show, in Learning */
+const ROUNDS={"2026-10-23":{pool:"sa",from:"2026-10-23",to:"2026-10-30",chats:2,calls:4,label:"Oct 23 – 30"},
+  "2026-11-09":{pool:"candidates",from:"2026-10-23",to:"2026-10-30",chats:2,calls:4,label:"Oct 23 – 30"}};
+const R1_KEYS=["2026-10-05","2026-10-12","2026-11-02"],CAND_R1="2026-11-02";
+const ONLY_WEEK="2026-10-23",CAND_WEEK="2026-11-09",CAND_TEACH=["Joana Tormis","Lourdes Rabina"];
+const isCandKey=w=>w===CAND_WEEK||w===CAND_R1;
+/* the candidate pool: Lightdash full names (logins are read from their calls) and WIRA names */
+const CAND_ROSTER=[{name:"Joana Tormis",full:["Joana Tormis"],logins:["zzjtormis"]},{name:"Lourdes Rabina",full:["Lou Rabina","Lourdes Rabina"],logins:["zzlorabina"]},
+  {name:"Nichole Alanano",full:["Nichole Alanano"],logins:["zznalanano"]},{name:"Rolence Vinas",full:["Rolence Vinas Gd","Rolence Vinas"],logins:["rvinasgd"]},
+  {name:"Reese Rendal",full:["Reese Rendal"],logins:["rrendalgd"]},{name:"Stephen Larot",full:["Stephen Larot"],logins:["slarotgd"]}];
+const rgFrom=w=>(ROUNDS[w]||{}).from||w,rgTo=w=>(ROUNDS[w]||{}).to||addDaysU(w,6);
+/* a lesson counts unless it comes from a Round 1 SA candidate other than the ones whose agreed marks teach (that pool's calls were order-taking lines) */
+const lessonOk=l=>!l||l.week!==CAND_R1||CAND_TEACH.includes(l.sa);
 let week = ONLY_WEEK||iso(mondayOf(new Date(Date.now()-7*864e5)));
 
 /* ---------- parsing ---------- */
@@ -4995,9 +5032,10 @@ function pullErr(e,again){const c=e&&e.code,m=String((e&&e.message)||"").replace
     again?`That stopped. ${A}.`:"The pull stopped. Pull again."}
 async function runPull(w,auto){
   if(pullRun||!db||!mcp)return;
-  const ref=db.doc("pulls/"+w),holder=myId||tabId,o=PULL,R=roster;
+  const RG=ROUNDS[w],base=rgFrom(w),cand=!!RG&&RG.pool==="candidates",o=RG?Object.assign({},PULL,{perAgent:6}):PULL;let R=cand?makeRoster(CAND_ROSTER,{include:SCOPE_DEFAULT.include.concat(CAND_ROSTER.flatMap(c=>c.logins))}):roster;
+  const ref=db.doc("pulls/"+w),holder=myId||tabId;
   pullRun={week:w,step:"Starting…"};delete pullNote[w];renderPull();
-  const step=s=>{if(pullRun){pullRun.step=s;renderPull()}};
+  const step=s=>{if(pullRun){pullRun.step=s;renderPull();if(cbBusy==="calls"&&typeof renderCalib==="function")renderCalib()}};
   const lock=()=>typeof ref.acquire==="function"?ref.acquire({holder,ttlMs:300000}):Promise.resolve({acquired:true});
   const renew=()=>lock().catch(()=>null);
   let prev=null,wrote=false;
@@ -5008,24 +5046,30 @@ async function runPull(w,auto){
     if(auto&&prev&&prev.status==="done")return;
     if(prev&&prev.status==="done"&&R.agents.every(ag=>queue.filter(q=>q.week===w&&q.agent===ag.name).length>=o.perAgent)){toast(`${weekLabel(w)} already has its sample`);return}
     await ref.set(Object.assign({},prev||{},{status:"running",week:w,startedAt:new Date().toISOString(),by:myId||null}));wrote=true;
-    step("Pulling Super Agent calls from Lightdash…");
-    const a=await ldWeek("internal_users_user_login_name",w,[[-1,3],[4,7]],R.logins,`QA Desk sample · ${w} · Super Agent calls`);
-    const vals=linkedNumbers(w,scopeRows(normRows(a.rows),R),R,o).concat(R.logins);
+    step(cand?"Pulling the candidates' calls from Lightdash…":"Pulling Super Agent calls from Lightdash…");
+    const a=cand?await ldWeek("internal_users_full_name",base,[[-1,3],[4,8]],CAND_ROSTER.flatMap(c=>c.full),`QA Desk sample · ${w} · candidate calls`)
+      :await ldWeek("internal_users_user_login_name",base,RG?[[-1,3],[4,8]]:[[-1,3],[4,7]],R.logins,`QA Desk sample · ${w} · Super Agent calls`);
+    /* candidates: every login their calls show belongs to them */
+    if(cand){const by=new Map();CAND_ROSTER.forEach(c=>c.full.concat([c.name]).forEach(f=>by.set(normWho(cleanAgent(f)),c.name)));const L=CAND_ROSTER.map(c=>({name:c.name,logins:c.logins.slice()}));
+      a.rows.forEach(x=>{const nm=by.get(normWho(cleanAgent(x.internal_users_full_name))),lg=String(x.internal_users_user_login_name||"").trim().toLowerCase();if(!nm||!lg)return;const t=L.find(c=>c.name===nm);if(!t.logins.includes(lg))t.logins.push(lg)});
+      R=makeRoster(L,{include:SCOPE_DEFAULT.include.concat(L.flatMap(c=>c.logins))})}
+    const rgK=rows=>{if(cand)rows.forEach(r=>{if(!r.kind&&r.dir==="in")r.kind=/subject_matter_expert/.test(r.skills)?"SME":/^(new_customer; )?green_dot$/.test(r.skills.trim())?"OT":null});return rows};
+    const vals=linkedNumbers(w,rgK(scopeRows(normRows(a.rows),R)),R,o).concat(R.logins);
     step("Linking transfers and callbacks…");await renew();
     let linked=[],partial=a.full;
-    for(let i=0;i<vals.length;i+=o.chunk){const b=await ldWeek("calls_call_phone_detail",w,[[-1,1],[2,4],[5,7]],vals.slice(i,i+o.chunk),`QA Desk sample · ${w} · linked calls`);
+    for(let i=0;i<vals.length;i+=o.chunk){const b=await ldWeek("calls_call_phone_detail",base,RG?[[-1,2],[3,5],[6,8]]:[[-1,1],[2,4],[5,7]],vals.slice(i,i+o.chunk),`QA Desk sample · ${w} · linked calls`);
       linked=linked.concat(b.rows);partial=partial||b.full;await renew()}
-    const rows=scopeRows(normRows(a.rows.concat(linked)),R);
+    const rows=rgK(scopeRows(normRows(a.rows.concat(linked)),R));
     step("Adding calls to the queue…");
     const audited=new Set();audits.forEach(x=>{const id=x.callId||parseLink(x.link||"").callId;if(id)audited.add(String(id));((x.chain&&x.chain.legs)||[]).forEach(l=>l&&l.id&&audited.add(String(l.id)))});
-    const plan=choosePicks(w,rows,R,o,queueAll,audited);
+    const plan=(RG?choosePicksRG:choosePicks)(w,rows,R,o,queueAll,audited);
     let taskMap=null,taskErr=null;const cases=[];
     plan.forEach(pl=>{const ag=R.agents.find(x=>x.name===pl.agent);pl.picks.forEach(e=>{const cd=caseCoded(e,pl.set);cases.push({key:e.S.id,code:cd?cd.code:"",legs:e.legs.map(l=>({id:l.id,t0:l.t0,t1:l.t1})),ag})})});
     if(cases.length){step("Linking WIRA tasks…");await renew();
       try{taskMap=await fetchTasks(cases,`QA Desk sample · ${w}`)}catch(e){if(LD_ACCESS.includes(e&&e.code))throw e;taskErr=pullErr(e,"Pull again")}}
     let pos=queueAll.filter(q=>q.week===w).reduce((m,q)=>Math.max(m,(q.pos??0)+1),0),added=0;const now=new Date().toISOString(),docs=[];
     for(const pl of plan){const ag=R.agents.find(x=>x.name===pl.agent);
-      for(const e of pl.picks.slice().sort((x,y)=>x.S.t0-y.S.t0))docs.push(["ld-"+e.S.id,queueDoc(e,ag,w,R,pos++,now,taskMap?(taskMap.get(e.S.id)||[]):undefined)])}
+      for(const e of RG?pl.picks:pl.picks.slice().sort((x,y)=>x.S.t0-y.S.t0)){const d=queueDoc(e,ag,w,R,pos++,now,taskMap?(taskMap.get(e.S.id)||[]):undefined);if(cand)d.pool="candidates";if(RG)d.round=w;docs.push(["ld-"+e.S.id,d])}}
     let talkErr=null;if(docs.length){step("Setting aside voicemail and sorting calls from cases…");await renew();
       try{await classifyDocs(docs.map(d=>d[1]))}catch(e){if(LD_ACCESS.includes(e&&e.code))throw e;talkErr=pullErr(e,"Pull again")}}
     step("Adding calls to the queue…");
@@ -5044,6 +5088,7 @@ async function runPull(w,auto){
   }finally{pullRun=null;renderPull()}
 }
 function maybeAutoPull(){
+  if(ONLY_WEEK)return;
   if(autoTried||pullRun||!mayAuto||!db||!mcp||!dbReady||!queueReady||!pullsReady||!rosterReady)return;
   const w=latestClosedWeek(),p=pulls[w];
   if(p&&(p.status==="done"||(p.status==="running"&&pullFresh(p))))return;
@@ -5766,7 +5811,7 @@ function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="
   const c=!callSel&&chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid],lk=callSel&&typeof cbItems!=="undefined"?(cbItems["call_"+callSel]||{}).locked:null;tb.classList.toggle("done",!!c||!!lk);
   const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=lk?lk.pct:d?chScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
   const n=chatsOfWeek().filter(x=>x.picked&&!chatRev[x.sid]).length;const cc=$("#chCount");if(cc)cc.textContent=n?String(n):"";
-  const lr=lrnOpenRound(),sl=$("#st-learn");if(sl)sl.textContent=lr?`${(lr.results||[]).length}/${(lr.sample||[]).length}`:""}
+  const sl=$("#st-learn");if(sl)sl.textContent=""}
 
 /* ---------- errors: Lightdash and Claude access errors stop a batch; anything else marks that chat and moves on ---------- */
 const CH_AI_STOP=["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed","session_expired","rate_limited","queue_overflow"];
@@ -5816,14 +5861,17 @@ async function pullChats(){
   if(chatPullRun||chatRun||!db||!mcp||!chatsReady||chW.week!==week)return {ok:false,busy:true};
   const w=week;chatPullRun={step:"Pulling chats from Lightdash…"};chatNote=null;renderChats();let res={ok:false};
   try{
-    const R=roster,staff=(staffDoc&&staffDoc.map)||{};
-    const list=await pullChatWeek(w,R.agents.map(a=>a.name),(cfg,title)=>ldQuery(cfg,title),{roster:R.agents.map(a=>({name:a.name})),staff});
+    const R=roster,staff=(staffDoc&&staffDoc.map)||{},cand=!!ROUNDS[w]&&ROUNDS[w].pool==="candidates";
+    const names=cand?[...new Set(CAND_ROSTER.flatMap(c=>c.full.concat([c.name])))]:R.agents.map(a=>a.name);
+    const canon=new Map();if(cand)CAND_ROSTER.forEach(c=>c.full.concat([c.name]).forEach(f=>canon.set(normWho(cleanAgent(f)),c.name)));
+    const list=(await pullChatWeek(w,names,(cfg,title)=>ldQuery(cfg,title),{roster:(cand?CAND_ROSTER.map(c=>({name:c.name})):R.agents.map(a=>({name:a.name}))),staff}))
+      .map(c=>{if(cand){const n=canon.get(normWho(cleanAgent(c.sa)));if(n)c.sa=n}return c});
     /* re-pulling keeps the picks already made; new chats are picked up to N per SA */
     const existing=new Map(chats.filter(c=>c.week===w).map(c=>[String(c.sid),c])),picks=new Set(chatPicks(list,CHAT.perSA)),per=new Map();
     list.forEach(c=>{const e=existing.get(String(c.sid));if(e&&e.picked)per.set(c.sa,(per.get(c.sa)||0)+1)});
     const docs=list.map(c=>{const e=existing.get(String(c.sid));let p;
       if(e)p=!!e.picked;else{p=picks.has(c.sid)&&(per.get(c.sa)||0)<CHAT.perSA;if(p)per.set(c.sa,(per.get(c.sa)||0)+1)}
-      return [String(c.sid),chatQueueDoc(c,p)]});
+      const d=chatQueueDoc(c,p);if(ROUNDS[w]){d.week=w;if(cand)d.pool="candidates"}return [String(c.sid),d]});
     chatPullRun.step=`Saving ${docs.length} chat${docs.length===1?"":"s"}…`;renderChats();
     for(let i=0;i<docs.length;i+=8)await Promise.all(docs.slice(i,i+8).map(([sid,d])=>db.doc(chPath("chats",w,sid)).set(d).catch(e=>{throw chTag(e,"db")})));
     const np=docs.filter(d=>d[1].picked).length;
@@ -5854,15 +5902,15 @@ async function chTogglePick(sid){const c=chatBy(sid);if(!c||!db||!chCanGrade(c))
 /* ---------- grade: one chat at a time, each result written as soon as it's done ---------- */
 function chGradeList(kind){return chSort(chatsOfWeek().filter(c=>chCanGrade(c)&&!chatAud[c.sid]&&(kind==="all"||c.picked)))}
 /* fresh: ask Claude again instead of replaying a cached answer (re-grade, change order, a chat that failed). Claude calls are never retried from code */
-async function gradeOneChat(c,ctl,orderIds,fresh){
+async function gradeOneChat(c,ctl,orderIds,fresh,opt){opt=opt||{};
   const sid=String(c.sid),w=chWk(c),guard=()=>{if(ctl.signal.aborted)throw {code:"cancelled",src:"run"}};
   const deps={
     query:async(cfg,title)=>{guard();try{return await ldQuery(cfg,title)}catch(e){throw chTag(e,"ld")}},
     ask:async(prompt,pass,po)=>{guard();const o={signal:ctl.signal,modelTier:"default"};if(fresh||(po&&po.fresh))o.cache=false;
       try{return await sampleFn.json(prompt,o)}catch(e){throw chTag(e,"ai")}},
     policy:chatPolicyDoc||CHAT_POLICY_EMPTY,
-    cal:chatCal.slice().sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))),
-    lessons:chLessonsSorted().filter(lessonOk).slice(0,CHAT.lessonMax||20),
+    cal:chatCal.filter(x=>!opt.exclude||String(x.sid)!==String(opt.exclude)).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))),
+    lessons:opt.lessons||chLessonsSorted().filter(lessonOk).slice(0,CHAT.lessonMax||20),
     slack:ch=>chatSlack(ch,ctl),
     isStop:e=>!!e&&(e.code==="cancelled"||chatIsAccess(e)),
     step:(id,st,note)=>{if(!chatRun||chatRun.sid!==sid)return;chatRun.steps[id]={st,note:note||""};if(st==="run")chatRun.step=id;paintRun()}};
@@ -5871,6 +5919,7 @@ async function gradeOneChat(c,ctl,orderIds,fresh){
   deps.siblings=chats.filter(x=>String(x.sid)!==String(c.sid));
   const k=await chatContext(clone(c),deps);
   const R=await gradeChat(k,deps);guard();
+  if(opt.save===false)return {k,R};
   const meta={by:myId||null};if(Array.isArray(orderIds))meta.orderIds=orderIds;
   try{await db.doc(chPath("audits",w,sid)).set(chatAuditDoc(k,R,meta));await db.doc(chPath("tx",w,sid)).set(chatTxDoc(k));
     if(c.gradeError)await db.doc(chPath("chats",w,sid)).update({gradeError:null,gradeErrorAt:null})}
@@ -6926,7 +6975,7 @@ function lrnCallLessonsLoad(){if(!db||Date.now()-lrnCLAt<15000)return;lrnCLAt=Da
 /* candidate calls locked before Joana's and Lourdes's agreed marks could teach: write their lessons once */
 let cbTBDone=false;
 async function cbTeachBackfill(){if(cbTBDone||!amOwner||!db||!lrnCL)return;cbTBDone=true;const have=new Set(lrnCL.map(l=>String(l.queueId)));
-  for(const it of cbRoundItems(CAND_WEEK).filter(x=>x.kind==="call"&&CAND_TEACH.includes(x.sa))){const lk=(cbItems[it.ik]||{}).locked;if(!lk||have.has(String(it.key)))continue;
+  for(const it of cbRoundItems(CAND_R1).filter(x=>x.kind==="call"&&CAND_TEACH.includes(x.sa))){const lk=(cbItems[it.ik]||{}).locked;if(!lk||have.has(String(it.key)))continue;
     if(!cbCG.get(String(it.key))){try{const g=await db.doc(CG_ROOT+"/"+it.key).get();cbCG.set(String(it.key),g&&g.exists?(g.data()||null):null)}catch(e){}}if(!cbClaude(it))continue;
     const R=cbRubric("call",it),subd=cbGraderIds().filter(u=>cbSub(u,it.ik)),A={};let ok=true;for(const r of R){const x=cbAgreed(it.ik,r.id,subd);if(!x){ok=false;break}A[r.id]=x}if(!ok)continue;
     try{await cbCallLocked(it,R,cbLkMarks(it.ik,lk),A,subd,lk.at||new Date().toISOString())}catch(e){}}
@@ -6952,16 +7001,89 @@ function lrnLessonsHtml(){const L=chLessons.filter(l=>l.kind!=="not").map(l=>Obj
   if(db&&miss.length&&!lrnCGAsk){lrnCGAsk=true;Promise.all(miss.map(k=>db.doc(CG_ROOT+"/"+k).get().then(x=>cbCG.set(k,x&&x.exists?(x.data()||null):null)).catch(()=>cbCG.set(k,null)))).then(()=>{if(tab==="learn")$("#lrLessons").innerHTML=lrnLessonsHtml()})}
   const used=L.filter(lessonOk).length;
   return `<div class="bhd"><h2>What Claude learned</h2><span class="hint num">${chPl(G.size,"agreed item")} · ${chPl(used,"lesson")} used in the next grades</span></div>${cards.length?`<ol class="lrcards">${cards.join("")}</ol>`:`<p class="lrp">Nothing yet. Lock an agreed score and every row where you moved Claude's mark shows here with your reason.</p>`}`}
+/* ---------- Learning: each round's settled items, with every grade Claude ever gave them ----------
+   gradeHistory/<itemKey> {ik, kind, key, sa, title, round, roundKey, versions:[{n, at, src:"original"|"regrade", scores, reasons, pct, verdict, lessons, left}]}
+   Version 1 is Claude's grade before the team settled (written at lock). Versions are only ever added, never changed.
+   A regrade is blind: the grader gets the call or chat and the newest lessons, minus every lesson and calibration case that came from this item,
+   and never the team's marks or notes. That keeps the measure honest: a regrade can only move closer by learning from other items. */
+const GH_ROOT="gradeHistory",GH_ROUNDS=[{id:"r1",label:"Round 1",keys:R1_KEYS},{id:"r2",label:"Round 2",keys:[ONLY_WEEK,CAND_WEEK]}];
+let ghDocs=null,ghOff=null,ghRun=null,ghNote="",ghRound="r1";
+function ghListen(){if(!db||ghOff)return;ghOff=db.collection(GH_ROOT).onSnapshot(s=>{ghDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));if(tab==="learn")renderLearn()},()=>{ghDocs=ghDocs||[]})}
+const ghDoc=ik=>(ghDocs||[]).find(h=>h.id===ik)||null;
+/* a round's settled items: the archived Round 1 keeps only these */
+function ghItems(rid){const R=GH_ROUNDS.find(r=>r.id===rid)||GH_ROUNDS[0],out=[];
+  R.keys.forEach(k=>cbRoundItems(k).forEach(it=>{const lk=(cbItems[it.ik]||{}).locked;if(lk&&lk.pct!=null)out.push(Object.assign({},it,{lk}))}));return out}
+/* a version's marks on the item's live rows, and its score */
+function ghMarks(it,v){const k=it.kind==="chat"?"chat":"call",t=scGenT(k,v.scores||{},k==="chat"?"":cbCallType(it));return scMapMarks(k,v.scores||{},t).marks}
+function ghPct(it,v){if(it.kind==="chat"&&v.pct!=null)return v.pct;const p=cbPct(it.kind,ghMarks(it,v),it);return p==null?null:Math.round(p*10)/10}
+/* how close a version is to the agreed score: the score gap and the rows */
+function ghCmp(it,v){const pct=ghPct(it,v),agreed=it.lk.pct,R=cbRubric(it.kind,it),A=cbLkMarks(it.ik,it.lk),M=ghMarks(it,v);let rows=0,exact=0,near=0;
+  R.forEach(r=>{const a=A[r.id],m=M[r.id];if(a==null||a===""||m==null||m==="")return;rows++;if(String(a)===String(m)){exact++;near++}else if(a!=="na"&&m!=="na"&&Math.abs(Number(a)-Number(m))<=1)near++});
+  const va=cbLockV(it,it.lk),vc=pct==null?null:cbVerdict(it.kind,pct,M,it);
+  return {pct,gap:pct==null?null:Math.round((pct-agreed)*10)/10,rows,exact,near,verdict:!!(va&&vc&&va.id===vc.id)}}
+const ghLabel=v=>v.src==="original"?"Original":"Regrade "+(v.n-1);
+function ghStats(items,n){const L=items.map(it=>{const h=ghDoc(it.ik),v=h&&(h.versions||[]).find(x=>x.n===n);return v?ghCmp(it,v):null}).filter(x=>x&&x.gap!=null);
+  if(!L.length)return null;const sum=f=>L.reduce((t,x)=>t+f(x),0),rows=sum(x=>x.rows);
+  return {n:L.length,abs:Math.round(sum(x=>Math.abs(x.gap))/L.length*10)/10,bias:Math.round(sum(x=>x.gap)/L.length*10)/10,exact:rows?Math.round(sum(x=>x.exact)/rows*100):null,near:rows?Math.round(sum(x=>x.near)/rows*100):null,verdict:sum(x=>x.verdict?1:0)}}
+/* the honest read of the newest regrade: same items, original vs newest */
+function ghTrend(items){const maxN=Math.max(0,...items.map(it=>((ghDoc(it.ik)||{}).versions||[]).length));if(maxN<2)return "";
+  const both=items.filter(it=>{const V=(ghDoc(it.ik)||{}).versions||[];return V.some(x=>x.n===1)&&V.some(x=>x.n===maxN)});if(!both.length)return "";
+  const a=ghStats(both,1),b=ghStats(both,maxN);if(!a||!b)return "";const d=Math.round((a.abs-b.abs)*10)/10;
+  const word=d>=1?"Closer":d<=-1?"Further":"No real change";
+  return `<p class="ghtrend ${d>=1?"up":d<=-1?"down":""}" id="ghTrend"><b>${word}.</b> On the same ${chPl(both.length,"item")}, the average gap went from <b class="num">${fmt(a.abs)}</b> to <b class="num">${fmt(b.abs)}</b> pts; exact rows ${a.exact??"–"}% → ${b.exact??"–"}%; verdicts ${a.verdict} → ${b.verdict} of ${both.length}.</p>`}
+const ghGapH=g=>g==null?"":`<span class="ghgap num ${Math.abs(g)<=5?"ok":Math.abs(g)<=10?"mid":"far"}">${g>0?"+":g<0?"−":"±"}${fmt(Math.abs(g))}</span>`;
+function ghHtml(){const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=ghItems(R.id);
+  const tabs=`<div class="ghtabs" role="group" aria-label="Round">${GH_ROUNDS.map(r=>`<button type="button" class="wksw" data-ghr="${r.id}" aria-pressed="${r.id===R.id}">${esc(r.label)}</button>`).join("")}</div>`;
+  const head=`<div class="bhd"><h2>Claude vs the team</h2>${tabs}</div><p class="ghrule">Earlier grades never change. A regrade is blind: Claude never sees your marks or notes on the item, and lessons from that item are left out.</p>`;
+  if(ghDocs==null)return head+`<p class="lrp hint">Loading…</p>`;
+  if(!items.length)return head+`<p class="lrp">No settled items in ${esc(R.label)} yet.</p>`;
+  const maxN=Math.max(1,...items.map(it=>((ghDoc(it.ik)||{}).versions||[]).length)),Ns=[...Array(maxN).keys()].map(i=>i+1);
+  const vlab=n=>{const v=items.map(it=>((ghDoc(it.ik)||{}).versions||[]).find(x=>x.n===n)).find(Boolean);return v?ghLabel(v):"Regrade "+(n-1)};
+  const vday=n=>{const v=items.map(it=>((ghDoc(it.ik)||{}).versions||[]).find(x=>x.n===n)).find(Boolean);return v&&v.at?lrnDay(v.at):""};
+  const sum=`<div class="ghsum" role="table" id="ghSum"><div class="ghr ghh" role="row"><span role="columnheader">Grade</span><span role="columnheader" class="n">Items</span><span role="columnheader" class="n">Avg gap</span><span role="columnheader" class="n">Claude vs team</span><span role="columnheader" class="n">Rows exact</span><span role="columnheader" class="n">Rows ±1</span><span role="columnheader" class="n">Verdicts</span></div>
+    ${Ns.map(n=>{const S=ghStats(items,n);return S?`<div class="ghr" role="row"><span role="cell"><b>${esc(vlab(n))}</b> <span class="hint num">${esc(vday(n))}</span></span><span role="cell" class="n num">${S.n}</span><span role="cell" class="n num">${fmt(S.abs)} pts</span><span role="cell" class="n num">${S.bias>0?"+":S.bias<0?"−":"±"}${fmt(Math.abs(S.bias))}</span><span role="cell" class="n num">${S.exact??"–"}%</span><span role="cell" class="n num">${S.near??"–"}%</span><span role="cell" class="n num">${S.verdict} of ${S.n}</span></div>`:""}).join("")}</div>`;
+  const rows=items.slice().sort((a,b)=>chSaOrder(items.map(x=>x.sa)).indexOf(a.sa)-chSaOrder(items.map(x=>x.sa)).indexOf(b.sa)).map(it=>{const h=ghDoc(it.ik),V=(h&&h.versions)||[];
+    const cells=Ns.map(n=>{const v=V.find(x=>x.n===n);if(!v)return `<span role="cell" class="n tkmut">–</span>`;const c=ghCmp(it,v);return `<span role="cell" class="n"><b class="num">${c.pct==null?"–":fmt(c.pct)+"%"}</b> ${ghGapH(c.gap)}</span>`}).join("");
+    return `<div class="ghr ghi" role="row" style="--gn:${maxN}"><span role="cell"><button type="button" class="lrlink" data-lropen="${esc(it.ik)}">${esc(it.title||"")}</button><span class="hint"> ${esc([it.sa,it.kind==="chat"?"Chat":"Call"].join(" · "))}</span></span><span role="cell" class="n"><b class="num">${fmt(it.lk.pct)}%</b></span>${cells}</div>`}).join("");
+  const itab=`<div class="ghitems" role="table" id="ghItems" style="--gn:${maxN}"><div class="ghr ghi ghh" role="row" style="--gn:${maxN}"><span role="columnheader">Item</span><span role="columnheader" class="n">Team</span>${Ns.map(n=>`<span role="columnheader" class="n">${esc(vlab(n))}</span>`).join("")}</div>${rows}</div>`;
+  const can=amOwner&&!!db&&!!sampleFn&&!!mcp;
+  const ctl=can?`<div class="row">${ghRun?`<span class="hint" id="ghLine">${esc(ghRun.line||"Regrading…")}</span><button type="button" class="btn small" id="ghStop">Stop</button>`:`<button type="button" class="btn primary" id="ghGo">Regrade ${esc(R.label)}</button>`}${ghNote?`<span class="hint">${esc(ghNote)}</span>`:""}</div>`:"";
+  return head+sum+ghTrend(items)+itab+ctl}
+/* version 1: Claude's grade on the item as it stood when the team locked it (never overwritten) */
+async function ghSnap(it){if(!db||!it)return;const ik=it.ik;const ref=db.doc(GH_ROOT+"/"+ik),s=await ref.get();if(s&&s.exists)return;let v=null;
+  if(it.kind==="call"){const g=cbCG.get(String(it.key))||(srDocFor(it.key)||{}).grade||null;if(g&&g.scores)v={n:1,at:g.at||new Date().toISOString(),src:"original",scores:clone(g.scores),via:cbCG.get(String(it.key))?"transcript":"screen + voice"}}
+  else{const a=chatAud[it.key];if(a&&a.grade&&a.grade.scores)v={n:1,at:a.gradedAt||new Date().toISOString(),src:"original",scores:clone(a.grade.scores),pct:a.pct??null,verdict:a.verdict||null}}
+  if(!v)return;const R=GH_ROUNDS.find(r=>r.keys.includes(it.week||it.round))||{};
+  await ref.set({ik,kind:it.kind,key:String(it.key),sa:it.sa||"",title:it.title||"",round:R.id||null,roundKey:it.week||it.round||null,versions:[v]})}
+/* the newest lessons without the ones this item taught */
+async function ghLessons(it){if(it.kind==="call"){if(!db)return [];const s=await db.collection(CL_ROOT).get();
+    const all=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).filter(lessonOk).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+    const mine=all.filter(l=>String(l.queueId)===String(it.key));return {lessons:all.filter(l=>String(l.queueId)!==String(it.key)).slice(0,20),left:mine.length}}
+  const all=chLessonsSorted().filter(lessonOk),mine=all.filter(l=>String(l.sid)===String(it.key));return {lessons:all.filter(l=>String(l.sid)!==String(it.key)).slice(0,CHAT.lessonMax||20),left:mine.length}}
+async function ghRegradeOne(it,ctl){const {lessons,left}=await ghLessons(it),at=new Date().toISOString();let v;
+  if(it.kind==="call"){const q=(queueAll||[]).find(d=>String(d.id)===String(it.key));if(!q)throw {code:"error",message:"call not in the queue"};
+    const doc=await cbGradeOne(Object.assign({},it,{q:Object.assign({},q,{aiFacts:null})}),ctl,lessons,{save:false});
+    v={at,src:"regrade",scores:doc.scores,reasons:doc.reasons,lessons:lessons.length,left}}
+  else{const w=it.week||it.round,s=await db.doc(chPath("chats",w,it.key)).get();if(!s||!s.exists)throw {code:"error",message:"chat not found"};
+    const c=Object.assign({},s.data(),{sid:String(it.key),week:w}),r=await gradeOneChat(c,ctl,undefined,true,{save:false,lessons,exclude:it.key}),d=chatAuditDoc(r.k,r.R,{});
+    v={at,src:"regrade",scores:(d.grade&&d.grade.scores)||{},reasons:(d.grade&&d.grade.reasons)||{},pct:d.pct??null,verdict:d.verdict||null,lessons:lessons.length,left}}
+  const ref=db.doc(GH_ROOT+"/"+it.ik),s=await ref.get(),h=s&&s.exists?s.data():{ik:it.ik,kind:it.kind,key:String(it.key),sa:it.sa||"",title:it.title||"",versions:[]};
+  const V=(h.versions||[]).slice();v.n=V.length+1;V.push(clone(v));
+  await ref.set(Object.assign({},h,{versions:V}))}
+async function ghRegrade(){if(ghRun||!amOwner||!db||!sampleFn||!mcp||cbGR||(typeof chatRun!=="undefined"&&chatRun))return;
+  const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=ghItems(R.id);if(!items.length)return;
+  const ctl=new AbortController();ghRun={ctl,line:""};ghNote="";renderLearn();let done=0,errs=0;
+  try{for(let i=0;i<items.length;i++){if(ctl.signal.aborted)break;const it=items[i];ghRun.line=`Regrading ${i+1} of ${items.length} · ${chFirst(it.sa)} · ${it.title}`;const l=$("#ghLine");if(l)l.textContent=ghRun.line;
+      try{await ghRegradeOne(it,ctl);done++}catch(e){if(ctl.signal.aborted||(e&&e.code==="cancelled"))break;if(chatIsAccess(e)){ghNote=capText(cbGRMsg(e),160);break}errs++}}}
+  finally{ghRun=null;if(!ghNote)ghNote=ctl.signal.aborted?`Stopped · ${done} regraded`:`Regraded ${chPl(done,"item")}${errs?` · ${errs} couldn't be regraded`:""}`;renderLearn()}}
 function renderLearn(){const v=$("#view-learn");if(!v||tab!=="learn")return;
-  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="learn"><section class="panel lpanel" id="lrLessons"></section><section class="panel lpanel" id="lrRound"></section><section class="panel lpanel" id="lrChart" hidden></section><section class="panel lpanel" id="lrCps"></section><section class="panel lpanel" id="lrChat"></section></div>`}
-  if(!db){$("#lrRound").innerHTML=`<div class="bhd"><h2>Rounds</h2></div><p class="lrp">Sign in to claude.ai to run rounds.</p>`}else $("#lrRound").innerHTML=lrnRoundHtml();
-  const ch=lrnChartHtml();$("#lrChart").hidden=!ch;$("#lrChart").innerHTML=ch;
-  $("#lrCps").innerHTML=lrnCpsHtml();
-  $("#lrLessons").innerHTML=lrnLessonsHtml();lrnCallLessonsLoad();
-  const f=document.activeElement&&document.activeElement.id==="lrPick";$("#lrChat").innerHTML=lrnChatHtml();if(f){const p=$("#lrPick");if(p)p.focus({preventScroll:true})}
-  lrnLoadGrades()}
+  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="learn"><section class="panel lpanel" id="lrHistory"></section><section class="panel lpanel" id="lrLessons"></section></div>`}
+  ghListen();
+  if(!db){$("#lrHistory").innerHTML=`<div class="bhd"><h2>Claude vs the team</h2></div><p class="lrp">Sign in to claude.ai to see the rounds.</p>`}else $("#lrHistory").innerHTML=ghHtml();
+  $("#lrLessons").innerHTML=lrnLessonsHtml();lrnCallLessonsLoad()}
 $("#view-learn").addEventListener("click",e=>{const lr=e.target.closest("[data-lropen]");if(lr){cbOpenItem(lr.dataset.lropen);return}const o=e.target.closest("[data-lopen]");if(o){openChat(o.dataset.lopen,lrnWeek());return}
-  const b=e.target.closest("button");if(b&&b.id==="lrDraw")return});
+  const r=e.target.closest("[data-ghr]");if(r){ghRound=r.dataset.ghr;renderLearn();return}
+  const b=e.target.closest("button");if(!b)return;if(b.id==="ghGo"){ghRegrade();return}if(b.id==="ghStop"&&ghRun){ghRun.ctl.abort();return}});
 $("#view-learn").addEventListener("change",e=>{if(e.target.id==="lrPick"){lrnChat=e.target.value;renderLearn()}});
 $("#view-learn").addEventListener("toggle",e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.cp){if(d.open)lrnCpOpen.add(d.dataset.cp);else lrnCpOpen.delete(d.dataset.cp)}},true);
 
@@ -7055,7 +7177,7 @@ const CB_CALL_SHORT={"1a":"Opening spiel","1b":"Tone and dead air","1c":"Empathy
 const CB_MGR_SHORT=Object.assign({},CB_CALL_SHORT,{"3b":"Edge case judgment","3c":"Proactive outreach"});
 const CB_CASE_SHORT={"1a":"Root cause and fault","1b":"Facts gathered once","2a":"Owner and handoffs","2b":"Coordination","2c":"One voice","3a":"Fix and promises","3b":"Ticket tells the case","3c":"No loops"};
 /* a round is one week: 3 chats and 3 calls per SA, in calibRounds/<week> */
-const CB_PER=3;
+const CB_PER=3,cbPer=(w,k)=>ROUNDS[w||week]?ROUNDS[w||week][k==="call"?"calls":"chats"]:CB_PER;
 /* who should grade: settings/calibGraders {expected:[names]} (owner edits); missing doc → these three */
 const CB_EXPECT=["Pat","Howard","Li Qi"];
 let cbExpectDoc=null,cbGrEdit=false,cbGrDraft="",cbRailOpen=false;
@@ -7349,9 +7471,10 @@ async function cbLock(it){const ik=it.ik,R=cbRubric(it.kind,it),subd=cbGraderIds
     const pct=cbPct(it.kind,marks,it),v=cbVerdict(it.kind,pct,marks,it),locked={by:myId||null,at,pct,verdict:v?v.id:null,marks};
     const doc=Object.assign({},cbItems[ik]||{},{kind:it.kind,key:it.key,round:it.round??null,locked});
     await db.doc("calibItems/"+ik).set(doc);cbItems[ik]=doc;
+    try{await ghSnap(it)}catch(e){}
     let msg=`Locked ${v?v.label+" ":""}${fmt(pct)}%`;
     /* the SA candidates pool is scored, never learned from (its calls include order-taking lines) */
-    if((it.week||it.round)===CAND_WEEK&&!CAND_TEACH.includes(it.sa)){}
+    if((it.week||it.round)===CAND_R1&&!CAND_TEACH.includes(it.sa)){}
     else if(it.kind==="chat"){const x=await cbChatLocked(it,R,marks,A,subd,pct,v,at);msg+=x}
     else if(it.kind==="call")msg+=await cbCallLocked(it,R,marks,A,subd,at);
     toast(msg)}
@@ -7386,7 +7509,9 @@ function cbDrawnBefore(){const S=new Set();cbRounds.forEach(r=>(r.items||[]).for
 /* the SAs: everyone with a gradable chat or a call this week, in roster order */
 function cbDrawPool(w){const chatsW=chW.week===w?chatsOfWeek().filter(c=>chCanGrade(c)&&c.sa):[],callsW=(queueAll||[]).filter(q=>!q.removed&&q.week===w&&q.agent);
   return {chatsW,callsW,sas:chSaOrder(chatsW.map(c=>c.sa).concat(callsW.map(q=>q.agent)))}}
-function cbPickN(L,key,prev,n){const sh=cbShuffle(L);return sh.filter(x=>!prev.has(key(x))).concat(sh.filter(x=>prev.has(key(x)))).slice(0,n)}
+/* Round 2 calls: the pull already ranked them (pos: CL, CL, DE, MGR, then by line priority CL > DE > MGR); take the first n not drawn before */
+const cbPickRanked=(mine,prev,n)=>mine.slice().sort((a,b)=>(a.pos??0)-(b.pos??0)).filter(q=>!prev.has("call|"+q.id)).slice(0,n).sort((a,b)=>String(a.callDate+a.callTime).localeCompare(String(b.callDate+b.callTime)));
+function cbPickN(L,key,prev,n){const sh=ROUNDS[week]?L.slice().sort((a,b)=>fnv(key(a)+"|"+week)-fnv(key(b)+"|"+week)):cbShuffle(L);return sh.filter(x=>!prev.has(key(x))).concat(sh.filter(x=>prev.has(key(x)))).slice(0,n)}
 /* n of an SA's chats (graded first, then not drawn before first) and n of their calls, each in time order */
 function cbPickChats(mine,prev,n){const g=mine.filter(c=>chatAud[c.sid]&&chatAud[c.sid].pct!=null),u=mine.filter(c=>!g.includes(c));
   let ch=cbPickN(g,c=>"chat|"+c.sid,prev,n);if(ch.length<n)ch=ch.concat(cbPickN(u,c=>"chat|"+c.sid,prev,n-ch.length));
@@ -7395,8 +7520,8 @@ const cbPickCalls=(mine,prev,n)=>cbPickN(mine,q=>"call|"+q.id,prev,n).sort((a,b)
 function cbChatIt(c,sa){const a=chatAud[c.sid];return {kind:"chat",key:String(c.sid),sa,restaurant:c.restaurant||"",at:c.at||"",aiPct:a&&a.pct!=null?a.pct:null}}
 const cbCallIt=(q,sa)=>({kind:"call",key:String(q.id),sa,restaurant:q.restaurantName||"",at:(q.callDate||"")+(q.callTime?"T"+q.callTime:"")});
 function cbDrawItems(w){const {chatsW,callsW,sas}=cbDrawPool(w),prev=cbDrawnBefore(),items=[];
-  sas.forEach(sa=>{cbPickChats(chatsW.filter(c=>c.sa===sa),prev,CB_PER).forEach(c=>items.push(cbChatIt(c,sa)));
-    cbPickCalls(callsW.filter(q=>q.agent===sa),prev,CB_PER).forEach(q=>items.push(cbCallIt(q,sa)))});
+  sas.forEach(sa=>{cbPickChats(chatsW.filter(c=>c.sa===sa),prev,cbPer(w,"chat")).forEach(c=>items.push(cbChatIt(c,sa)));
+    (ROUNDS[w]?cbPickRanked(callsW.filter(q=>q.agent===sa),prev,cbPer(w,"call")):cbPickCalls(callsW.filter(q=>q.agent===sa),prev,CB_PER)).forEach(q=>items.push(cbCallIt(q,sa)))});
   return {items,sas}}
 /* chats must be pulled before a draw (when they can be): the week has chats or its index doc */
 const cbNeedPull=w=>!!mcp&&chPulled(w||week)!==true;
@@ -7414,6 +7539,10 @@ async function cbDraw(redo){if(!db||!amOwner||cbBusy)return;const w=week,cur=cbW
   if(chW.week!==w||!chatsReady||!queueReady){cbNote="Still loading this week. Try again in a moment.";renderCalib();return}
   if(cbNeedPull(w)){cbBusy="pull";cbNote="";renderCalib();let ok=false;try{ok=await cbPullFirst(w)}finally{cbBusy=false}
     if(!ok||week!==w){renderCalib();return}}
+  /* Round 2: the round's calls are pulled here, for its dates and pool */
+  if(ROUNDS[w]&&!(queueAll||[]).some(q=>q.week===w&&!q.removed)){cbBusy="calls";cbNote="";renderCalib();
+    try{await runPull(w,false);for(let i=0;i<100&&!(queueAll||[]).some(q=>q.week===w);i++)await new Promise(f=>setTimeout(f,100))}finally{cbBusy=false}
+    if(pullNote[w]){cbNote=pullNote[w];renderCalib();return}if(week!==w){renderCalib();return}}
   const {items,sas}=cbDrawItems(w);cbNote="";
   if(!items.length){cbNote=`No chats or calls in ${weekLabel(w)} to draw.`;renderCalib();return}
   cbBusy=true;renderCalib();
@@ -7446,9 +7575,9 @@ async function cbLearnAppend(w){const r=cbWeekRound(w);if(!db||!r||!lrnState)ret
 function cbTopUp(w){const r=cbWeekRound(w),out={chat:[],call:[],sas:[]};if(!r||chW.week!==w||!chatsReady||!queueReady)return out;
   const {chatsW,callsW}=cbDrawPool(w),have=new Set(r.items.map(x=>(x.kind==="call"?"call|":"chat|")+x.key)),prev=cbDrawnBefore();
   const sas=(r.sas||[]).slice();chSaOrder(r.items.map(x=>x.sa).concat(chatsW.map(c=>c.sa),callsW.map(q=>q.agent)).filter(Boolean)).forEach(sa=>{if(!sas.includes(sa))sas.push(sa)});
-  sas.forEach(sa=>{const nC=CB_PER-r.items.filter(x=>x.sa===sa&&x.kind!=="call").length,nK=CB_PER-r.items.filter(x=>x.sa===sa&&x.kind==="call").length;
+  sas.forEach(sa=>{const nC=cbPer(w,"chat")-r.items.filter(x=>x.sa===sa&&x.kind!=="call").length,nK=cbPer(w,"call")-r.items.filter(x=>x.sa===sa&&x.kind==="call").length;
     if(nC>0)cbPickChats(chatsW.filter(c=>c.sa===sa&&!have.has("chat|"+c.sid)),prev,nC).forEach(c=>out.chat.push(cbChatIt(c,sa)));
-    if(nK>0)cbPickCalls(callsW.filter(q=>q.agent===sa&&!have.has("call|"+q.id)),prev,nK).forEach(q=>out.call.push(cbCallIt(q,sa)))});
+    if(nK>0)(ROUNDS[w]?cbPickRanked:cbPickCalls)(callsW.filter(q=>q.agent===sa&&!have.has("call|"+q.id)),prev,nK).forEach(q=>out.call.push(cbCallIt(q,sa)))});
   out.sas=sas;return out}
 /* a new item goes after the SA's last of its kind; a chat with none goes before the SA's calls; a new SA goes last */
 function cbInsert(L,x){const call=y=>y.kind==="call";let j=-1;L.forEach((y,i)=>{if(y.sa===x.sa&&call(y)===call(x))j=i});
@@ -7561,9 +7690,9 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   const mine=items.filter(it=>cbSub(myId,it.ik)||(cbItems[it.ik]||{}).locked).length,nx=cbNextItem(items);
   const ctl=[];
   if(amOwner)ctl.push(`<button type="button" class="btn" data-cb="graders" id="cbGrBtn" aria-expanded="${cbGrEdit}">Graders</button>`);
-  const busyL=cbBusy==="pull"?"Pulling chats…":cbBusy==="top"?"Adding…":"Drawing…",pullL=amOwner&&cbNeedPull(week);if(amOwner&&!r&&chPulled(week)===null)chIdxCheck(week);
-  const isCand=week===CAND_WEEK;
-  if(amOwner&&db&&!isCand){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy||chatPullRun?" disabled":""}>${cbBusy?busyL:chatPullRun?"Pulling chats…":pullL?"Pull chats and draw":"Draw"}</button>`);
+  const busyL=cbBusy==="pull"?"Pulling chats…":cbBusy==="calls"?(pullRun&&pullRun.step)||"Pulling calls…":cbBusy==="top"?"Adding…":"Drawing…",pullL=amOwner&&cbNeedPull(week);if(amOwner&&!r&&chPulled(week)===null)chIdxCheck(week);
+  const isCand=week===CAND_R1;
+  if(amOwner&&db&&!isCand){if(!r)ctl.push(`<button type="button" class="btn primary" data-cb="draw" id="cbDraw"${cbBusy||chatPullRun?" disabled":""}>${cbBusy?busyL:chatPullRun?"Pulling chats…":pullL||ROUNDS[week]&&!(queueAll||[]).some(q=>q.week===week)?"Pull and draw":"Draw"}</button>`);
     else if(!started)ctl.push(`<button type="button" class="btn" data-cb="redraw" id="cbRedraw" aria-expanded="${cbRedraw}"${cbBusy?" disabled":""}>${cbBusy?busyL:"Redraw"}</button>`)}
   if(amOwner&&db&&r&&!isCand){const T=cbTopUp(week),dis=cbBusy||chatPullRun?" disabled":"";
     if(T.chat.length)ctl.push(`<button type="button" class="btn" data-cb="addchats" id="cbAddChats"${dis}>Add missing chats <span class="num">(${T.chat.length})</span></button>`);
@@ -7581,7 +7710,7 @@ function cbTabHtml(){const r=cbWeekRound(),items=cbRoundItems(),G=cbCols(),start
   /* who came up short: fewer than 3 chats or calls this week */
   const sas=(r.sas&&r.sas.length?r.sas:[...new Set(items.map(x=>x.sa))]);
   const short=isCand?[]:sas.map(sa=>{const c=items.filter(x=>x.sa===sa&&x.kind==="chat").length,k=items.filter(x=>x.sa===sa&&x.kind==="call").length,p=[];
-    if(c<CB_PER)p.push(`${c} of ${CB_PER} chats`);if(k<CB_PER)p.push(`${k} of ${CB_PER} calls`);return p.length?`<span data-sa="${esc(sa)}"><b>${esc(chFirst(sa))}</b> ${p.join(", ")}</span>`:""}).filter(Boolean);
+    if(c<cbPer(week,"chat"))p.push(`${c} of ${cbPer(week,"chat")} chats`);if(k<cbPer(week,"call"))p.push(`${k} of ${cbPer(week,"call")} calls`);return p.length?`<span data-sa="${esc(sa)}"><b>${esc(chFirst(sa))}</b> ${p.join(", ")}</span>`:""}).filter(Boolean);
   const filt=`<div class="cbfilt"><div class="cbseg" role="group" aria-label="Show">${[["all","All"],["chat","Chats"],["call","Calls"]].map(([v,l])=>`<button type="button" data-cb="filt" data-v="${v}" aria-pressed="${cbFilt===v}">${l}</button>`).join("")}</div>
     <button type="button" class="btn small cbmine" data-cb="mine" aria-pressed="${cbMineOnly}">Mine to do</button></div>`;
   const vis0=it=>(cbFilt==="all"||it.kind===cbFilt)&&(!cbMineOnly||(!cbSub(myId,it.ik)&&!(cbItems[it.ik]||{}).locked)),ctId=it=>(ctOf(it.kind,it.key)||{}).id||"";
@@ -7781,7 +7910,7 @@ function cbGRMsg(e){const c=e&&e.code;if(c==="no_text")return "No transcript for
 const cbCanGrade=()=>!!(cbGradeFn()&&db&&mcp&&sampleFn);
 async function cbCallLessons(){if(!db)return [];try{const s=await db.collection(CL_ROOT).get();
   return s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).filter(lessonOk).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||""))).slice(0,20)}catch(e){return []}}
-async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {code:"error",src:"run"};
+async function cbGradeOne(it,ctl,lessons,opt){const fn=cbGradeFn();if(!fn)throw {code:"error",src:"run"};
   const q=it.q||{},guard=()=>{if(ctl.signal.aborted)throw {code:"cancelled",src:"run"}},step=s=>{if(cbGR){cbGR.step=s;cbGRPaint()}};
   const all=cbLegs(q),legs=all.filter(l=>l.id).map(l=>({id:String(l.id),at:l.at}));
   step("Getting transcripts");
@@ -7797,6 +7926,7 @@ async function cbGradeOne(it,ctl,lessons){const fn=cbGradeFn();if(!fn)throw {cod
   const ids=items.map(x=>x.id),pick=o=>Object.fromEntries(ids.filter(id=>o&&o[id]!==undefined).map(id=>[id,o[id]]));
   const doc=clone({v:G.v||(R&&R.v)||1,at:new Date().toISOString(),by:myId||null,items:ids,scores:pick(G.scores),reasons:pick(G.reasons),cites:pick(G.cites),quotes:pick(G.quotes||{}),
     wentWell:Array.isArray(G.wentWell)?G.wentWell:[],fixes:Array.isArray(G.fixes)?G.fixes:[],summary:String(G.summary||""),caseType:String(G.caseType||""),caseWhy:String(G.caseWhy||""),F:(R&&R.F)??null,A:(R&&R.A)??null});
+  if(opt&&opt.save===false)return doc;
   try{await db.doc(CG_ROOT+"/"+it.key).set(doc)}catch(e){throw chTag(e,"db")}
   cbCG.set(String(it.key),doc);cbGRErr.delete(String(it.key))}
 async function cbGradeRun(list,one){if(cbGR||(typeof chatRun!=="undefined"&&chatRun)||!cbCanGrade()||!list.length)return;

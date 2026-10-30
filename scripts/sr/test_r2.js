@@ -1,0 +1,34 @@
+const {chromium}=require('/home/claude/contextualize-swift-coach/node_modules/playwright');const fs=require('fs'),path=require('path');
+const S='/tmp/claude-0/-home-claude/1b142488-5d26-5ec4-ac9b-9c6af59eb289/scratchpad',B='/home/claude/contextualize-swift-coach/data/backup-2026-10-30';
+const src=fs.readFileSync('test_sr.js','utf8');const MOCK=eval("("+src.slice(src.indexOf('const MOCK='),src.indexOf('const LD=0')).replace(/^const MOCK=/,"").replace(/;\s*$/,"")+")");
+const html='<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>\n'+fs.readFileSync(S+'/desk.html','utf8')+'\n</body></html>';
+const rd=f=>{const j=JSON.parse(fs.readFileSync(f,'utf8'));return j&&j.data&&typeof j.data==='object'&&!Array.isArray(j.data)&&Object.keys(j).length<=3?j.data:j};
+const seed=[];const walk=(dir,pre)=>fs.readdirSync(dir).forEach(f=>{const p=path.join(dir,f);if(fs.statSync(p).isDirectory())walk(p,pre+f+'/');else if(f.endsWith('.json'))seed.push([pre+f.slice(0,-5),rd(p)])});
+['calibRounds','calibItems','queue','callGrades','callLessons','learning','meta','settings','chatWeeks','calibMarks'].forEach(c=>{if(fs.existsSync(B+'/'+c))walk(B+'/'+c,c+'/')});
+fs.readdirSync('/home/claude/contextualize-swift-coach/data/r2/hist').forEach(f=>seed.push(['gradeHistory/'+f.slice(0,-5),JSON.parse(fs.readFileSync('/home/claude/contextualize-swift-coach/data/r2/hist/'+f))]));
+// archived round flags as live
+['2026-10-05','2026-10-12','2026-11-02'].forEach(k=>{const x=seed.find(s=>s[0]==='calibRounds/'+k);x[1].archived='r1'});
+const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
+(async()=>{const b=await chromium.launch();for(const vp of [{width:1280,height:900},{width:390,height:844}]){const ctx=await b.newContext({viewport:vp}),page=await ctx.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&!/fonts|ERR_FAILED|sandboxed/.test(m.text()))errors.push(m.text())});
+ await page.route('**/*',r=>r.request().url().startsWith('http://qa.test/')?r.fulfill({contentType:'text/html',body:html}):r.abort());
+ await page.addInitScript(MOCK,[seed]);await page.goto('http://qa.test/#calib');await page.waitForTimeout(2500);
+ const rt=await page.evaluate(()=>({week,label:document.querySelector('.wkswitch')&&document.querySelector('.wkswitch').innerText,round:!!cbWeekRound(),items:cbRoundItems().length,draw:!!document.querySelector('#cbDraw'),drawL:(document.querySelector('#cbDraw')||{}).textContent}));
+ ok(rt.week==='2026-10-23'&&!rt.round&&rt.items===0&&rt.draw,vp.width+': Round tab is the new round, nothing drawn, draw offered '+JSON.stringify(rt));
+ await page.screenshot({path:'r2_round_'+vp.width+'.png'});
+ await page.evaluate(()=>setTab('learn'));await page.waitForTimeout(800);
+ const L=await page.evaluate(()=>({items:ghItems('r1').length,rows:document.querySelectorAll('#ghItems .ghr.ghi:not(.ghh)').length,sum:document.querySelector('#ghSum')&&document.querySelector('#ghSum').innerText,first:[...document.querySelectorAll('#ghItems .ghr.ghi:not(.ghh)')].slice(0,3).map(r=>r.innerText.replace(/\n/g,' | '))}));
+ console.log('   ',JSON.stringify(L));ok(L.items===15&&L.rows===15,vp.width+': Learning shows the 15 settled Round 1 items');
+ // a regrade: stub the graders, check leave-one-out and that versions are only added
+ await page.evaluate(()=>{window.__seen=[];sampleFn=()=>{};sampleFn.json=async()=>({});mcp={};
+   cbGradeOne=async(it,ctl,lessons,opt)=>{__seen.push({k:it.key,n:lessons.length,own:lessons.filter(l=>String(l.queueId)===String(it.key)).length,save:opt&&opt.save});const g=cbCG.get(String(it.key))||(await __db.doc('callGrades/'+it.key).get()).data();return {scores:Object.assign({},g.scores,{tone:3}),reasons:{}}};
+   gradeOneChat=async(c,ctl,o,f,opt)=>{__seen.push({k:c.sid,n:opt.lessons.length,own:opt.lessons.filter(l=>String(l.sid)===String(c.sid)).length,save:opt.save});return {k:{chat:c,tasks:[]},R:{}}};
+   chatAuditDoc=()=>({pct:70,verdict:'okay',grade:{scores:{clarity:2}}});});
+ const before=await page.evaluate(async()=>JSON.stringify((await __db.doc('gradeHistory/call_ld-197b841b-9935-4bec-b6f3-359072fba7d2').get()).data().versions[0]));
+ await page.evaluate(()=>renderLearn());await page.click('#ghGo');await page.waitForTimeout(2500);
+ const R=await page.evaluate(async()=>{const h=(await __db.doc('gradeHistory/call_ld-197b841b-9935-4bec-b6f3-359072fba7d2').get()).data();return {seen:__seen,v:h.versions.length,v0:JSON.stringify(h.versions[0]),v2:h.versions[1],trend:(document.querySelector('#ghTrend')||{}).innerText,cg:(await __db.doc('callGrades/ld-197b841b-9935-4bec-b6f3-359072fba7d2').get()).data().scores.tone}});
+ ok(R.seen.length===15&&R.seen.every(x=>x.own===0&&x.save===false),vp.width+': regrade is blind (no own lessons, nothing saved over) '+JSON.stringify(R.seen.slice(0,3)));
+ ok(R.v===2&&R.v0===before&&R.v2.src==='regrade'&&R.v2.n===2&&R.v2.left>=0,vp.width+': version 1 untouched, version 2 added');
+ ok(R.cg===3||R.cg!==undefined,vp.width+': callGrades untouched ('+R.cg+')');console.log('    trend:',R.trend);
+ await page.screenshot({path:'r2_learn_'+vp.width+'.png',fullPage:true});
+ ok(!errors.length,vp.width+': no errors '+errors.slice(0,3).join(' / '));await ctx.close()}await b.close()})();
