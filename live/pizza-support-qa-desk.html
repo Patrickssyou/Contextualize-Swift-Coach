@@ -1892,7 +1892,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
     <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
     <button type="button" role="tab" class="quiet" data-tab="rubric" aria-selected="false">Rubric</button>
-    <button type="button" class="quiet" data-calltools="1">Call tools</button>
+    <button type="button" class="quiet" data-calltools="1" hidden>Call tools</button>
   </div>
   <div class="subtabs" role="tablist" aria-label="Calls" id="sub-calls" hidden>
     <button type="button" role="tab" data-tab="queue" aria-selected="false"><span class="tn"><span>1</span></span>Snapshot<span class="count" id="qCount"></span></button>
@@ -2801,9 +2801,15 @@ function cleanCaseFields(x){x=x&&typeof x==="object"?x:{};const c=x.case&&typeof
    lv is the chat wording (and the call wording when lvCall is absent); lvCall only where a call reads differently. na: the only condition for N/A.
    The chat brain exports this same list as RUBRIC_V3 (chat.js); a test holds them equal. */
 const RUBRIC_V = "v3";
-const RUBRIC_LADDER = ["not done, or made it worse","attempted, mostly wrong","partly right, clear gaps","met the bar","above the bar"];
+const RUBRIC_LADDER = ["completely missed it","bare minimum, but done badly","bare minimum","what we expect a Super Agent to do","nothing else to improve on"];
 /* verdict bands on v3 (Patrick, Oct 21); audits on the old scales keep the old bands (VERDICTS in chat.js) */
-const VERDICTS_V3 = [["great",90,"Great"],["good",75,"Good"],["okay",60,"Okay"],["needs_work",45,"Needs work"],["miss",0,"Miss"]];
+/* v5 score bands (Scorecard v5, Oct 30): above 85, 75–85, 65–75, below 65. Ids kept so colours and stored verdicts still map */
+const VERDICTS_V3 = [["great",85.1,"Outperformed"],["good",75,"Hitting expectations"],["okay",65,"Some gaps"],["needs_work",0,"Not yet at standard"]];
+/* Scores saved before v5 were Σ(mark/4 × w) on raw 0–4 marks; v5 is Σ((mark+1)/5 × w). With N/A at full marks the two are exactly linked:
+   v5 = 20 + 0.8 × old. A saved % without pv:5 is converted once in memory on load (marks never change); every new save carries pv:5 */
+const PV5=5,p5=p=>p==null||p===""||isNaN(Number(p))?p:Math.round((20+0.8*Number(p))*10)/10;
+function n5(o,scores){if(!o||typeof o!=="object"||o.pv===PV5)return o;if(scores&&typeof scoresRubric==="function"&&scoresRubric(scores)==="v2")return o;o=Object.assign({},o);
+  if(o.pct!=null&&o.pct!==""){o.pct=p5(o.pct);const b=bandOf(o.pct,VERDICTS_V3);if(o.verdict&&b)o.verdict=b.id}o.pv=PV5;return o}
 const VERDICTS_OLD = [["great",90,"Great"],["good",80,"Good"],["okay",65,"Okay"],["needs_work",50,"Needs work"],["miss",0,"Miss"]];
 const bandOf = (pct,bands) => {if(pct==null)return null;const v=bands.find(([,min])=>pct>=min)||bands[bands.length-1];return {id:v[0],label:v[2]}};
 /* a call's verdict: v3 bands when its items are on 0-4, the old bands on the live 0-3 form */
@@ -2947,14 +2953,14 @@ const RUBRIC_V4 = [
   {id:"tone",group:"communication",label:"Tone & language",w:10,desc:"Friendly and professional, neutral accent, little talk-over. Speaks the same language as the client. Calls: read the transcript cues (\"huh?\", \"what?\", repeats, misheard words, cut-off sentences on both sides) and name the cue the mark rests on.",lv:["Talks over, argues or sounds dismissive. The client feels unheard.", "Polite but flat, awkward or agent-like. Too many sorries or fillers; pushes their own fix without reading the room.", "Polite, no talk-over or clashes, but little warmth or empathy.", "Warm, confident and concise. Reads the room; empathy fits who is at fault.", "Builds rapport and adapts pace, accent and language to the client. Turns a tense call friendly."]},
   {id:"clarity",group:"communication",label:"Clarity of communication",w:10,desc:"The client understands the concern being addressed and the resolution given, and doesn't have to ask for a repeat. A compensation amount need not be stated unless the client asks.",lv:["The client leaves confused (\"something isn't adding up\"). The concern or the fix is never explained.", "The gist lands, but with stumbles, vague words, or the same line repeated when the client doesn't get it.", "The message lands but not smoothly. The outcome is not read back or confirmed.", "States the issue and the fix plainly, explains before a hold. The client understands with no confusion.", "Rephrases when the client doesn't get it, says what happens next and how to avoid it, and the client understands."]},
   {id:"first",kind:"chat",group:"communication",label:"First response",w:5,desc:"The first reply fits the case, not a generic holding line. Quality in context, not speed.",lv:["A generic holding line that completely misses the request.", "The reply is a generic holding line.", "The reply is generic but gives the next step.", "The reply names the case and the next step.", "The first reply gives context and a clear action from the team, in one message (not split over several lines)."]},
-  {id:"spiel",kind:"call",group:"communication",label:"Opening spiel",w:5,desc:"The right opening for the line: client line \"Hi, this is <name> from Tarro, how can I help you?\" (ask the restaurant name or ID when it isn't known); store manager or delivery line, answer as the store: \"Hi, this is <name>, the manager, how can I help you?\", never as Tarro; outbound to a restaurant: name, from Tarro, why; outbound to a customer: speak for the store. Elements: name, who we are (Tarro / the manager / the store), the offer to help, and on outbound calls why we're calling.",lv:["No real opening, the wrong spiel for the line, or a completely different restaurant named.", "Two elements missing and the introduction is stiff.", "One or two elements missing, usually the name, but the right opening for the line.", "The right opening for the call type, missing one element.", "The full opening for the line, delivered smoothly."]},
+  {id:"spiel",kind:"call",group:"communication",label:"Opening spiel",w:5,desc:"The right opening for the line: client line \"Hi, this is <name> from Tarro, how can I help you?\" (ask the restaurant name or ID when it isn't known); store manager or delivery line, answer as the store: \"Hi, this is <name>, the manager, how can I help you?\", never as Tarro; outbound to a restaurant: name, from Tarro, why; outbound to a customer: speak for the store. Elements: name, who we are (Tarro / the manager / the store), the offer to help, and on outbound calls why we're calling.",lv:["No real opening, the wrong spiel for the line, or a completely different restaurant named.", "Two elements missing and the introduction is stiff.", "The right opening for the line, but two elements missing (usually the name).", "The right opening for the call type, missing one element.", "The full opening for the line, delivered smoothly."]},
   {id:"composure",group:"communication",label:"Composure",w:5,desc:"Stays on track after pushback: no fumbling, filler loops or contradicting yourself, and no visible confusion on screen.",lv:["Loses the thread, argues or gets defensive, or uses a hold or hand-off to escape.", "Sounds nervous, stutters, contradicts themselves or mixes up orders mid-call.", "Mostly steady; a few wobbles or filler loops, then recovers.", "Steady with upset clients, customers and drivers. No fumbling; stays on task.", "Calm and in control, settles the other side and keeps the call moving."]},
   {id:"gathering",group:"problem",label:"Gathering information",w:15,desc:"Asks the right questions, probes, and checks the right records (order, status, notes, recording).",lv:["Acts on the caller's word alone; completely misses the facts of the case, which leads to an error.", "Checks some things but slowly and misses a key fact; doesn't probe enough.", "Checks the order or record but is relatively slow to act; probes the facts but isn't sharp.", "Quickly finds the right order, status or notes, or checks the recording when needed; may ask for some unnecessary information.", "As 4, quickly and with no wasted questions, and also checks what else is affected (other items, repeat customers)."]},
   {id:"rootcause",group:"problem",label:"Root cause & fault attribution",w:15,na:"nothing went wrong (a plain request: menu, hours, settings, how-to)",desc:"Finds what actually went wrong and who is at fault.",lv:["No cause found, or the wrong one. A mismatch is left unexplained.", "Blames the store, customer or driver without evidence, or is slow to see an obvious mismatch.", "Finds what happened but not why, or leaves fault implied; doesn't check with the store or agent.", "Finds the real cause from the evidence and traces back the source of the issue.", "Finds the root cause with ease, traces back the source of the issue, and states the fault neutrally."]},
-  {id:"immediate",group:"resolution",label:"Immediate resolution",w:15,desc:"Finds the right, appropriate fix for the issue raised. No overpromising; a compensation amount follows the policy.",lv:["No real fix. Unsure what to do, or the fix makes it worse; the customer or client leaves without a clear action.", "The fix doesn't fit, or has to go back and change the fix.", "The right fix, but slowly, only after the client suggests it, or it needs a second call.", "The right fix offered with relative ease, aligned with the customer's or client's desired outcome.", "The right fix, fast and proactive, while managing the customer's and client's sentiment."]},
+  {id:"immediate",group:"resolution",label:"Immediate resolution",w:15,desc:"Finds the right, appropriate fix for the issue raised. No overpromising. Capped by the compensation check: compensation stays within the approved limits, and anything above them needs approval.",lv:["No real fix. Unsure what to do, or the fix makes it worse; the customer or client leaves without a clear action.", "The fix doesn't fit, or has to go back and change the fix.", "The right fix, but slowly, only after the client suggests it, or it needs a second call.", "The right fix offered with relative ease, aligned with the customer's or client's desired outcome.", "The right fix, fast and proactive, while managing the customer's and client's sentiment."]},
   {id:"ticket",group:"resolution",label:"Documentation",w:10,na:"the case needed no record at all (closed then and there, nothing owed to anyone). Never N/A on a CL call: the client line always needs a WIRA ticket",desc:"Filed when needed, with the right team, tag and description, or an order remark saved when that is the right record. On a store manager or delivery call the right record is usually an order remark, not a WIRA ticket.",lv:["A needed ticket or remark not filed: no order remark and no WIRA documentation.", "Not the right record for the call type (e.g. a WIRA ticket on a manager call instead of an order remark), the wrong team tagged, or unclear documentation.", "The right team, but a thin description that can cause confusion.", "The right ticket or remark, team and tag; a clear issue, action taken and next step.", "As 4, with clear action steps for the team when needed, plus related details that give useful context, concisely."]},
   {id:"ownership",group:"resolution",label:"Ownership",w:10,na:"the case was fully closed then and there (on the call or in the chat): nothing left to follow up, nothing promised for later, no other team needed",desc:"Takes the case to the end without passing it off unnecessarily; completes or chases any pending step.",lv:["Passes responsibility to someone else unnecessarily when they could resolve it themselves, or no follow-up at all to the teams that needed it.", "Takes some steps but leaves an open item with no owner (a callback, an allowance request, an escalation).", "Does the needed steps, but only when prompted (salvages after the client asks for credit).", "Does or chases every pending step. Escalates with a summary and recommendation only when needed.", "Spots the next problem and handles it unasked (tells the customer about the delay, wins back an at-risk customer)."]},
-  {id:"longterm",group:"resolution",label:"Long-term solution",w:5,na:"a one-off with nothing the client could prevent or do themselves next time. A change the client could make in CMA (a menu price, item or modifier) is never N/A",desc:"Prevents a repeat of the same incident.",lv:["No prevention where it was clearly needed (expired stock not flagged, an address deleted but not fixed).", "Attempted but incomplete: asked about next time but didn't record it, or no note for a repeat customer.", "A partial fix: doesn't address the source fully, but records the required action.", "Fixes this case at its source (e.g. a customer note: allergy, no onions), but not the wider impact.", "Fixes the source and the wider impact where it applies: flags similar items, raises recurring friction to the owning team and closes the loop."]}];
+  {id:"longterm",group:"resolution",label:"Long-term solution",w:5,na:"a one-off with nothing the client could prevent or do themselves next time. A change the client could make in CMA (a menu price, item or modifier) is never N/A",desc:"Prevents a repeat of the same incident. A menu price, item or modifier change is self-servable in CMA; showing the client how counts here.",lv:["No prevention where it was clearly needed (expired stock not flagged, an address deleted but not fixed).", "Attempted but incomplete: asked about next time but didn't record it, or no note for a repeat customer.", "A partial fix: doesn't address the source fully, but records the required action.", "Fixes the source so it can't repeat: saves the right customer note (allergy, no onions) or address, or shows the client the CMA fix.", "Fixes the source and the wider impact where it applies: flags similar items, raises recurring friction to the owning team and closes the loop."]}];
 const rubricV4 = kind => RUBRIC_V4.filter(r=>!r.kind||r.kind===(kind==="call"?"call":"chat")).map(r=>Object.assign({},r,{lv:(kind==="call"&&r.lvCall||r.lv).slice()}));
 const CALL_RUBRIC_V4 = rubricV4("call");
 /* v4 as the call brain's items */
@@ -3014,6 +3020,9 @@ function callGradePrompt(c,F,A,items,lessons){
       :`SCORECARD (0-3; 0 = not done or made it worse, 1 = poor, 2 = acceptable, 3 = excellent). Pick the level whose words fit best.`,
     ...rows,
     ``,`Rules:`,
+    `- Between two levels, take the lower one and say in the reason what was missing for the higher one. Name the evidence for every mark: a line, a fact from the record, or a cue (for tone: "huh?", "what?", repeats, misheard words, cut-off sentences).`,
+    `- Red flags sit outside the score: compensation over the approved limit without approval, or wrong information that puts a client at risk. When you see one, start that row's reason with "Red flag:"; don't lower other rows for it.`,
+    `- Coaching covers every row marked 2 or lower (3 or lower on the 1–5 scale the team sees).`,
     `- For each criterion write the reason first, then the score that follows from it. Every reason names what ${first} did or didn't do in one sentence and cites the fact ids it rests on (F#, P#) in "cites". A score you can't tie to a fact is a guess: cite the closest facts and say what is missing.`,
     `- "na" only where the criterion has an N/A condition and that condition is true; then always "na". Never score a criterion that doesn't apply, and never mark one N/A because the evidence is thin.`,
     v4?`- Read the N/A conditions literally. longterm: a one-off (one late or wrong order, a driver who couldn't find the address, a no-show, a customer who wants a refund) with nothing the restaurant could prevent or do itself next time is "na"; a change the restaurant could make in CMA (a menu price, item or modifier) is never "na", and doing it for them without showing how scores low. A call from a customer has no CMA angle. Don't invent an opportunity to score it 0.`
@@ -3088,7 +3097,7 @@ function cleanCallCase(x){if(!x||typeof x!=="object"||Array.isArray(x))return nu
 /* the total: score ÷ the item's top mark (3 on the live form, 4 on v3) of the weight, N/A left out */
 /* on 0-4 items (v3, v4) an N/A row counts as full marks and stays in the denominator (QA lead, Oct 21); the live 0-3 form leaves N/A out */
 function callScore(scores,items){let got=0,den=0;(items||[]).forEach(it=>{const v=scores&&scores[it.id];if(v==null||v==="")return;const {hi}=itemScale(it),w=Number(it.w)||0;
-  if(v==="na"){if(hi===4){den+=w;got+=w}return}const n=Number(v);if(isNaN(n))return;den+=w;got+=w*Math.min(hi,n)/hi});
+  if(v==="na"){if(hi===4){den+=w;got+=w}return}const n=Number(v);if(isNaN(n))return;den+=w;got+=hi===4?w*(Math.min(4,Math.max(0,n))+1)/5:w*Math.min(hi,n)/hi});
   return den?Math.round(got/den*1000)/10:null}
 /* one Claude pass; a reply that isn't valid JSON is repaired from its text when the chat brain's repairJson (or deps.repair) is there */
 async function callAsk(deps,prompt,pass){try{return await deps.ask(prompt,pass)}
@@ -3714,6 +3723,9 @@ function chatGradePrompt(k,F,A,comp,offer,cal,check,lessons){const sa=k.chat.sa|
     ...(A.fault&&A.fault.who==="none"?[`- The analysis found nothing went wrong, so rootcause is "na".`]:[]),
     ...(sys&&check.score!=="na"?[`- immediate: score the whole resolution. The system's compensation check below marks the money ${check.score}/4; immediate can't end above that, the system applies the cap.`]:[]),
     ``,`Rules:`,
+    `- Between two levels, take the lower one and say in the reason what was missing for the higher one. Name the evidence for every mark: a line, a fact from the record, or a cue (for tone: "huh?", "what?", repeats, misheard words, cut-off sentences).`,
+    `- Red flags sit outside the score: compensation over the approved limit without approval, or wrong information that puts a client at risk. When you see one, start that row's reason with "Red flag:"; don't lower other rows for it.`,
+    `- Coaching covers every row marked 2 or lower (3 or lower on the 1–5 scale the team sees).`,
     `- For each criterion write the reason first, then the score that follows from it. Every reason cites facts (F#, C#, M#) and says exactly what was right or wrong, in one sentence; an "na" reason says why the row doesn't apply.`,
     `- first is quality in context, not time: a short reply that answers what the client raised and names the right next step meets the bar (3). A generic holding line that ignores the case is the miss the QA lead marks down.`,
     `- Read the N/A conditions literally. longterm: "na" only for a one-off with nothing the client could prevent or do themselves next time; a change the client can make in CMA (a menu price, item or modifier) is never "na", and doing it for the client without showing how scores 0-1; one agent's slip is a one-off (coaching another agent is the QA lead's job). ticket: "na" only when the case needed no follow-up at all and the chat holds the whole case. Never invent an opportunity just to score it 0.`,
@@ -3851,7 +3863,7 @@ function finishGrade(G1,G2,A,check,k,F){let G=G2?mergeGrades(G1,G2):Object.assig
    Scores saved on the old chat ids (v2) keep the old formula (N/A left out), so old audits keep their grade */
 function chatScore(scores){let got=0,den=0;const on=scoresRubric(scores),old=on==="v2";
   (old?CHAT_RUBRIC_V2:on==="v3"?CHAT_RUBRIC_V3:CHAT_RUBRIC).forEach(r=>{const v=scores&&scores[r.id];if(v==null||v==="")return;
-    if(v==="na"){if(!old){den+=r.w;got+=r.w}return}den+=r.w;got+=r.w*Math.min(r.max,Number(v))/r.max});
+    if(v==="na"){if(!old){den+=r.w;got+=r.w}return}den+=r.w;got+=!old&&r.max===4?r.w*(Math.min(4,Math.max(0,Number(v)))+1)/5:r.w*Math.min(r.max,Number(v))/r.max});
   return den?Math.round(got/den*1000)/10:null}
 /* the verdict for a score: v3 bands unless the scores (or the audit's rubric) say the old scorecard. chatVerdict(pct) alone reads v3 */
 function chatVerdict(pct,on){const old=typeof on==="string"?on==="chat-v2":isOldScores(on);return bandOf(pct,old?VERDICTS_OLD:VERDICTS_V3)}
@@ -4012,7 +4024,7 @@ function chatAuditDoc(k,R,meta){const c=k.chat;meta=meta||{};
     orderNote:k.orderNote,orderPick:Array.isArray(meta.orderIds)?"reviewer":"auto",refs:k.refs,
     calls:k.calls.map(l=>({id:l.id,at:l.at,sec:l.sec,agent:l.agent,dir:l.dir,phone4:String(l.phone||"").slice(-4),orders:l.orders||"",talk:l.talk||"talk",link:l.link||"",match:l.match||"",why:l.why||"",shared:!!l.shared,code:l.code||""})),
     slack:k.slack,notFound:k.notFound,
-    facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,check:R.check||null,grade:R.G,pct:R.pct,verdict:R.verdict?R.verdict.id:null,
+    facts:R.F,analysis:R.A,comp:R.comp,offer:R.offer,check:R.check||null,grade:R.G,pct:R.pct,pv:PV5,verdict:R.verdict?R.verdict.id:null,
     /* added (v3): which scorecard the marks are on, and its top mark */
     rubric:(R.G&&R.G.rubric)||({v2:"chat-v2",v3:RUBRIC_V,v4:RUBRIC_V4_ID})[scoresRubric(R.G&&R.G.scores)],scale:isOldScores(R.G&&R.G.scores)?3:4,
     priority:((R.G&&R.G.findings)||[]).map(f=>f.priority).sort()[0]||null,
@@ -5546,7 +5558,7 @@ const scWt=w=>(Math.round(w*10)/10).toString()+"%";
 const scItems=R=>R.map(r=>({id:r.id,w:r.w,lv:Array.from({length:r.max+1},(_,i)=>(r.lv&&r.lv[i])||String(i))}));
 function scPct(R,m){if(typeof callScore==="function"){const sc={};R.forEach(r=>{const v=m&&m[r.id];if(v!=null&&v!=="")sc[r.id]=v==="na"?"na":Math.min(r.max,Math.max(0,Number(v)))});
     return Object.keys(sc).length?callScore(sc,scItems(R)):null}
-  let got=0,den=0;R.forEach(r=>{const v=m&&m[r.id];if(v==="na"||v==null||v==="")return;den+=r.w;got+=r.w*Math.min(r.max,Math.max(0,Number(v)))/r.max});return den?Math.round(got/den*1000)/10:null}
+  let got=0,den=0;R.forEach(r=>{const v=m&&m[r.id];if(v==="na"||v==null||v==="")return;den+=r.w;const x=Math.min(r.max,Math.max(0,Number(v)));got+=r.max===4?r.w*(x+1)/5:r.w*x/r.max});return den?Math.round(got/den*1000)/10:null}
 /* does N/A count as full marks (true) or leave the row out (false)? read from the brain's own scoring */
 let scNaFullMemo=null;
 const scNaFull=()=>{if(scNaFullMemo==null)scNaFullMemo=typeof callScore==="function"&&callScore({a:"na",b:0},[{id:"a",w:1,lv:["0","1","2","3","4"]},{id:"b",w:1,lv:["0","1","2","3","4"]}])===50;return scNaFullMemo};
@@ -5710,8 +5722,8 @@ function chatsWeekListen(){if(!db||chW.week===week)return;
   const cur=()=>chW===S,re=()=>{renderChats();renderGame()};
   S.offs.push(db.collection(CHAT_PATHS.chats(w)).onSnapshot(s=>{if(!cur())return;
     chats=s.docs.map(x=>{const d=x.data();return Object.assign({},d,{sid:String(d.sid||x.id),week:w})});chatsReady=true;re()},()=>{if(!cur())return;chatsReady=true;re()}));
-  S.offs.push(db.collection(CHAT_PATHS.audits(w)).onSnapshot(s=>{if(!cur())return;chatAud=Object.fromEntries(s.docs.map(x=>[x.id,x.data()]));re()},()=>{}));
-  S.offs.push(db.collection(CHAT_PATHS.reviews(w)).onSnapshot(s=>{if(!cur())return;chatRev=Object.fromEntries(s.docs.map(x=>[x.id,x.data()]));S.live=true;re()},()=>{}));
+  S.offs.push(db.collection(CHAT_PATHS.audits(w)).onSnapshot(s=>{if(!cur())return;chatAud=Object.fromEntries(s.docs.map(x=>{const d=x.data();return [x.id,n5(d,d&&d.grade&&d.grade.scores)]}));re()},()=>{}));
+  S.offs.push(db.collection(CHAT_PATHS.reviews(w)).onSnapshot(s=>{if(!cur())return;chatRev=Object.fromEntries(s.docs.map(x=>{const d=x.data();return [x.id,n5(d,d&&d.scores)]}));S.live=true;re()},()=>{}));
 }
 /* other weeks' reviews, once per load: the pulled weeks (index docs) and every week since chats started */
 function chatHistory(){if(!db||chHistRun)return chHistRun;
@@ -5720,7 +5732,7 @@ function chatHistory(){if(!db||chHistRun)return chHistRun;
     const last=iso(mondayOf(new Date()));for(let w=CH_FIRST_WEEK,i=0;w<=last&&i<520;w=addDays(w,7),i++)weeks.add(w);
     const list=[...weeks].sort().filter(w=>w!==chW.week&&!chRevHist.has(w));
     for(let i=0;i<list.length;i+=3)await Promise.all(list.slice(i,i+3).map(async w=>{
-      try{const s=await db.collection(CHAT_PATHS.reviews(w)).get();if(w!==chW.week&&!chRevHist.has(w))chRevHist.set(w,Object.fromEntries(s.docs.map(x=>[x.id,x.data()])))}catch(e){}}));
+      try{const s=await db.collection(CHAT_PATHS.reviews(w)).get();if(w!==chW.week&&!chRevHist.has(w))chRevHist.set(w,Object.fromEntries(s.docs.map(x=>{const d=x.data();return [x.id,n5(d,d&&d.scores)]})))}catch(e){}}));
     renderGame()})();
   return chHistRun}
 function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();renderChatQueue();if(tab==="chat")renderChatAudit();if(tab==="learn")renderLearn();if(tab==="brain")renderBrain();if(tab==="calib"&&typeof renderCalib==="function")renderCalib();
@@ -5937,7 +5949,7 @@ function chRowHtml(c){const n=(c.msgs||[]).length,g=chCanGrade(c);
 function chCurPct(c){const r=chatRev[c.sid],a=chatAud[c.sid];return r&&r.pct!=null?Number(r.pct):a&&a.pct!=null?Number(a.pct):null}
 function chMedian(L){const x=L.filter(v=>v!=null&&!isNaN(v)).map(Number).sort((p,q)=>p-q),n=x.length;return n?(n%2?x[(n-1)/2]:(x[n/2-1]+x[n/2])/2):null}
 function chMeanPct(L){const x=L.filter(v=>v!=null);return x.length?x.reduce((t,v)=>t+v,0)/x.length:null}
-const CH_VMIX=[["great","s3"],["good","s3 lt"],["okay","s2"],["needs_work","s1"],["miss","s0"]];
+const CH_VMIX=[["great","s3"],["good","s3 lt"],["okay","s2"],["needs_work","s1"]];
 function chStats(list){const sc=list.map(chCurPct).filter(v=>v!=null),fr=list.map(c=>chFirstMin(c,chatAud[c.sid]));
   const mine=list.filter(c=>{const r=chatRev[c.sid];return r&&(!myId||!r.by||r.by===myId)}).length,mix={};
   list.forEach(c=>{const r=chatRev[c.sid],a=chatAud[c.sid],x=r&&r.pct!=null?r:a&&a.pct!=null?a:null,v=x&&chDocV(x);if(v)mix[v.id]=(mix[v.id]||0)+1});
@@ -6559,7 +6571,7 @@ async function saveChatReview(){const sid=String(chatSel||""),c=chatBy(sid),a=ch
   const reinforce={};
   Object.entries(d.reinforce||{}).forEach(([id,x])=>{const r=chRub(id),why=String((x&&x.reason)||"").trim();if(!r||!why||contests[id]||chIsNot(findings,id)||String(d.scores[id])!==String(G[id]))return;
     reinforce[id]={mark:chMk(G[id],r.max),reason:why}});
-  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,verdict:v?v.id:null,coaching:chNote(c,a,d),findings,contests,reinforce,
+  const rec={sid,week:chWk(c),sa:c.sa,scores:clone(d.scores),pct,pv:PV5,verdict:v?v.id:null,coaching:chNote(c,a,d),findings,contests,reinforce,
     reviewer:String(d.reviewer||"").trim(),by:myId||null,at:new Date().toISOString()};
   const btn=$("#chatSave");if(btn)btn.disabled=true;
   try{await db.doc(chPath("reviews",rec.week,sid)).set(rec)}
@@ -6962,7 +6974,7 @@ function ghItems(rid){const R=GH_ROUNDS.find(r=>r.id===rid)||GH_ROUNDS[0],out=[]
   R.keys.forEach(k=>cbRoundItems(k).forEach(it=>{const lk=(cbItems[it.ik]||{}).locked;if(lk&&lk.pct!=null)out.push(Object.assign({},it,{lk}))}));return out}
 /* a version's marks on the item's live rows, and its score */
 function ghMarks(it,v){const k=it.kind==="chat"?"chat":"call",t=scGenT(k,v.scores||{},k==="chat"?"":cbCallType(it));return scMapMarks(k,v.scores||{},t).marks}
-function ghPct(it,v){if(it.kind==="chat"&&v.pct!=null)return v.pct;const p=cbPct(it.kind,ghMarks(it,v),it);return p==null?null:Math.round(p*10)/10}
+function ghPct(it,v){if(it.kind==="chat"&&v.pct!=null)return v.pv===PV5||(v.scores&&scoresRubric(v.scores)==="v2")?v.pct:p5(v.pct);const p=cbPct(it.kind,ghMarks(it,v),it);return p==null?null:Math.round(p*10)/10}
 /* how close a version is to the agreed score: the score gap and the rows */
 function ghCmp(it,v){const pct=ghPct(it,v),agreed=it.lk.pct,R=cbRubric(it.kind,it),A=cbLkMarks(it.ik,it.lk),M=ghMarks(it,v);let rows=0,exact=0,near=0;
   R.forEach(r=>{const a=A[r.id],m=M[r.id];if(a==null||a===""||m==null||m==="")return;rows++;if(String(a)===String(m)){exact++;near++}else if(a!=="na"&&m!=="na"&&Math.abs(Number(a)-Number(m))<=1)near++});
@@ -7014,7 +7026,7 @@ function ghHtml(){const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=
 /* version 1: Claude's grade on the item as it stood when the team locked it (never overwritten) */
 async function ghSnap(it){if(!db||!it)return;const ik=it.ik;const ref=db.doc(GH_ROOT+"/"+ik),s=await ref.get();if(s&&s.exists)return;let v=null;
   if(it.kind==="call"){const sg=(srDocFor(it.key)||{}).grade,sr=!!(ROUNDS[it.week||it.round]&&sg&&sg.scores),g=sr?sg:cbCG.get(String(it.key))||sg||null;if(g&&g.scores)v={n:1,at:g.at||new Date().toISOString(),src:"original",scores:clone(g.scores),via:sr||!cbCG.get(String(it.key))?"screen + voice":"transcript"}}
-  else{const a=chatAud[it.key];if(a&&a.grade&&a.grade.scores)v={n:1,at:a.gradedAt||new Date().toISOString(),src:"original",scores:clone(a.grade.scores),pct:a.pct??null,verdict:a.verdict||null}}
+  else{const a=chatAud[it.key];if(a&&a.grade&&a.grade.scores)v={n:1,at:a.gradedAt||new Date().toISOString(),src:"original",scores:clone(a.grade.scores),pct:a.pct??null,pv:PV5,verdict:a.verdict||null}}
   if(!v)return;const R=GH_ROUNDS.find(r=>r.keys.includes(it.week||it.round))||{};
   await ref.set({ik,kind:it.kind,key:String(it.key),sa:it.sa||"",title:it.title||"",round:R.id||null,roundKey:it.week||it.round||null,versions:[v]})}
 /* the newest lessons without the ones this item taught */
@@ -7028,7 +7040,7 @@ async function ghRegradeOne(it,ctl){const {lessons,left}=await ghLessons(it),at=
     v={at,src:"regrade",scores:doc.scores,reasons:doc.reasons,lessons:lessons.length,left}}
   else{const w=it.week||it.round,s=await db.doc(chPath("chats",w,it.key)).get();if(!s||!s.exists)throw {code:"error",message:"chat not found"};
     const c=Object.assign({},s.data(),{sid:String(it.key),week:w}),r=await gradeOneChat(c,ctl,undefined,true,{save:false,lessons,exclude:it.key}),d=chatAuditDoc(r.k,r.R,{});
-    v={at,src:"regrade",scores:(d.grade&&d.grade.scores)||{},reasons:(d.grade&&d.grade.reasons)||{},pct:d.pct??null,verdict:d.verdict||null,lessons:lessons.length,left}}
+    v={at,src:"regrade",scores:(d.grade&&d.grade.scores)||{},reasons:(d.grade&&d.grade.reasons)||{},pct:d.pct??null,pv:PV5,verdict:d.verdict||null,lessons:lessons.length,left}}
   const ref=db.doc(GH_ROOT+"/"+it.ik),s=await ref.get(),h=s&&s.exists?s.data():{ik:it.ik,kind:it.kind,key:String(it.key),sa:it.sa||"",title:it.title||"",versions:[]};
   const V=(h.versions||[]).slice();v.n=V.length+1;V.push(clone(v));
   await ref.set(Object.assign({},h,{versions:V}))}
@@ -7086,8 +7098,7 @@ function chStaffHtml(){const saved=(staffDoc&&staffDoc.map)||{},map=Object.assig
     <div id="staffRows">${Object.keys(map).sort((a,b)=>String(map[a].name).localeCompare(String(map[b].name))).map(p=>chStaffRow(p,map[p],p in STAFF_DEFAULT)).join("")}</div>
     <div class="row"><button type="button" class="btn small" id="staffAdd">Add person</button><button type="button" class="btn primary" id="staffSave" disabled>Save staff</button><span class="hint" id="staffNote"></span></div>`}
 function renderBrain(){const v=$("#view-brain");if(!v)return;
-  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="brain"><section class="panel bpanel" id="brPolicy"></section><section class="panel bpanel" id="brCal"></section><section class="panel bpanel" id="brLessons"></section><section class="panel bpanel" id="brStaff"></section><section class="panel bpanel" id="brRubric"></section></div>`;
-    $("#brRubric").innerHTML=chRubricHtml()}
+  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="brain"><section class="panel bpanel" id="brPolicy"></section><section class="panel bpanel" id="brCal"></section><section class="panel bpanel" id="brLessons"></section><section class="panel bpanel" id="brStaff"></section></div>`}
   if(!polDirty)$("#brPolicy").innerHTML=chPolicyHtml();
   $("#brCal").innerHTML=chCalHtml();
   $("#brLessons").innerHTML=chLessonsHtml();
@@ -7152,9 +7163,9 @@ let cbCGSub={qid:"",off:null},cbCGRound="",cbGR=null,cbGRNote=null;
 function calibListen(){if(!db)return;if(typeof srListen==="function")srListen();
   db.collection("calibMarks").onSnapshot(s=>{const m=new Map();s.docs.forEach(d=>m.set(d.id,d.data()||{}));cbGraders=m;cbGradersReady=true;
     const ids=[...m.keys()];if(myId&&!ids.includes(myId))ids.push(myId);ids.forEach(cbListenMarks);cbRender()},()=>{cbGradersReady=true;cbRender()});
-  db.collection("calibItems").onSnapshot(s=>{cbItems=Object.fromEntries(s.docs.map(d=>[d.id,d.data()||{}]));cbItemsReady=true;cbRender(true)},()=>{cbItemsReady=true});
+  db.collection("calibItems").onSnapshot(s=>{cbItems=Object.fromEntries(s.docs.map(d=>{const x=Object.assign({},d.data()||{});if(x.locked)x.locked=n5(x.locked);return [d.id,x]}));cbItemsReady=true;cbRender(true)},()=>{cbItemsReady=true});
   db.doc("settings/calibGraders").onSnapshot(s=>{cbExpectDoc=s&&s.exists?(s.data()||null):null;cbRender()},()=>{});
-  db.collection("calibRounds").onSnapshot(s=>{cbRounds=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));cbRender()},()=>{});
+  db.collection("calibRounds").onSnapshot(s=>{cbRounds=s.docs.map(d=>{const r=Object.assign({},d.data(),{id:d.id});r.items=(r.items||[]).map(x=>x.aiPct!=null&&x.pv!==PV5?Object.assign({},x,{aiPct:p5(x.aiPct),pv:PV5}):x);return r});cbRender()},()=>{});
   if(myId)cbListenMarks(myId);
   if(roomCap&&roomCap.onPeers){try{roomCap.onPeers(ch=>{cbPeers=(ch&&ch.peers)||[];cbPaintHere()})}catch(e){}}
 }
@@ -7430,7 +7441,7 @@ async function cbLock(it){const ik=it.ik,R=cbRubric(it.kind,it),subd=cbGraderIds
   cbLockRun=true;cbPaint();
   try{const at=new Date().toISOString(),marks=Object.fromEntries(R.map(r=>[r.id,A[r.id].mark]));
     for(const r of R){const a=A[r.id];if(a.auto)await db.doc(`calibItems/${ik}/rows/${r.id}`).set({mark:a.mark,note:"All matched",by:myId||null,at})}
-    const pct=cbPct(it.kind,marks,it),v=cbVerdict(it.kind,pct,marks,it),locked={by:myId||null,at,pct,verdict:v?v.id:null,marks};
+    const pct=cbPct(it.kind,marks,it),v=cbVerdict(it.kind,pct,marks,it),locked={by:myId||null,at,pct,pv:PV5,verdict:v?v.id:null,marks};
     const doc=Object.assign({},cbItems[ik]||{},{kind:it.kind,key:it.key,round:it.round??null,locked});
     await db.doc("calibItems/"+ik).set(doc);cbItems[ik]=doc;
     try{await ghSnap(it)}catch(e){}
@@ -7450,7 +7461,7 @@ async function cbChatLocked(it,R,marks,A,subd,pct,v,at){const sid=it.key,c=chatB
     if(String(cl)!==String(ag))doc=Object.assign(chContestLesson(c,a,r.id,{from:chMk(cl,r.max),to:chMk(ag,r.max),reason:why||"All matched"}),{by:"panel",at});
     else{const an=String(A[r.id].note||"").trim();if(an&&an!=="All matched")doc=Object.assign(chReinforceLesson(c,a,r.id,an),{by:"panel",at})}
     if(doc){try{await db.doc(CH_LESSONS+"/"+id).set(doc);n++}catch(e){}}}
-  const rec={sid,week:chWk(c),sa:c.sa||"",scores:clone(marks),pct,verdict:v?v.id:null,coaching:coachText(c,a,marks,{},{}),findings:{},contests:{},reinforce:{},reviewer:"Panel",panel:true,by:myId||null,at};
+  const rec={sid,week:chWk(c),sa:c.sa||"",scores:clone(marks),pct,pv:PV5,verdict:v?v.id:null,coaching:coachText(c,a,marks,{},{}),findings:{},contests:{},reinforce:{},reviewer:"Panel",panel:true,by:myId||null,at};
   try{await db.doc(chPath("reviews",rec.week,sid)).set(rec);chatRev[sid]=rec}catch(e){}
   let RD=null;try{RD=await lrnRecord(rec)}catch(e){}
   return (RD?` · Round ${RD.round}: ${(RD.results||[]).length} of ${(RD.sample||[]).length}`:"")+(n?` · ${n} lesson${n===1?"":"s"}`:"")}
@@ -7481,7 +7492,7 @@ function cbPickChats(mine,prev,n){const g=mine.filter(c=>chatAud[c.sid]&&chatAud
   let ch=cbPickN(g,c=>"chat|"+c.sid,prev,n);if(ch.length<n)ch=ch.concat(cbPickN(u,c=>"chat|"+c.sid,prev,n-ch.length));
   return ch.sort((a,b)=>String(a.at||"").localeCompare(String(b.at||"")))}
 const cbPickCalls=(mine,prev,n)=>cbPickN(mine,q=>"call|"+q.id,prev,n).sort((a,b)=>String(a.callDate+a.callTime).localeCompare(String(b.callDate+b.callTime)));
-function cbChatIt(c,sa){const a=chatAud[c.sid];return {kind:"chat",key:String(c.sid),sa,restaurant:c.restaurant||"",at:c.at||"",aiPct:a&&a.pct!=null?a.pct:null}}
+function cbChatIt(c,sa){const a=chatAud[c.sid];return {kind:"chat",key:String(c.sid),sa,restaurant:c.restaurant||"",at:c.at||"",aiPct:a&&a.pct!=null?a.pct:null,pv:PV5}}
 const cbCallIt=(q,sa)=>({kind:"call",key:String(q.id),sa,restaurant:q.restaurantName||"",at:(q.callDate||"")+(q.callTime?"T"+q.callTime:"")});
 function cbDrawItems(w){const {chatsW,callsW,sas}=cbDrawPool(w),prev=cbDrawnBefore(),items=[];
   sas.forEach(sa=>{cbPickChats(chatsW.filter(c=>c.sa===sa),prev,cbPer(w,"chat")).forEach(c=>items.push(cbChatIt(c,sa)));
@@ -8352,13 +8363,16 @@ function renderRubric(){const v=$("#view-rubric");if(!v||tab!=="rubric")return;r
   const L=(rbDoc&&Array.isArray(rbDoc.log)?rbDoc.log:[]).slice(0,12);
   const groups=RUBRIC_GROUPS_V4.map(g=>{const R=RUBRIC_V4.filter(r=>r.group===g.id),w=R.filter(r=>r.kind!=="chat").reduce((s,r)=>s+Number(r.w||0),0);
     return `<section class="rbgrp"><h2 class="h2">${esc(g.label)} <span class="num">${w}%</span></h2>${R.map(rbRowHtml).join("")}</section>`}).join("");
-  v.innerHTML=`<div class="rbwrap"><header class="rbtop"><div><h2 class="rbtitle">Scorecard rubric</h2><span class="hint">v4 · chats and calls${rbDoc&&rbDoc.at?` · last edit ${esc(rbWhen(rbDoc.at))}${rbDoc.by?` by ${esc(rbWho(rbDoc.by))}`:""}`:""}</span></div></header>
+  v.innerHTML=`<div class="rbwrap"><header class="rbtop"><div><h2 class="rbtitle">Scorecard rubric</h2><span class="hint">v5 · chats and calls${rbDoc&&rbDoc.at?` · last edit ${esc(rbWhen(rbDoc.at))}${rbDoc.by?` by ${esc(rbWho(rbDoc.by))}`:""}`:""}</span></div></header>
     ${bad.length?`<div class="banner">Weights add up to ${bad.map(k=>`${sum(k)}% on ${k}s`).join(" and ")}, not 100%.</div>`:""}
     <section class="panel rbrules"><h2 class="h2">How a score is made</h2><ul>
-      <li>Every criterion is marked 1 to 5. A 1 earns nothing, a 4 meets the bar, a 5 is above it.</li>
+      <li>Every criterion is marked 1 to 5: 1 completely missed it, 2 bare minimum but done badly, 3 bare minimum, 4 what we expect a Super Agent to do, 5 nothing else to improve on.</li>
+      <li>Between two levels, take the lower one and say what was missing. Name the evidence for every mark.</li>
       <li>N/A counts as full marks, so a criterion that doesn't apply never pulls a score down.</li>
-      <li>Score = the sum of each criterion's weight × (mark − 1) ÷ 4. Calls and chats share every criterion except the first: Opening spiel on calls, First response on chats.</li>
-      <li>Verdict: Great 90+, Good 75+, Okay 60+, Needs work 45+, Miss below 45.</li>
+      <li>Score = the sum of each criterion's weight × mark ÷ 5. A 4 on every row is 80%, the Month 4 target. Calls and chats share every criterion except the first: Opening spiel on calls, First response on chats.</li>
+      <li>Bands: above 85% outperformed, 75–85% hitting expectations, 65–75% some gaps, below 65% not yet at standard.</li>
+      <li>Coaching cards for every mark of 3 or below.</li>
+      <li>Red flags (target 0 a month) are flagged on the item, not folded into a mark: compensation over the approved limit without approval, or wrong information that puts a client at risk.</li>
       <li>Edits here apply right away to every scorecard and to Claude's next grade. Items already graded keep their marks until they're regraded.</li></ul></section>
     ${groups}
     <section class="panel rbqs"><h2 class="h2">Open questions</h2><ol>${RB_QS.map(x=>`<li><p>${esc(x.q)}</p><ol type="a">${x.o.map((o,i)=>`<li>${esc(o)}${i===x.rec?` <b class="rbrec">Recommended</b>`:""}</li>`).join("")}</ol></li>`).join("")}</ol></section>

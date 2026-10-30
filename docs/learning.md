@@ -32,3 +32,9 @@ Patrick replaced the level descriptions with v5. Rows, weights, the 0–4 raw sc
 - Each Round 2 screen + voice audit keeps its earlier grade as `gradeV4` next to the new `grade` (`text: "v5"`). Nothing was overwritten.
 - Where a Round 1 lesson and the v5 text disagree, the v5 text wins (e.g. a manager-line opening without the agent's name is now raw 3, not 4).
 - Round 2 calls moved from an average of 77.7 to 73.9 under v5 (48 calls). The main drivers: openings missing the name, Gathering 5 now needs a check of what else is affected, Composure 5 needs the other side settled, and order remarks count as the right record on MGR/DE calls.
+
+## Scorecard v5 maths (Oct 30, later)
+
+From desk v92 a row is worth mark ÷ 5 (marks 1–5), N/A at full marks: a 4 on every row is 80%. Bands: above 85 outperformed, 75–85 hitting expectations, 65–75 some gaps, below 65 not yet at standard.
+
+No mark changed, Claude's or the team's. Every % saved before v5 (Σ(mark/4 × w) on raw 0–4) is shown on the v5 scale in memory with the exact link v5 = 20 + 0.8 × old; new saves carry `pv: 5`. Both sides move together, so gaps shrink by the same 0.8 factor: Round 1 original gap 21.3 → 17.0 pts, Regrade 1 23.5 → 18.8 pts (still Further). Verdict matches change because the bands changed (original 6 of 15, Regrade 1 5 of 15).
