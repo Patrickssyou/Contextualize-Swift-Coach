@@ -18,3 +18,9 @@ Written Oct 30, 2026, when Round 1 was archived and Round 2 (Oct 23–30) starte
 ## Where it starts (Round 1, original grades)
 
 15 items, average gap 21.3 pts, Claude 20.6 pts below the team on average, 28% of rows exact, 68% within one mark, verdict matched on 5 of 15. Claude graded much harder than the team.
+
+## Regrade 1 (Oct 30, in the desk, transcript brain, blind)
+
+Same 15 items: average gap **23.5 pts** (original 21.3), Claude 21.5 pts below the team, 25% of rows exact (was 28%), 64% within one mark (was 68%), verdicts 4 of 15 (was 5). **Further.** The in-page call grader did not move toward the team even with the 32 Round 1 lessons in its prompt; it still marks low by habit.
+
+Round 2's screen + voice grades were written with the same lessons by a different grader (this session), and they run much higher (most calls 70–90). Whether that is closer to the team is unknown until Round 2 settles; it will show as Round 2's "Original" in Learning.
