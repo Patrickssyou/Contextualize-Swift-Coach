@@ -1653,7 +1653,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .rbmx-wrap{padding:0;overflow:visible}@media (max-width:1180px){.rbmx-wrap{overflow-x:auto}}
 .rbmx{width:100%;min-width:1080px;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:12.5px;line-height:1.4}
 .rbmx th{text-transform:none;letter-spacing:normal}.rbmx thead th span{text-transform:none;letter-spacing:0}.rbmx th[scope=row] b{color:var(--ink)}
-.rbmx col.c0{width:170px}.rbmx col.cna{width:150px}
+.rbmx col.c0{width:200px}.rbmx th,.rbmx-n,.rbmx-n b{white-space:normal;overflow-wrap:anywhere}.rbmx-n{max-width:100%;box-sizing:border-box}.rbmx col.cna{width:150px}
 .rbmx thead th{position:sticky;top:0;z-index:2;background:var(--panel,var(--bg));text-align:left;vertical-align:bottom;padding:10px 10px 8px;border-bottom:1px solid var(--line);font-weight:600}
 .rbmx thead th span{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:4px}
 .rbmx-h0{width:190px}.rbmx th[scope=row]{position:sticky;left:0;z-index:1;background:var(--panel,var(--bg));text-align:left;vertical-align:top;padding:10px;border-top:1px solid var(--line);width:190px}
@@ -1668,7 +1668,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .rbmx-more td{padding:0 10px 12px;background:var(--accent-soft)}.rbmx-mo{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:start;padding-top:4px}.rbmx-mo p{margin:4px 0 0;font-size:13px}
 .rbmx-ed td{padding:10px;border-top:1px solid var(--line)}.rbmx-ed .rbrow{box-shadow:none;border:0}
 .rbrules>summary,.rbqs>summary{cursor:pointer;list-style:revert;margin:0}.rbrules[open]>summary,.rbqs[open]>summary{margin-bottom:8px}
-@media (max-width:700px){.rbmx-wrap{max-height:none}.rbmx-mo{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){.rbmx-wrap{max-height:none}.rbmx-mo{grid-template-columns:minmax(0,1fr);position:sticky;left:10px;max-width:calc(100vw - 72px)}.rbmx-mo .btn{justify-self:start}}
 .rbtitle{font-family:var(--f-display);font-size:22px;margin:0 0 2px;letter-spacing:-.02em}
 .rbrules,.rbqs,.rblog{padding:14px 18px}.rbrules .h2,.rbqs .h2{margin:0 0 8px}
 .rbrules ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
