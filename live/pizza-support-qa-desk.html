@@ -1753,9 +1753,11 @@ html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;
 .srpin:hover .srtip,.srpin:focus-visible .srtip{display:block}
 .srcurvew{position:relative;height:64px;cursor:pointer;border-bottom:1px solid var(--line)}
 .srcurve{position:absolute;inset:0;width:100%;height:100%}
-.srta{fill:var(--accent)}.srtc{fill:color-mix(in srgb,var(--ink) 38%,transparent)}.srmid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.srta{fill:#7c3aed;shape-rendering:crispEdges}.srtc{fill:#f08a24;shape-rendering:crispEdges}.srto{fill:#9aa0a6;shape-rendering:crispEdges}.srmid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.srsave{fill:#0f7b4a;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke}.srpost{fill:color-mix(in srgb,var(--ink) 7%,transparent)}.srhang{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.srksave i{background:#0f7b4a}.srkpost i{background:color-mix(in srgb,var(--ink) 14%,transparent)}
 .srcut{fill:color-mix(in srgb,var(--s0,#c0392b) 55%,transparent)}
-.srkta i{background:var(--accent)}.srktc i{background:color-mix(in srgb,var(--ink) 38%,transparent)}.srkcut i{background:color-mix(in srgb,var(--s0,#c0392b) 70%,transparent)}
+.srkta i{background:#7c3aed}.srktc i{background:#f08a24}.srkcut i{background:color-mix(in srgb,var(--s0,#c0392b) 70%,transparent)}
 .srarea{fill:color-mix(in srgb,var(--accent) 38%,transparent);stroke:var(--accent);stroke-width:1.2;vector-effect:non-scaling-stroke}
 .srclip{fill:color-mix(in srgb,var(--accent) 9%,transparent)}
 .srsil{fill:var(--s1)}
@@ -1763,7 +1765,7 @@ html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;
 .srhover{position:absolute;top:2px;transform:translateX(-50%);font-size:11px;background:var(--ink);color:var(--panel);padding:1px 5px;border-radius:4px;pointer-events:none}
 .srticks{position:relative;height:20px;font-size:11px;color:var(--muted)}.srticks span{position:absolute;top:3px;transform:translateX(-50%)}.srticks span:first-child{transform:none}
 .srkeys{list-style:none;margin:0;padding:6px 12px 10px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}.srkeys li{display:flex;align-items:center;gap:5px}.srkeys .sri{width:13px;height:13px;color:var(--ink)}
-.srkta i,.srktc i,.srkcut i{display:inline-block;width:14px;height:10px;border-radius:2px}.srkclip i{width:14px;height:10px;background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:2px}.srksil i{width:14px;height:3px;background:var(--s1)}
+.srkta i,.srktc i,.srkcut i,.srksave i,.srkpost i{display:inline-block;width:14px;height:10px;border-radius:2px}.srkclip i{width:14px;height:10px;background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:2px}.srksil i{width:14px;height:3px;background:var(--s1)}
 .srpaste{margin:8px 0;padding:18px;border:1.5px dashed var(--line);border-radius:10px;text-align:center;color:var(--muted);font-size:13px;cursor:text}.srpaste:focus{border-color:var(--accent);outline:none;color:var(--accent)}
 @media (max-width:620px){.srstage{aspect-ratio:4/3}.srnow{padding:18px 16px}.srrate button{padding:6px 7px}.srpico{width:22px;height:22px}.sri{width:12px;height:12px}}
 .srstage.norec{aspect-ratio:auto;height:280px}
@@ -8140,8 +8142,11 @@ const SR_PAD=20;
 function srClips(d){const dur=srDur(d),F=((d.audit||{}).findings||[]).map(f=>+f.t).filter(t=>!isNaN(t)).sort((a,b)=>a-b),o=[];
   if(d.media&&Array.isArray(d.media.clips)&&d.media.clips.length)return d.media.clips.map(c=>({s:+c[0],e:+c[1]}));
   for(const t of F){const s=Math.max(0,t-SR_PAD),e=Math.min(dur,t+SR_PAD);if(o.length&&s<=o[o.length-1].e+4)o[o.length-1].e=Math.max(o[o.length-1].e,e);else o.push({s,e})}return o}
-const srDur=d=>Math.max(1,Number(d.dur)||0,...(d.lines||[]).map(l=>+l.e||0),...((d.audit||{}).findings||[]).map(f=>(+f.t||0)+SR_PAD),...(((d.media||{}).clips)||[]).map(c=>+c[1]||0));
+const srDur=d=>Math.max(1,Number(d.dur)||0,...(d.screen||[]).filter(x=>x.k==="click"||x.k==="dblclick"||x.k==="type").map(x=>(+x.t||0)+5),...(d.lines||[]).map(l=>+l.e||0),...((d.audit||{}).findings||[]).map(f=>(+f.t||0)+SR_PAD),...(((d.media||{}).clips)||[]).map(c=>+c[1]||0));
 /* activity per second: speech (0-1) plus a little for on-screen actions, smoothed */
+/* screen saves: the order, a remark, a WIRA task. They often come after hang-up, so they mark the timeline even with no finding there */
+const SR_SAVE=/save|submit|create|remark|ticket|task|confirm|update|send|note/i;
+function srSaves(d){return (d.screen||[]).filter(x=>(x.k==="click"||x.k==="dblclick")&&SR_SAVE.test(String(x.l||""))).map(x=>({t:+x.t,l:String(x.l||"").replace(/^(save_alt|chat|add_task|arrow_drop_down)\s*/,"").slice(0,60)||"Saved"}))}
 function srCuts(d){const L=(d.lines||[]).filter(l=>+l.e>+l.t).slice().sort((a,b)=>a.t-b.t),o=[];
   for(let i=1;i<L.length;i++){const a=L[i-1],b=L[i];if((a.who==="agent")===(b.who==="agent"))continue;if(+b.t-+a.e>0.2)continue;if(/[.?!…]["')\]]?\s*$/.test(String(a.txt||"")))continue;o.push({t:+b.t,by:b.who==="agent"?"agent":"caller"})}return o}
 function srCurve(d){const dur=Math.ceil(srDur(d)),v=new Float32Array(dur+1);
@@ -8153,9 +8158,13 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
   const W=1000,H=64,x=t=>(t/dur)*W,mx=Math.max(.6,...C);
   /* who is talking: the agent's lines above the middle, everyone else below. A cut-in is a change of speaker with no gap (≤0.2 s)
      while the other side's line was unfinished: the closest the captions get to talk-over, since one mono track has no overlap of its own */
-  const L=(d.lines||[]).filter(l=>+l.e>+l.t),mid=H/2,lane=l=>l.who==="agent"?`<rect x="${x(+l.t).toFixed(1)}" y="5" width="${Math.max(1.5,x(+l.e)-x(+l.t)).toFixed(1)}" height="${(mid-7).toFixed(1)}" rx="1.5" class="srta"/>`:`<rect x="${x(+l.t).toFixed(1)}" y="${(mid+2).toFixed(1)}" width="${Math.max(1.5,x(+l.e)-x(+l.t)).toFixed(1)}" height="${(mid-7).toFixed(1)}" rx="1.5" class="srtc"/>`;
-  const cuts=srCuts(d);
-  const p="";const talk=L.map(lane).join("")+`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="srmid"/>`+cuts.map(c=>`<rect x="${(x(c.t)-3).toFixed(1)}" y="1" width="6" height="${H-4}" class="srcut"><title>${esc(srT(c.t)+" · "+(c.by==="agent"?"agent cut in":"caller cut in"))}</title></rect>`).join("");
+  const L=(d.lines||[]).filter(l=>+l.e>+l.t),mid=H/2,lw=(l)=>Math.max(1,x(+l.e)-x(+l.t)).toFixed(2),
+    lane=l=>l.who==="agent"?`<rect x="${x(+l.t).toFixed(2)}" y="${mid-9}" width="${lw(l)}" height="7" class="srta"><title>${esc(srT(+l.t))} · Tarro</title></rect>`
+      :`<rect x="${x(+l.t).toFixed(2)}" y="${mid+2}" width="${lw(l)}" height="7" class="${l.who==="other"?"srto":"srtc"}"><title>${esc(srT(+l.t))} · ${l.who==="other"?"Someone else":"Caller"}</title></rect>`;
+  const cuts=srCuts(d),saves=srSaves(d),hang=+d.dur||0,past=hang&&dur>hang+2;
+  const p="";const talk=L.map(lane).join("")+`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="srmid"/>`+cuts.map(c=>`<rect x="${(x(c.t)-3).toFixed(1)}" y="1" width="6" height="${H-4}" class="srcut"><title>${esc(srT(c.t)+" · "+(c.by==="agent"?"agent cut in":"caller cut in"))}</title></rect>`).join("")
+    +(past?`<rect x="${x(hang).toFixed(1)}" y="0" width="${(W-x(hang)).toFixed(1)}" height="${H}" class="srpost"/><line x1="${x(hang).toFixed(1)}" x2="${x(hang).toFixed(1)}" y1="0" y2="${H}" class="srhang"><title>${esc(srT(hang))} · hang-up</title></line>`:"")
+    +saves.map(v=>`<rect x="${(x(v.t)-2.5).toFixed(1)}" y="${(mid-7).toFixed(1)}" width="5" height="14" rx="1" class="srsave"><title>${esc(srT(v.t)+" · "+v.l)}</title></rect>`).join("");
   const sil=(d.silences||[]).filter(s=>+s[1]>=10).map(s=>`<rect x="${x(+s[0]).toFixed(1)}" y="${H-3}" width="${Math.max(2,x(+s[1])).toFixed(1)}" height="3" class="srsil"/>`).join("");
   const step=dur>900?120:dur>360?60:30,ticks=[];for(let t=0;t<=dur;t+=step)ticks.push(t);
   /* icons: two rows when they crowd */
@@ -8187,7 +8196,7 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
       </div>
       <div class="srticks">${ticks.map(t=>`<span style="left:${(t/dur*100).toFixed(2)}%">${t>=60?Math.round(t/60)+"m":t+"s"}</span>`).join("")}</div>
     </div>
-    <ul class="srkeys">${kinds.map(k=>`<li class="k-${k}">${srSvgI(k)}${SR_KL[k]}</li>`).join("")}<li class="srkta"><i></i>Agent talking</li><li class="srktc"><i></i>Caller talking</li><li class="srkcut"><i></i>Cut-in${cuts.length?` <b class="num">${cuts.length}</b>`:""}</li><li class="srkclip"><i></i>Highlight clip</li><li class="srksil"><i></i>Dead air 10 s+</li></ul>
+    <ul class="srkeys">${kinds.map(k=>`<li class="k-${k}">${srSvgI(k)}${SR_KL[k]}</li>`).join("")}<li class="srkta"><i></i>Tarro</li><li class="srktc"><i></i>Caller</li><li class="srkcut"><i></i>Cut-in${cuts.length?` <b class="num">${cuts.length}</b>`:""}</li>${saves.length?`<li class="srksave"><i></i>Saved on screen</li>`:""}${past?`<li class="srkpost"><i></i>After hang-up</li>`:""}<li class="srkclip"><i></i>Highlight clip</li><li class="srksil"><i></i>Dead air 10 s+</li></ul>
   </section>`}
 /* the "now" view when there is no recording: the caption being spoken and the last thing done on screen */
 function srNowHtml(d,t){const L=d.lines||[],S=d.screen||[],F=(d.audit||{}).findings||[];

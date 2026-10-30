@@ -15,9 +15,10 @@ window.srClipBuild = async function (id, clips) {
   const ab = await new OfflineAudioContext(1, SR, SR).decodeAudioData(await res.arrayBuffer());
   const ch = [...Array(ab.numberOfChannels).keys()].map(c => ab.getChannelData(c)), n = ch[0].length;
   const b64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
-  const outClips = clips.map(c => { const i0 = Math.floor(c.s * SR), i1 = Math.min(n, Math.floor(c.e * SR)), len = Math.max(0, i1 - i0), dv = new DataView(new ArrayBuffer(len * 2));
-    for (let i = 0; i < len; i++) { let v = 0; for (const x of ch) v += x[i0 + i]; v /= ch.length; dv.setInt16(i * 2, Math.max(-32768, Math.min(32767, Math.round(v * 32767))), true); }
-    return { s: c.s, e: Math.min(c.e, n / SR), pcm: b64(new Uint8Array(dv.buffer)) }; });
+  /* a clip may run past hang-up (the wrap-up on screen: save order, remark, WIRA task): the audio after the end is silence, not cut */
+  const outClips = clips.map(c => { const i0 = Math.floor(c.s * SR), i1 = Math.floor(c.e * SR), len = Math.max(0, i1 - i0), dv = new DataView(new ArrayBuffer(len * 2));
+    for (let i = 0; i < len; i++) { const j = i0 + i; if (j >= n) break; let v = 0; for (const x of ch) v += x[j]; v /= ch.length; dv.setInt16(i * 2, Math.max(-32768, Math.min(32767, Math.round(v * 32767))), true); }
+    return { s: c.s, e: c.e, pcm: b64(new Uint8Array(dv.buffer)) }; });
   /* screen */
   const R = await get("get_rrweb_events"); let ev = (R.Ok ? R.Ok.payload : R).events || []; if (typeof ev === "string") ev = JSON.parse(ev);
   ev = ev.map(e => typeof e === "string" ? JSON.parse(e) : e).sort((p, q) => p.timestamp - q.timestamp);
