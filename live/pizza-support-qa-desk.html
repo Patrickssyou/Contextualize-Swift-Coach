@@ -1716,7 +1716,11 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srlim{margin-top:10px}
 .srimp{margin-top:14px;padding:10px 14px}.srimp summary{cursor:pointer;font-size:13px;color:var(--muted)}.srimp textarea{width:100%;margin:8px 0;font:12px ui-monospace,monospace}
 .srplay{margin:0 0 16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
-.srstage{position:relative;aspect-ratio:16/9;max-height:440px;width:100%;background:#16141d;color:#eeecf5;overflow:hidden}
+.srstage{position:relative;aspect-ratio:16/9;max-height:440px;width:100%;background:#16141d;color:#eeecf5;overflow:hidden;cursor:zoom-in}.srstage.zoomed{cursor:zoom-out}.srstage.norec{cursor:default}
+.srplay.big{position:fixed;inset:12px;z-index:1000;display:flex;flex-direction:column;background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+.srplay.big .srstage{flex:1 1 auto;aspect-ratio:auto;max-height:none;height:auto;min-height:0}
+html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;inset:0;background:rgba(10,8,16,.55);z-index:999}
+.srbig svg{width:16px;height:16px}
 .srnorec{position:absolute;top:10px;right:12px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#a29fb0}
 .srnow{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:28px 9%}
 .srnow .dim,.srnowl.dim{opacity:.45}
@@ -1749,6 +1753,9 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srpin:hover .srtip,.srpin:focus-visible .srtip{display:block}
 .srcurvew{position:relative;height:64px;cursor:pointer;border-bottom:1px solid var(--line)}
 .srcurve{position:absolute;inset:0;width:100%;height:100%}
+.srta{fill:var(--accent)}.srtc{fill:color-mix(in srgb,var(--ink) 38%,transparent)}.srmid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.srcut{fill:color-mix(in srgb,var(--s0,#c0392b) 55%,transparent)}
+.srkta i{background:var(--accent)}.srktc i{background:color-mix(in srgb,var(--ink) 38%,transparent)}.srkcut i{background:color-mix(in srgb,var(--s0,#c0392b) 70%,transparent)}
 .srarea{fill:color-mix(in srgb,var(--accent) 38%,transparent);stroke:var(--accent);stroke-width:1.2;vector-effect:non-scaling-stroke}
 .srclip{fill:color-mix(in srgb,var(--accent) 9%,transparent)}
 .srsil{fill:var(--s1)}
@@ -1756,7 +1763,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srhover{position:absolute;top:2px;transform:translateX(-50%);font-size:11px;background:var(--ink);color:var(--panel);padding:1px 5px;border-radius:4px;pointer-events:none}
 .srticks{position:relative;height:20px;font-size:11px;color:var(--muted)}.srticks span{position:absolute;top:3px;transform:translateX(-50%)}.srticks span:first-child{transform:none}
 .srkeys{list-style:none;margin:0;padding:6px 12px 10px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}.srkeys li{display:flex;align-items:center;gap:5px}.srkeys .sri{width:13px;height:13px;color:var(--ink)}
-.srkclip i{width:14px;height:10px;background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:2px}.srksil i{width:14px;height:3px;background:var(--s1)}
+.srkta i,.srktc i,.srkcut i{display:inline-block;width:14px;height:10px;border-radius:2px}.srkclip i{width:14px;height:10px;background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:2px}.srksil i{width:14px;height:3px;background:var(--s1)}
 .srpaste{margin:8px 0;padding:18px;border:1.5px dashed var(--line);border-radius:10px;text-align:center;color:var(--muted);font-size:13px;cursor:text}.srpaste:focus{border-color:var(--accent);outline:none;color:var(--accent)}
 @media (max-width:620px){.srstage{aspect-ratio:4/3}.srnow{padding:18px 16px}.srrate button{padding:6px 7px}.srpico{width:22px;height:22px}.sri{width:12px;height:12px}}
 .srstage.norec{aspect-ratio:auto;height:280px}
@@ -8129,20 +8136,26 @@ function srKind(f){if(f.kind&&SR_ICON[f.kind])return f.kind;const x=String(f.tex
   if(c==="ownership")return "ownership";
   if(/tone|composure|empathy/.test(c))return f.tone==="bad"?"friction":"tone";
   return f.tone==="bad"?"friction":"info"}
-const SR_PAD=12;
+const SR_PAD=20;
 function srClips(d){const dur=srDur(d),F=((d.audit||{}).findings||[]).map(f=>+f.t).filter(t=>!isNaN(t)).sort((a,b)=>a-b),o=[];
   if(d.media&&Array.isArray(d.media.clips)&&d.media.clips.length)return d.media.clips.map(c=>({s:+c[0],e:+c[1]}));
   for(const t of F){const s=Math.max(0,t-SR_PAD),e=Math.min(dur,t+SR_PAD);if(o.length&&s<=o[o.length-1].e+4)o[o.length-1].e=Math.max(o[o.length-1].e,e);else o.push({s,e})}return o}
 const srDur=d=>Math.max(1,Number(d.dur)||0,...(d.lines||[]).map(l=>+l.e||0),...((d.audit||{}).findings||[]).map(f=>(+f.t||0)+SR_PAD),...(((d.media||{}).clips)||[]).map(c=>+c[1]||0));
 /* activity per second: speech (0-1) plus a little for on-screen actions, smoothed */
+function srCuts(d){const L=(d.lines||[]).filter(l=>+l.e>+l.t).slice().sort((a,b)=>a.t-b.t),o=[];
+  for(let i=1;i<L.length;i++){const a=L[i-1],b=L[i];if((a.who==="agent")===(b.who==="agent"))continue;if(+b.t-+a.e>0.2)continue;if(/[.?!…]["')\]]?\s*$/.test(String(a.txt||"")))continue;o.push({t:+b.t,by:b.who==="agent"?"agent":"caller"})}return o}
 function srCurve(d){const dur=Math.ceil(srDur(d)),v=new Float32Array(dur+1);
   for(const l of d.lines||[]){const s=Math.max(0,+l.t||0),e=Math.min(dur,+l.e||s);for(let i=Math.floor(s);i<=Math.floor(e);i++)v[i]+=Math.max(0,Math.min(i+1,e)-Math.max(i,s))*(l.who==="agent"?.85:.75)}
   for(const s of d.screen||[])if(s.k==="click"||s.k==="type"||s.k==="dblclick"){const i=Math.min(dur,Math.floor(+s.t||0));v[i]+=.35}
   const k=[.06,.12,.2,.24,.2,.12,.06],o=new Float32Array(dur+1);for(let i=0;i<=dur;i++){let a=0;for(let j=-3;j<=3;j++){const q=i+j;if(q>=0&&q<=dur)a+=Math.min(1.3,v[q])*k[j+3]}o[i]=a}return o}
-let srP={id:"",t:0,playing:false,rate:1,hl:true,raf:0,last:0,media:null};
+let srP={id:"",t:0,playing:false,rate:1,hl:true,raf:0,last:0,media:null,big:false,zoom:1,fx:.5,fy:.5};
 function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.audit||{}).findings||[]).slice().sort((a,b)=>a.t-b.t);
   const W=1000,H=64,x=t=>(t/dur)*W,mx=Math.max(.6,...C);
-  let p=`M0 ${H}`;for(let i=0;i<C.length;i+=1)p+=` L${x(i).toFixed(1)} ${(H-2-(H-6)*(C[i]/mx)).toFixed(1)}`;p+=` L${W} ${H} Z`;
+  /* who is talking: the agent's lines above the middle, everyone else below. A cut-in is a change of speaker with no gap (≤0.2 s)
+     while the other side's line was unfinished: the closest the captions get to talk-over, since one mono track has no overlap of its own */
+  const L=(d.lines||[]).filter(l=>+l.e>+l.t),mid=H/2,lane=l=>l.who==="agent"?`<rect x="${x(+l.t).toFixed(1)}" y="5" width="${Math.max(1.5,x(+l.e)-x(+l.t)).toFixed(1)}" height="${(mid-7).toFixed(1)}" rx="1.5" class="srta"/>`:`<rect x="${x(+l.t).toFixed(1)}" y="${(mid+2).toFixed(1)}" width="${Math.max(1.5,x(+l.e)-x(+l.t)).toFixed(1)}" height="${(mid-7).toFixed(1)}" rx="1.5" class="srtc"/>`;
+  const cuts=srCuts(d);
+  const p="";const talk=L.map(lane).join("")+`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="srmid"/>`+cuts.map(c=>`<rect x="${(x(c.t)-3).toFixed(1)}" y="1" width="6" height="${H-4}" class="srcut"><title>${esc(srT(c.t)+" · "+(c.by==="agent"?"agent cut in":"caller cut in"))}</title></rect>`).join("");
   const sil=(d.silences||[]).filter(s=>+s[1]>=10).map(s=>`<rect x="${x(+s[0]).toFixed(1)}" y="${H-3}" width="${Math.max(2,x(+s[1])).toFixed(1)}" height="3" class="srsil"/>`).join("");
   const step=dur>900?120:dur>360?60:30,ticks=[];for(let t=0;t<=dur;t+=step)ticks.push(t);
   /* icons: two rows when they crowd */
@@ -8150,8 +8163,8 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
     return `<button type="button" class="srpin k-${k} t-${esc(f.tone||"note")} r${row}" style="left:${px.toFixed(2)}%" data-srseek="${f.t}" aria-label="${esc(srT(f.t)+" "+SR_KL[k]+": "+f.text)}"><span class="srpico">${srSvgI(k)}</span><span class="srtip"><b>${esc(srT(f.t))} · ${esc(SR_KL[k])}</b>${esc(f.text)}</span></button>`}).join("");
   const kinds=SR_KO.filter(k=>F.some(f=>srKind(f)===k));
   const hasMedia=!!(d.media&&d.media.asset);
-  return `<section class="srplay" id="srPlay" data-id="${esc(d.id)}" data-dur="${dur}">
-    <div class="srstage${hasMedia?"":" norec"}" id="srStage"><div class="srnow" id="srNow"></div><div class="srrep" id="srRep" hidden></div>${hasMedia?"":`<span class="srnorec">No recording loaded</span>`}</div>
+  return `<section class="srplay${srP.big?" big":""}" id="srPlay" data-id="${esc(d.id)}" data-dur="${dur}">
+    <div class="srstage${hasMedia?"":" norec"}${srP.zoom>1?" zoomed":""}" id="srStage" title="${hasMedia?(srP.zoom>1?"Click to fit":"Click to zoom in"):""}"><div class="srnow" id="srNow"></div><div class="srrep" id="srRep" hidden></div>${hasMedia?"":`<span class="srnorec">No recording loaded</span>`}</div>
     <div class="srctl">
       <button type="button" class="srbtn srpp" id="srPP" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg></button>
       <span class="num srclock"><b id="srClock">0:00</b> / ${srT(dur)}</span>
@@ -8160,19 +8173,21 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
       <span class="srsp"></span>
       <button type="button" class="srtog" id="srHL" aria-pressed="${srP.hl}">Highlights only</button>
       <div class="srrate" role="group" aria-label="Speed">${[1,1.5,2].map(r=>`<button type="button" data-srrate="${r}" aria-pressed="${srP.rate===r}">${r}×</button>`).join("")}</div>
+      ${hasMedia?`<div class="srrate" role="group" aria-label="Zoom">${[1,2,3].map(z=>`<button type="button" data-srzoom="${z}" aria-pressed="${srP.zoom===z}">${z===1?"Fit":z+"×"}</button>`).join("")}</div>
+      <button type="button" class="srbtn srbig" id="srBig" aria-pressed="${srP.big}" aria-label="${srP.big?"Close the big view":"Expand"}">${srP.big?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}</button>`:""}
     </div>
     <div class="srtrack" id="srTrack">
       <div class="srpins">${ic}</div>
       <div class="srcurvew" data-srbar="1">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="srcurve" aria-hidden="true">
           ${clips.map(c=>`<rect x="${x(c.s).toFixed(1)}" y="0" width="${(x(c.e)-x(c.s)).toFixed(1)}" height="${H}" class="srclip"/>`).join("")}
-          <path d="${p}" class="srarea"/>${sil}
+          ${talk}${sil}
         </svg>
         <div class="srhead" id="srHead"></div><div class="srhover" id="srHover" hidden></div>
       </div>
       <div class="srticks">${ticks.map(t=>`<span style="left:${(t/dur*100).toFixed(2)}%">${t>=60?Math.round(t/60)+"m":t+"s"}</span>`).join("")}</div>
     </div>
-    <ul class="srkeys">${kinds.map(k=>`<li class="k-${k}">${srSvgI(k)}${SR_KL[k]}</li>`).join("")}<li class="srkclip"><i></i>Highlight clip</li><li class="srksil"><i></i>Dead air 10 s+</li></ul>
+    <ul class="srkeys">${kinds.map(k=>`<li class="k-${k}">${srSvgI(k)}${SR_KL[k]}</li>`).join("")}<li class="srkta"><i></i>Agent talking</li><li class="srktc"><i></i>Caller talking</li><li class="srkcut"><i></i>Cut-in${cuts.length?` <b class="num">${cuts.length}</b>`:""}</li><li class="srkclip"><i></i>Highlight clip</li><li class="srksil"><i></i>Dead air 10 s+</li></ul>
   </section>`}
 /* the "now" view when there is no recording: the caption being spoken and the last thing done on screen */
 function srNowHtml(d,t){const L=d.lines||[],S=d.screen||[],F=(d.audit||{}).findings||[];
@@ -8233,8 +8248,20 @@ function srMakeRep(M){const R=srQ("#srRep");if(!window.rrweb||!R||(M.events||[])
 function srMediaDrop(){const M=srP.media;if(!M)return;try{M.src&&M.src.stop()}catch(e){}try{M.rep&&M.rep.pause()}catch(e){}try{M.ctx&&M.ctx.close()}catch(e){}srP.media=null}
 function srFit(){const M=srP.media;if(!M||!M.rep)return;const st=srQ("#srStage"),w=M.rep.wrapper,ifr=M.rep.iframe;if(!st||!w||!ifr)return;
   const iw=+ifr.width||ifr.offsetWidth||1280,ih=+ifr.height||ifr.offsetHeight||720,sw=st.clientWidth,sh=st.clientHeight,k=Math.min(sw/iw,sh/ih);
-  w.style.transform=`scale(${k})`;w.style.transformOrigin="0 0";w.style.position="absolute";w.style.left=((sw-iw*k)/2)+"px";w.style.top=((sh-ih*k)/2)+"px"}
+  const z=srP.zoom||1,kk=k*z;let L=(sw-iw*kk)/2,T=(sh-ih*kk)/2;
+  if(z>1){L=Math.min(0,Math.max(sw-iw*kk,sw/2-srP.fx*iw*kk));T=Math.min(0,Math.max(sh-ih*kk,sh/2-srP.fy*ih*kk));if(ih*kk<sh)T=(sh-ih*kk)/2}
+  /* whole-pixel offsets: a fractional left/top is what made the paused frame look soft */
+  w.style.transform=`scale(${kk})`;w.style.transformOrigin="0 0";w.style.position="absolute";w.style.left=Math.round(L)+"px";w.style.top=Math.round(T)+"px";w.style.willChange="auto"}
+
 window.addEventListener("resize",()=>srFit());
+/* zoom and the big view change classes in place: the replay iframe is never moved, so playback keeps going */
+function srZoomPaint(){const st=srQ("#srStage");if(st){st.classList.toggle("zoomed",srP.zoom>1);st.title=srP.zoom>1?"Click to fit":"Click to zoom in"}
+  document.querySelectorAll("#srPlay [data-srzoom]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.srzoom===srP.zoom)));srFit()}
+function srSetBig(on){srP.big=on;const P=srQ("#srPlay");if(!P)return;P.classList.toggle("big",on);document.documentElement.classList.toggle("srbigon",on);
+  const b=srQ("#srBig");if(b){b.setAttribute("aria-pressed",String(on));b.setAttribute("aria-label",on?"Close the big view":"Expand");
+    b.innerHTML=on?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}
+  requestAnimationFrame(()=>srFit())}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&srP.big){srSetBig(false)}});
 /* after a re-render, put the live replay node back so a db update doesn't kill playback */
 function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=0}
   const M=srP.media;if(M&&M.id===d.id&&M.ready&&M.node&&srQ("#srRep")!==M.node){srMakeRep(M);srMediaSync(srP.playing)}
@@ -8242,6 +8269,11 @@ function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=
 function srBarT(e){const b=e.target.closest("[data-srbar]")||srQ("#srPlay [data-srbar]");const r=b.getBoundingClientRect(),d=srDoc();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*srDur(d)}
 document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#srPlay"))return;
   if(e.target.closest("#srPP")){srP.playing?srPause():srPlay();return}
+  if(e.target.closest("#srBig")){srSetBig(!srP.big);return}
+  const zb=e.target.closest("[data-srzoom]");if(zb){srP.zoom=+zb.dataset.srzoom;if(srP.zoom===1){srP.fx=srP.fy=.5}srZoomPaint();return}
+  const stg=e.target.closest("#srStage");if(stg&&srP.media&&srP.media.rep){const M=srP.media,w=M.rep.wrapper,ifr=M.rep.iframe,r=w.getBoundingClientRect();
+    if(srP.zoom>1){srP.zoom=1;srP.fx=srP.fy=.5}else if(r.width&&r.height){srP.fx=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));srP.fy=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));srP.zoom=2}
+    srZoomPaint();return}
   const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srP.pick=t;srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);srMomScroll(t);return}
   const st=e.target.closest("[data-srstep]");if(st){const d=srDoc(),F=((d.audit||{}).findings||[]).map(f=>+f.t).sort((a,b)=>a-b),dir=+st.dataset.srstep;const n=dir>0?F.find(t=>t>srP.t+1):F.slice().reverse().find(t=>t<srP.t-5);if(n!=null)srSeek(Math.max(0,n-4),srP.playing);return}
   const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=srQ("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}

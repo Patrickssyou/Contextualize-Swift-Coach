@@ -63,6 +63,17 @@ const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
  await page.evaluate(()=>renderSR());await page.waitForTimeout(500);const r=await page.evaluate(()=>({t:srP.t,src:!!(srP.media&&srP.media.src),h:document.querySelector('#srRep iframe').contentDocument.body.innerText.slice(0,60)}));
  ok(r.t>4&&r.src,'plays audio clip and replay ('+r.t.toFixed(1)+')');console.log('   replay text:',r.h.replace(/\n/g,' | '));
  await page.screenshot({path:S+'/sr/t/p_rec.png'});
+ await page.click('#srPP');
+ const box0=await page.evaluate(()=>document.querySelector('#srStage').getBoundingClientRect().width);
+ await page.click('#srBig');await page.waitForTimeout(300);
+ const big=await page.evaluate(()=>({big:srP.big,w:document.querySelector('#srStage').getBoundingClientRect().width,ifr:document.querySelector('#srRep iframe').isConnected}));
+ ok(big.big&&big.w>box0&&big.ifr,'expand makes the screen bigger, replay kept '+JSON.stringify({box0,big}));
+ await page.screenshot({path:S+'/sr/t/p_big.png'});
+ const st=await page.$('#srStage');const bb=await st.boundingBox();await page.mouse.click(bb.x+bb.width*.25,bb.y+bb.height*.3);await page.waitForTimeout(200);
+ const z=await page.evaluate(()=>({zoom:srP.zoom,tr:srP.media.rep.wrapper.style.transform,left:srP.media.rep.wrapper.style.left}));
+ ok(z.zoom===2&&/^-?\d+px$/.test(z.left),'click zooms in at the spot, whole-pixel offset '+JSON.stringify(z));
+ await page.screenshot({path:S+'/sr/t/p_zoom.png'});
+ await page.keyboard.press('Escape');await page.waitForTimeout(200);ok(!(await page.evaluate(()=>srP.big)),'Esc closes the big view');
  await page.waitForTimeout(8000);ok(!(await page.evaluate(()=>srP.playing)),'stops at the end of the last clip');
  }
  ok(errors.length===0,vp.width+': no errors '+errors.slice(0,3).join(' / '));await ctx.close()}
