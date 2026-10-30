@@ -48,3 +48,7 @@ Those 10 were regraded on v5 as a case (audited call + follow-ups). The audited-
 ## Audio sync fix (Oct 30)
 
 GreenDot's call audio file starts at the call start (ring and hold music included, ~4 s on most calls, up to 109 s), while captions and the screen recording start at `audio_start_utc`. Until desk v102 the audio was played from the file start, so it ran ahead of the screen. The extract and clip scripts now skip that lead-in; a residual ~1.2 s (measured on four calls, the same on each) is corrected in the player. Voice measures (pitch, dead air, talk time) were re-measured on all 48 calls. The audits' holds and pauses came from caption times and screen activity, so no grade changed.
+
+## Teaching clips (Oct 30)
+
+In a call's recording, Teach → drag across the timeline → pick the scorecard row, "Done well" or "Done badly", and why. The clip is saved in `callLessons` (`kind: "clip"`, with the transcript and screen actions of that stretch as `excerpt`) and goes into every later call grade as a worked example. A blind regrade of the same call leaves its own clips out (matched on `queueId`), like every other lesson.

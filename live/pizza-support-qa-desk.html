@@ -1755,6 +1755,16 @@ html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;
 .srcurve{position:absolute;inset:0;width:100%;height:100%}
 .srta{fill:#7c3aed;shape-rendering:crispEdges}.srtc{fill:#f08a24;shape-rendering:crispEdges}.srto{fill:#9aa0a6;shape-rendering:crispEdges}.srmid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
 .srlegrow{background:color-mix(in srgb,#7c3aed 10%,transparent);border-top:2px solid #7c3aed}.srlegrow b{color:#6d28d9}
+.srtcb{position:absolute;left:0;right:0;bottom:-12px;height:12px;pointer-events:none}.srtcband{position:absolute;height:5px;border:0;padding:0;border-radius:3px;cursor:pointer;pointer-events:auto}
+.srtcband.t-good{background:#0f7b4a}.srtcband.t-bad{background:#c2410c}
+.srtcsel{position:absolute;top:0;bottom:0;background:color-mix(in srgb,#7c3aed 22%,transparent);border:1px dashed #7c3aed;font-size:10.5px;color:#6d28d9;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:2}
+.srcurvew.tcmode{cursor:crosshair}.srtcbtn[aria-pressed="true"]{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.srteach{padding:14px 12px 0}.srteach:empty{display:none}.srtchd{display:flex;gap:6px;align-items:baseline;margin-bottom:6px}
+.srtcform{display:grid;grid-template-columns:auto minmax(140px,220px) auto minmax(0,1fr) auto auto;gap:8px;align-items:center;margin-bottom:8px}.srtcform textarea{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;resize:vertical;background:var(--bg);color:var(--ink)}
+.srtcform select{border:1px solid var(--line);border-radius:8px;padding:5px 6px;background:var(--bg);color:var(--ink)}
+.srtclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}.srtclist li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:baseline;font-size:13px;padding:4px 6px;border-left:3px solid #0f7b4a;background:var(--soft);border-radius:4px}.srtclist li.t-bad{border-left-color:#c2410c}
+.srtctone{font-size:11px;font-weight:600;color:var(--muted)}.srtchint{margin:0 0 8px}
+@media (max-width:700px){.srtcform{grid-template-columns:1fr 1fr}.srtcform textarea{grid-column:1/-1}}
 .srleg{stroke:#7c3aed;stroke-width:2;vector-effect:non-scaling-stroke}.srlegl{position:absolute;top:-2px;transform:translateX(4px);font-size:10.5px;font-weight:600;color:#6d28d9;background:var(--panel,#fff);padding:0 4px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:1}
 .srsave{fill:#0f7b4a;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke}.srpost{fill:color-mix(in srgb,var(--ink) 7%,transparent)}.srhang{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
 .srksave i{background:#0f7b4a}.srkpost i{background:color-mix(in srgb,var(--ink) 14%,transparent)}
@@ -3011,7 +3021,8 @@ function lessonV4(l,kind){const old=l&&l.crit;if(!old||l.rubric===RUBRIC_V4_ID)r
   const wasV2=V2_ONLY.includes(old)||(!v3Row(old)&&!!RUBRIC_MAP[kind==="call"?"call":"chat"][old]);
   const mk=v=>!wasV2||v==null||v===""||typeof v!=="number"&&!/^\d+(\.\d+)?$/.test(String(v))?v:`${v}/3`;
   return Object.assign({},l,{crit:id,label:r.label+(l.label&&l.label!==r.label?` (was ${l.label})`:""),from:mk(l.from),to:mk(l.to),oldCrit:old})}
-function callLessonLines(ls){return (ls||[]).slice(0,20).map(l=>lessonV4(l,"call")).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.crit&&l.label?` (${l.crit})`:""}`,why=l.note||l.reason;
+function callLessonLines(ls){return (ls||[]).slice(0,24).map(l=>l.kind==="clip"?l:lessonV4(l,"call")).map(l=>{const c=`${l.label||l.crit||"Finding"}${l.crit&&l.label?` (${l.crit})`:""}`,why=l.note||l.reason;
+  if(l.kind==="clip")return `- ${c}: a clip the QA team marked as ${l.tone==="bad"?"DONE BADLY":"DONE WELL"} for this row (another call, ${srT(+l.s||0)}-${srT(+l.e||0)}): "${capText(l.excerpt||"",420)}". Why: ${capText(why||"",300)}`;
   if(l.kind==="reinforce")return `- ${c}: the coach gave ${l.from??l.to} and that mark is right, but the reasoning was off${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}. The right reason: ${capText(why||"",300)}`;
   if(l.kind==="contest")return `- ${c}: the coach gave ${l.from}, the QA lead says ${l.to}${why?`. Why: ${capText(why,300)}`:"."}${l.what?` (coach's reason: "${capText(l.what,160)}")`:""}`;
   return `- ${c}: the coach said "${capText(l.what||"",200)}"; the QA lead marked it not a mistake${why?`: ${capText(why,200)}`:"."}`}).join("\n")}
@@ -8149,6 +8160,45 @@ const srDur=d=>Math.max(1,Number(d.dur)||0,...(d.screen||[]).filter(x=>x.k==="cl
 /* screen saves: the order, a remark, a WIRA task. They often come after hang-up, so they mark the timeline even with no finding there */
 const SR_SAVE=/save|submit|create|remark|ticket|task|confirm|update|send|note/i;
 function srSaves(d){return (d.screen||[]).filter(x=>(x.k==="click"||x.k==="dblclick")&&SR_SAVE.test(String(x.l||""))).map(x=>({t:+x.t,l:String(x.l||"").replace(/^(save_alt|chat|add_task|arrow_drop_down)\s*/,"").slice(0,60)||"Saved"}))}
+/* ---------- teaching clips: a grader drags across the timeline, tags a scorecard row and says why. Saved as a call lesson
+   (callLessons, kind "clip") so it feeds every later call grade; a blind regrade of this same call leaves it out (queueId). ---------- */
+let tcDocs=[],tcOff=null,tcDrag=null,tcSwallow=false;
+function tcListen(){if(!db||tcOff)return;tcOff=db.collection(CL_ROOT).onSnapshot(s=>{tcDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).filter(x=>x.kind==="clip");tcPaint()},()=>{})}
+const tcFor=d=>(tcDocs||[]).filter(x=>d&&String(x.queueId)===String(d.id)).sort((a,b)=>a.s-b.s);
+const tcRows=()=>RUBRIC_V4.filter(r=>r.kind!=="chat");
+function tcBandsHtml(d){const dur=srDur(d),L=tcFor(d);return L.map((c,i)=>`<button type="button" class="srtcband t-${c.tone==="good"?"good":"bad"}" style="left:${(c.s/dur*100).toFixed(2)}%;width:${Math.max(.6,(c.e-c.s)/dur*100).toFixed(2)}%;top:${(i%2)*6}px" data-tcplay="${esc(c.id)}" title="${esc(srT(c.s)+"–"+srT(c.e)+" · "+(c.label||c.crit)+" · "+(c.reason||""))}"></button>`).join("")}
+function tcExcerpt(d,s,e){const who=l=>l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller";
+  const L=(d.lines||[]).filter(l=>+l.e>=s&&+l.t<=e).map(l=>`${who(l)}: ${l.txt}`),S=(d.screen||[]).filter(x=>+x.t>=s&&+x.t<=e&&(x.k==="click"||x.k==="type"||x.k==="panel")).map(x=>`[screen] ${x.k==="type"?"types in "+x.l:x.l}`);
+  return [...L,...S].join(" | ").slice(0,900)}
+function tcPanelHtml(d){const L=tcFor(d),sel=srP.tcSel,canW=!!db&&amOwner!==undefined;
+  const form=sel?`<form class="srtcform" id="srTcForm"><b class="num">${srT(sel.s)}–${srT(sel.e)}</b>
+    <select id="srTcCrit" aria-label="Scorecard row">${tcRows().map(r=>`<option value="${esc(r.id)}">${esc(r.label)}</option>`).join("")}</select>
+    <div class="srrate" role="group" aria-label="Example"><button type="button" data-tctone="good" aria-pressed="${sel.tone!=="bad"}">Done well</button><button type="button" data-tctone="bad" aria-pressed="${sel.tone==="bad"}">Done badly</button></div>
+    <textarea id="srTcWhy" rows="2" placeholder="Why"></textarea>
+    <button type="button" class="btn primary small" id="srTcSave">Save</button><button type="button" class="btn small" id="srTcCancel">Cancel</button><span class="hint" id="srTcMsg"></span></form>`
+    :srP.tc?`<p class="hint srtchint">Drag across the timeline to mark a stretch.</p>`:"";
+  const list=L.length?`<ol class="srtclist">${L.map(c=>`<li class="t-${c.tone==="good"?"good":"bad"}"><button type="button" class="lg-t num srlt" data-tcplay="${esc(c.id)}">${srT(c.s)}–${srT(c.e)}</button><span><b>${esc(c.label||c.crit)}</b> <span class="srtctone">${c.tone==="good"?"Done well":"Done badly"}</span> ${esc(c.reason||"")} <span class="hint">· ${esc(cbName(c.by)||"")}</span></span>${c.by===myId||amOwner?`<button type="button" class="btn small" data-tcdel="${esc(c.id)}">Delete</button>`:""}</li>`).join("")}</ol>`:"";
+  return (form||list)?`<div class="srtchd"><span class="lbl-sm">Teaching clips</span><span class="hint num">${L.length||""}</span></div>${form}${list}`:""}
+function tcPaint(){const d=srDoc();if(!d)return;const b=srQ("#srTcBands");if(b)b.innerHTML=tcBandsHtml(d);const p=srQ("#srTeach");if(p)p.innerHTML=tcPanelHtml(d);const m=srQ("#srTcMode");if(m)m.setAttribute("aria-pressed",String(!!srP.tc));
+  const w=srQ("#srPlay .srcurvew");if(w)w.classList.toggle("tcmode",!!srP.tc)}
+async function tcSave(){const d=srDoc(),sel=srP.tcSel;if(!db||!d||!sel)return;const crit=$("#srTcCrit").value,why=$("#srTcWhy").value.trim(),r=tcRows().find(x=>x.id===crit)||{};
+  if(!why){$("#srTcMsg").textContent="Say why.";return}
+  const q=(queueAll||[]).find(x=>x.id===d.id)||{},id="clip_"+d.id.slice(3,11)+"_"+Math.round(sel.s*10)+"_"+Date.now().toString(36);
+  const doc={kind:"clip",crit,label:r.label||crit,tone:sel.tone==="bad"?"bad":"good",s:+sel.s.toFixed(1),e:+sel.e.toFixed(1),reason:why,excerpt:tcExcerpt(d,sel.s,sel.e),
+    queueId:d.id,callId:d.callId||"",sa:d.sa||"",week:q.week||"",at:new Date().toISOString(),by:myId||null};
+  try{await db.doc(CL_ROOT+"/"+id).set(doc);srP.tcSel=null;toast("Clip saved. Claude learns from it on the next grades.");tcPaint()}catch(e){$("#srTcMsg").textContent="Couldn't save: "+String(e&&e.code||e).slice(0,60)}}
+document.addEventListener("pointerdown",e=>{if(!srP.tc)return;const b=e.target.closest&&e.target.closest("#srPlay [data-srbar]");if(!b||e.target.closest("[data-tcplay]"))return;
+  e.preventDefault();tcDrag={t0:srBarT(e),t1:srBarT(e)};try{b.setPointerCapture(e.pointerId)}catch(_){}});
+document.addEventListener("pointermove",e=>{if(!tcDrag)return;tcDrag.t1=srBarT(e);const d=srDoc(),dur=srDur(d),el=srQ("#srTcSel");if(!el)return;const a=Math.min(tcDrag.t0,tcDrag.t1),z=Math.max(tcDrag.t0,tcDrag.t1);
+  el.hidden=false;el.style.left=(a/dur*100)+"%";el.style.width=((z-a)/dur*100)+"%";el.textContent=srT(a)+"–"+srT(z)});
+document.addEventListener("pointerup",()=>{if(!tcDrag)return;const a=Math.min(tcDrag.t0,tcDrag.t1),z=Math.max(tcDrag.t0,tcDrag.t1);tcDrag=null;tcSwallow=true;setTimeout(()=>{tcSwallow=false},50);
+  const el=srQ("#srTcSel");if(el)el.hidden=true;if(z-a<1)return;srP.tcSel={s:a,e:z,tone:"good"};tcPaint();const w=$("#srTcWhy");if(w)w.focus()});
+document.addEventListener("click",async e=>{if(!e.target.closest||!e.target.closest("#srPlay"))return;
+  if(e.target.closest("#srTcMode")){srP.tc=!srP.tc;if(!srP.tc)srP.tcSel=null;tcListen();tcPaint();return}
+  const tn=e.target.closest("[data-tctone]");if(tn&&srP.tcSel){srP.tcSel.tone=tn.dataset.tctone;document.querySelectorAll("#srTcForm [data-tctone]").forEach(b=>b.setAttribute("aria-pressed",String(b===tn)));return}
+  if(e.target.closest("#srTcSave")){tcSave();return}if(e.target.closest("#srTcCancel")){srP.tcSel=null;tcPaint();return}
+  const pl=e.target.closest("[data-tcplay]");if(pl){const c=tcDocs.find(x=>x.id===pl.dataset.tcplay);if(c)srSeek(c.s,true);return}
+  const dl=e.target.closest("[data-tcdel]");if(dl){if(dl.dataset.arm!=="1"){dl.dataset.arm="1";dl.textContent="Confirm";return}try{await db.doc(CL_ROOT+"/"+dl.dataset.tcdel).delete()}catch(_){toast("Couldn't delete it.")}return}},true);
 function srCuts(d){const L=(d.lines||[]).filter(l=>+l.e>+l.t).slice().sort((a,b)=>a.t-b.t),o=[];
   for(let i=1;i<L.length;i++){const a=L[i-1],b=L[i];if((a.who==="agent")===(b.who==="agent"))continue;if(+b.t-+a.e>0.2)continue;if(/[.?!…]["')\]]?\s*$/.test(String(a.txt||"")))continue;o.push({t:+b.t,by:b.who==="agent"?"agent":"caller"})}return o}
 function srCurve(d){const dur=Math.ceil(srDur(d)),v=new Float32Array(dur+1);
@@ -8185,6 +8235,7 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
       <span class="srsp"></span>
       <button type="button" class="srtog" id="srHL" aria-pressed="${srP.hl}">Highlights only</button>
       <div class="srrate" role="group" aria-label="Speed">${[1,1.5,2].map(r=>`<button type="button" data-srrate="${r}" aria-pressed="${srP.rate===r}">${r}×</button>`).join("")}</div>
+      <button type="button" class="srtog srtcbtn" id="srTcMode" aria-pressed="${!!srP.tc}">Teach</button>
       ${hasMedia?`<div class="srrate" role="group" aria-label="Zoom">${[1,2,3].map(z=>`<button type="button" data-srzoom="${z}" aria-pressed="${srP.zoom===z}">${z===1?"Fit":z+"×"}</button>`).join("")}</div>
       <button type="button" class="srbtn srbig" id="srBig" aria-pressed="${srP.big}" aria-label="${srP.big?"Close the big view":"Expand"}">${srP.big?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}</button>`:""}
     </div>
@@ -8196,10 +8247,12 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
           ${talk}${sil}
         </svg>
         ${LG.map((l,i)=>`<span class="srlegl" style="left:${(x(+l.off)/W*100).toFixed(2)}%">${esc(String(l.label||("Leg "+(i+2))).split(" · ")[0])}</span>`).join("")}
+        <div class="srtcb" id="srTcBands">${tcBandsHtml(d)}</div><div class="srtcsel" id="srTcSel" hidden></div>
         <div class="srhead" id="srHead"></div><div class="srhover" id="srHover" hidden></div>
       </div>
       <div class="srticks">${ticks.map(t=>`<span style="left:${(t/dur*100).toFixed(2)}%">${t>=60?Math.round(t/60)+"m":t+"s"}</span>`).join("")}</div>
     </div>
+    <div class="srteach" id="srTeach">${tcPanelHtml(d)}</div>
     <ul class="srkeys">${kinds.map(k=>`<li class="k-${k}">${srSvgI(k)}${SR_KL[k]}</li>`).join("")}<li class="srkta"><i></i>Tarro</li><li class="srktc"><i></i>Caller</li><li class="srkcut"><i></i>Cut-in${cuts.length?` <b class="num">${cuts.length}</b>`:""}</li>${saves.length?`<li class="srksave"><i></i>Saved on screen</li>`:""}${past?`<li class="srkpost"><i></i>After hang-up</li>`:""}<li class="srkclip"><i></i>Highlight clip</li><li class="srksil"><i></i>Dead air 10 s+</li></ul>
   </section>`}
 /* the "now" view when there is no recording: the caption being spoken and the last thing done on screen */
@@ -8285,7 +8338,7 @@ document.addEventListener("pointermove",e=>{if(!srDrag)return;const dx=e.clientX
   srP.fx=Math.max(0,Math.min(1,srDrag.fx-dx/srDrag.w));srP.fy=Math.max(0,Math.min(1,srDrag.fy-dy/srDrag.h));srFit()});
 document.addEventListener("pointerup",()=>{const st=srQ("#srStage");if(st)st.classList.remove("dragging");if(srDrag&&!srDrag.moved)srDrag=null});
 /* after a re-render, put the live replay node back so a db update doesn't kill playback */
-function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=0}
+function srMount(d){tcListen();if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=0;srP.tcSel=null}
   const M=srP.media;if(M&&M.id===d.id&&M.ready&&M.node&&srQ("#srRep")!==M.node){srMakeRep(M);srMediaSync(srP.playing)}
   if(d.media&&d.media.asset)srLoadMedia(d);srPaint();srFit()}
 function srBarT(e){const b=e.target.closest("[data-srbar]")||srQ("#srPlay [data-srbar]");const r=b.getBoundingClientRect(),d=srDoc();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*srDur(d)}
@@ -8300,7 +8353,7 @@ document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#
   const st=e.target.closest("[data-srstep]");if(st){const d=srDoc(),F=((d.audit||{}).findings||[]).map(f=>+f.t).sort((a,b)=>a-b),dir=+st.dataset.srstep;const n=dir>0?F.find(t=>t>srP.t+1):F.slice().reverse().find(t=>t<srP.t-5);if(n!=null)srSeek(Math.max(0,n-4),srP.playing);return}
   const hl=e.target.closest("#srHL");if(hl){srP.hl=!srP.hl;hl.setAttribute("aria-pressed",srP.hl);const g=srQ("#srLog");if(g)g.classList.toggle("hlon",srP.hl);return}
   const rt=e.target.closest("[data-srrate]");if(rt){srP.rate=+rt.dataset.srrate;srRoot().querySelectorAll("#srPlay [data-srrate]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.srrate===srP.rate));srMediaSync(srP.playing);return}
-  if(e.target.closest("[data-srbar]")){srSeek(srBarT(e),false);return}});
+  if(e.target.closest("[data-srbar]")){if(tcSwallow||srP.tc)return;srSeek(srBarT(e),false);return}});
 document.addEventListener("mousemove",e=>{const b=e.target.closest&&e.target.closest("#srPlay [data-srbar]"),h=srQ("#srHover");if(!h)return;if(!b){h.hidden=true;return}const r=b.getBoundingClientRect(),f=(e.clientX-r.left)/r.width;h.hidden=false;h.style.left=(f*100)+"%";h.textContent=srT(f*srDur(srDoc()))});
 document.addEventListener("keydown",e=>{if((tab!=="sr"&&tab!=="chat")||!srQ("#srPlay")||/input|textarea|select/i.test((e.target.tagName||"")))return;if(e.key===" "&&!e.target.closest("button")){e.preventDefault();srP.playing?srPause():srPlay()}
   else if(e.key==="ArrowRight")srSeek(srP.t+5,false);else if(e.key==="ArrowLeft")srSeek(srP.t-5,false)});

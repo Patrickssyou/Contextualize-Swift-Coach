@@ -78,6 +78,15 @@ const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
  const f1=await page.evaluate(()=>({fx:srP.fx,left:srP.media.rep.wrapper.style.left,zoom:srP.zoom}));
  ok(f1.zoom===2&&f1.fx>f0[0]&&f1.left!==f0[2],'drag pans while zoomed, stays zoomed '+JSON.stringify({f0,f1}));
  await page.keyboard.press('Escape');await page.waitForTimeout(200);ok(!(await page.evaluate(()=>srP.big)),'Esc closes the big view');
+ /* teaching clip: Teach, drag across the timeline, tag a row, say why, save */
+ await page.click('#srTcMode');const cv=await (await page.$('#srPlay .srcurvew')).boundingBox();
+ await page.mouse.move(cv.x+cv.width*.1,cv.y+cv.height*.5);await page.mouse.down();await page.mouse.move(cv.x+cv.width*.2,cv.y+cv.height*.5,{steps:5});await page.mouse.up();await page.waitForTimeout(200);
+ const sel=await page.evaluate(()=>srP.tcSel&&{s:+srP.tcSel.s.toFixed(0),e:+srP.tcSel.e.toFixed(0),form:!!document.querySelector('#srTcForm')});
+ await page.selectOption('#srTcCrit','gathering');await page.click('[data-tctone="bad"]');await page.fill('#srTcWhy','Asked for the order number twice');await page.click('#srTcSave');await page.waitForTimeout(600);
+ const tc=await page.evaluate(()=>({n:tcDocs.length,band:document.querySelectorAll('#srTcBands .srtcband').length,list:document.querySelectorAll('.srtclist li').length,c:tcDocs[0]&&{crit:tcDocs[0].crit,tone:tcDocs[0].tone,ex:(tcDocs[0].excerpt||'').length>0,q:tcDocs[0].queueId}}));
+ ok(sel&&sel.form&&tc.n===1&&tc.band===1&&tc.c.crit==='gathering'&&tc.c.tone==='bad','teaching clip saved as a call lesson '+JSON.stringify({sel,tc}));
+ const ln=await page.evaluate(()=>callLessonLines(tcDocs));ok(/DONE BADLY/.test(ln)&&/order number twice/.test(ln),'clip reaches the grader prompt: '+ln.slice(0,120));
+ await page.click('#srTcMode');
  await page.waitForTimeout(8000);ok(!(await page.evaluate(()=>srP.playing)),'stops at the end of the last clip');
  }
  ok(errors.length===0,vp.width+': no errors '+errors.slice(0,3).join(' / '));await ctx.close()}
