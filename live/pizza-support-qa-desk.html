@@ -1630,7 +1630,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srcrit dt{font-weight:600}.srcrit dd{margin:0}
 .srgrade{margin:14px 0}
 .srgh{display:flex;align-items:center;gap:12px;margin:0 0 8px}.srgh h3{margin:0}.srgv{font-weight:600}.srgv.v-none,.srgv.v-{font-size:inherit}.srgh .btn{margin-left:auto}
-.srcoach{margin:14px 0;padding:16px}.srcoach h3{margin:0 0 10px;font-size:16px}.srcg{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:700px){.srcg{grid-template-columns:1fr}}
+.srcoach{margin:14px 0;padding:16px}.srcoach.top{margin:0;padding:0}.srcoach.in{margin:22px 0 0;padding:18px 0 0;border-top:1px solid var(--line,#e5e0da)}.srcoach h3{margin:0 0 10px;font-size:16px}.srcg{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:700px){.srcg{grid-template-columns:1fr}}
 .srcl{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}.srcl li{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:start}.srcl .srmc{display:block;font-size:12px;opacity:.7}.srgtop{display:flex;gap:6px 16px;align-items:baseline;flex-wrap:wrap;margin:4px 0 8px}.srgtop b{font-size:22px}
 /* rubric document */
 .rbwrap{display:flex;flex-direction:column;gap:14px;max-width:980px}
@@ -7655,7 +7655,7 @@ function cbTicketHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLo
   return `${band}<header class="tkhd"><span class="qnum tknum"><span>1</span></span><div class="tkttl"><span class="tkkind sechd">QA ticket</span><span class="tkid">Call · ${esc(it.title)}</span>${ctTicketHtml("call",it.key,true)}</div>
     <div class="tkverd"><span class="tkword v-${esc(v?v.id:"")}" id="tkWord">${esc(v?v.label:"Not agreed yet")}</span><span class="tkpct num" id="tkPct">${lk?fmt(lk.pct)+"%":""}</span>${cbClScoreHtml(it,"tkClaude","tkcl")}</div></header>
     <div class="tktabs" role="tablist" aria-label="QA ticket">${tab("ticket","Ticket")}${tab("tx","Transcript",`<span class="count num">${legs.length}</span>`)}</div>
-    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>${srAuditSec(it)}<section class="tksec tkev" id="tkEv">${cbEvidenceHtml(it)}</section></div>
+    <div class="tkbody" id="cbTkPan-ticket" role="tabpanel" aria-labelledby="cbTkTab-ticket"${cbTkTab==="ticket"?"":" hidden"}><dl class="tkgrid">${F.map(([k,v])=>`<div class="tkf"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl><section class="tksec tkev" id="tkEv">${cbEvidenceHtml(it)}</section>${srAuditSec(it)}</div>
     <div class="tkchat cbtxpan" id="cbTkPan-tx" role="tabpanel" aria-labelledby="cbTkTab-tx" tabindex="0"${cbTkTab==="tx"?"":" hidden"}>${cbTxHtml(q)}</div>`}
 /* "Claude's score 82.5%", or "Not graded yet" */
 function cbClScoreHtml(it,id,cls){const p=cbCGPct(it),C=cbClaude(it),lk=(cbItems[it.ik]||{}).locked;
@@ -7715,7 +7715,7 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   if(cbPanel&&cbPanel.ik!==it.ik)cbPanelClose();
   const pct=lk?lk.pct:null,vd=cbLockV(it,lk);
   const secs=[chSec("cs-score",2,"Scorecard",lk?`Agreed · ${vd?vd.label+" · ":""}${fmt(pct)}%`:"Not agreed yet",cbGridHtml(it),lk?"done cbsc-sec":"cbsc-sec"),
-    chSec("cs-coach",3,"Coaching",lk?"From the agreed score":cbClaude(it)?"Claude's draft":"After the agreed score",cbCoachHtml(it),lk?"done":"")];
+    (()=>{const sd=srDocFor(it.key);return chSec("cs-coach",3,"Coaching",lk?"From the agreed score":sd?"From the recording":cbClaude(it)?"Claude's draft":"After the agreed score",lk?cbCoachHtml(it)+(sd?srCoachHtml(sd,true):""):sd?srCoachHtml(sd,false).replace('class="panel srcoach"','class="srcoach top"'):cbCoachHtml(it),lk?"done":"")})()];
   v.innerHTML=nav+`<div class="cdesk has-tk${inR?" has-rail":""}"><article class="panel qticket" id="cTicket" data-call="${esc(it.key)}" aria-label="QA ticket">${cbTicketHtml(it)}</article>${inR?`<div class="cside">${cbBoardHtml(it)}${cbRailBox(it.ik)}</div>`:cbBoardHtml(it)}<div class="ccol">${secs.join("")}</div></div>`;
   {const n=$("#chNav");if(n)n._h=chNavHtml();const rb=$("#cbRailBox");if(rb)rb._h=cbRailHtml(rb.dataset.ik)}
   if(cbTkTab==="tx")cbLoadTx(it);
@@ -7961,10 +7961,10 @@ function srDetail(d){const A=d.audit||{};
     ${!d.grade&&(A.crit||[]).length?`<section class="srcrit"><h3 class="lbl-sm">For the scorecard</h3><dl>${A.crit.map(c=>`<div><dt>${esc(c.label)}</dt><dd>${esc(c.note)}</dd></div>`).join("")}</dl></section>`:""}
     ${srCoachHtml(d)}`}
 /* Swift coaching: what to keep and what to change, each tied to the moment in the recording */
-function srCoachHtml(d){const F=((d.audit||{}).findings||[]).slice().sort((a,b)=>a.t-b.t),first=String(d.sa||"the SA").split(" ")[0];
+function srCoachHtml(d,inCoach){const F=((d.audit||{}).findings||[]).slice().sort((a,b)=>a.t-b.t),first=String(d.sa||"the SA").split(" ")[0];
   const li=f=>`<li><button type="button" class="lg-t num srlt" data-srlog="${f.t}">${srT(f.t)}</button><span>${esc(f.text)}${f.crit?`<span class="srmc">${esc(f.crit)}</span>`:""}</span></li>`;
   const keep=F.filter(f=>f.tone==="good"),fix=F.filter(f=>f.tone==="bad"||f.tone==="warn");
-  return `<section class="panel srcoach"><h3>Swift coaching for ${esc(first)}</h3><div class="srcg">
+  return `<section class="${inCoach?"srcoach in":"panel srcoach"}"><h3>Swift coaching for ${esc(first)}</h3><div class="srcg">
     <div><h4 class="lbl-sm">Keep doing</h4>${keep.length?`<ol class="srcl">${keep.map(li).join("")}</ol>`:`<p class="tkmut">Nothing marked.</p>`}</div>
     <div><h4 class="lbl-sm">Next time</h4>${fix.length?`<ol class="srcl fix">${fix.map(li).join("")}</ol>`:`<p class="tkmut">Nothing to change.</p>`}</div></div></section>`}
 const srTools=()=>{try{return localStorage.getItem("srTools")==="1"}catch(e){return false}};
@@ -8158,7 +8158,7 @@ function srLogPaint(t){const L=srQ("#srLogL");if(!L)return;const rows=L.querySel
   if(srP.playing&&!L.matches(":hover")){const a=cur.getBoundingClientRect(),b=L.getBoundingClientRect();if(a.top<b.top||a.bottom>b.bottom)L.scrollTop+=a.top-b.top-b.height/3}}
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-srlog]");if(!b)return;const d=srDoc();if(!d)return;const t=+b.dataset.srlog,cl=srClips(d);
   if(srP.hl&&cl.length&&!cl.some(c=>t>=c.s-.5&&t<=c.e+.5)){srP.hl=false;const h=srQ("#srHL");if(h)h.setAttribute("aria-pressed","false");const g=srQ("#srLog");if(g)g.classList.remove("hlon")}
-  srSeek(t,true)});
+  srSeek(t,true);if(b.closest(".srcoach.in")){const pl=srQ("#srPlay");if(pl)pl.scrollIntoView({block:"center",behavior:"smooth"})}});
 
 
 /* the key moments under the player: the audit's findings only, each time a button that plays from there */
@@ -8169,7 +8169,7 @@ const srDuo=d=>`<div class="srduo">${srMomentsHtml(d)}${srPlayerHtml(d)}</div>`;
 /* a call's Audit ticket: the recording, when the call has a screen + voice audit (srAudits/<queueId>) */
 const srDocFor=key=>(srDocs||[]).find(x=>x.id===String(key))||null;
 function srAuditSec(it){if(typeof srListen==="function")srListen();const d=it&&srDocFor(it.key);if(!d)return "";
-  return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srDuo(d)}${srCoachHtml(d)}</section>`}
+  return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srDuo(d)}</section>`}
 function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(srEnter())return;if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
   if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
   if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
