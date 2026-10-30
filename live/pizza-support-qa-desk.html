@@ -4197,11 +4197,13 @@ const TABS=["chats","chat","calib","sr","rubric","learn","brain","queue","calls"
 const CALL_TOOLS=["queue","calls","facts"];
 const AREA_OF={chats:"chats",chat:"chats",calib:"chats",sr:"chats",rubric:"chats",learn:"chats",brain:"chats",queue:"chats",calls:"chats",facts:"chats",results:"results",data:"data"};
 const lastTab={chats:"calib",results:"results",data:"data"};
-function setTab(t){if(t==="score")t="calls";if(t==="round")t="calib";if(!TABS.includes(t))t="calib";tab=t;const area=AREA_OF[t];lastTab[area]=t;
+var srMode=false;
+function setTab(t,raw){if(t==="sr"&&!raw&&typeof srEnter==="function"&&srEnter())return;if(t!=="chat")srMode=false;if(t==="score")t="calls";if(t==="round")t="calib";if(!TABS.includes(t))t="calib";tab=t;const area=AREA_OF[t];lastTab[area]=t;
   document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
   document.querySelectorAll(".tabs [data-area]").forEach(b=>{if(b.dataset.area===area)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")});
   $("#sub-chats").hidden=area!=="chats";$("#sub-calls").hidden=!CALL_TOOLS.includes(t)&&area==="chats";
   {const ct=document.querySelector("[data-calltools]");if(ct){if(CALL_TOOLS.includes(t))ct.setAttribute("aria-current","page");else ct.removeAttribute("aria-current")}}
+  if(srMode&&t==="chat")document.querySelectorAll("[role=tab][data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab==="sr")));
   TABS.forEach(v=>$("#view-"+v).hidden=v!==t);try{history.replaceState(null,"","#"+(t==="chat"?chatHash():t))}catch(e){}
   if(t==="calls"||t==="facts")renderForm();renderAll()}
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(!g)return;setTab(g.dataset.go);window.scrollTo({top:0})});
@@ -5674,7 +5676,7 @@ let callSel=null;
 function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&!callSel&&String(chatSel)===String(sid)))navPush();
   wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   callSel=null;chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
-function openCall(id,wk,fromBack){if(!fromBack&&!(tab==="chat"&&callSel===String(id)))navPush();
+function openCall(id,wk,fromBack,keepSr){if(!keepSr)srMode=false;if(!fromBack&&!(tab==="chat"&&callSel===String(id)))navPush();
   wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   callSel=String(id);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
 
@@ -7184,7 +7186,7 @@ function cbCallItem(id){id=String(id||"");const hit=cbCallItems().find(x=>x.key=
 function cbItemOnScreen(){if(tab!=="chat")return null;if(callSel)return "call_"+callSel;const c=chatSel&&chatBy(chatSel),it=cbItemFor(c);return it?it.ik:null}
 /* Claude's marks and reasons: a call's callGrades doc; the chat's audit when it is loaded, else the marks at draw */
 function cbClaude(it){const W=(marks,why,cites,g)=>{const x=scMapMarks(it.kind==="chat"?"chat":"call",marks,cbT(it.kind,it));return {marks:x.marks,old:x.old,why:cbMM(it,why||{}),cites:cbMM(it,cites||{}),g}};
-  if(it.kind==="call"){const g=cbCG.get(String(it.key));return g&&g.scores&&typeof g.scores==="object"?W(g.scores,g.reasons,g.cites,g):null}
+  if(it.kind==="call"){const g=cbCG.get(String(it.key))||(typeof srDocFor==="function"&&(srDocFor(it.key)||{}).grade)||null;return g&&g.scores&&typeof g.scores==="object"?W(g.scores,g.reasons,g.cites,g):null}
   if(it.kind!=="chat")return null;const a=chatAud[it.key],G=(a&&a.grade)||{};
   if(G.scores)return W(G.scores,G.reasons);return it.s&&it.s.aiScores?W(it.s.aiScores,{}):null}
 const it0=ik=>String(ik).startsWith("call_")?"call":"chat";
@@ -7676,6 +7678,7 @@ function cbEvidenceHtml(it){const q=it.q||{},A=validAi(q.aiFacts),F=(A&&A.facts)
   const full=`${lc&&liveChain(lc).legs.length>1?timelineHtml(liveChain(lc)):""}<h4 class="evh">Calls</h4>${legsList(all)}
     ${(F.timeline||[]).length?`<h4 class="evh">Timeline</h4><ol class="cbfacts">${F.timeline.map(t=>`<li><span class="num fid">${esc(t.id||"")}</span><span>${t.when?`<span class="num hint">${esc(t.when)}</span> `:""}<b>${esc(t.who||"")}</b> ${esc(t.what||"")}</span></li>`).join("")}</ol>`:""}
     ${T.length?`<h4 class="evh">WIRA tasks</h4><div class="cxbox">${T.map(t=>`<div class="task"><div class="thead"><a class="tid" href="${esc(safeUrl(t.url)||wiraUrl(t.id))}" target="_blank" rel="noopener">${esc(t.id)} ↗</a>${t.status?`<span>${esc(t.status)}</span>`:""}</div><div class="ttitle">${esc(t.title||"")}</div>${t.desc?`<div class="hint">${esc(t.desc)}</div>`:""}</div>`).join("")}</div>`:""}`;
+  if(!br.length){const sd=typeof srDocFor==="function"&&srDocFor(it.key),sm=sd&&sd.audit&&sd.audit.summary;if(sm)br.push(...String(sm).split(/(?<=\.)\s+(?=[A-Z])/).filter(Boolean).slice(0,6))}
   return `<div class="ev2"><div class="evwhat"><h3 class="evh">What happened</h3>${br.length?`<ul class="evbrief" id="cbEvBrief">${br.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="tkmut">No summary.</p>`}</div>
     <div class="evsrcs" id="cbEvSrcs"><h3 class="evh">Sources</h3>${rows.map(r=>`<div class="evrow${r.main?" main":""}" data-ek="${r.k}"><span class="evic" aria-hidden="true">${r.ic}</span><span class="evt"><b>${esc(r.t)}</b>${r.tag||""}<span class="evs">${esc(r.s)}</span></span>${r.u?`<a class="evlink${r.k==="call"?" rec":""}" href="${esc(r.u)}" target="_blank" rel="noopener">${r.l}</a>`:""}</div>`).join("")}
       <button type="button" class="evmore" id="cbEvMore" data-cb="evmore" aria-expanded="${cbEvMore}" aria-controls="cbEvFull">Timeline and full sources</button></div></div>
@@ -7705,9 +7708,9 @@ function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="
   const lk=(cbItems[it?it.ik:""]||{}).locked,inR=it&&cbInRound(it.ik);
   if(it)cbCGWatch(it.key);const ck=String(callSel||"");
   const sig=JSON.stringify([callSel,week,!!it,typeof srDocs!=="undefined"&&srDocs?(srDocs.find(x=>x.id===String(callSel))||{}).at||srDocs.length:0,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
-    cbCG.has(ck),cbCGSig(cbCG.get(ck)),ctSig("call",ck),cbGraders.has(myId),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun)]);
+    cbCG.has(ck),cbCGSig(cbCG.get(ck)),ctSig("call",ck),cbGraders.has(myId),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun),srMode]);
   if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();cbGRPaint();return}
-  cbAuditSig=sig;const nav=`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
+  cbAuditSig=sig;const nav=srStripHtml()+`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
   if(!it){if(cbPanel)cbPanelClose();v.innerHTML=nav+`<div class="panel empty">${queueReady||!db?`Call ${esc(callSel)} isn't in the queue.`:"Loading…"} <button type="button" class="btn small" data-go="calib">Open the round</button></div>`;return}
   if(cbPanel&&cbPanel.ik!==it.ik)cbPanelClose();
   const pct=lk?lk.pct:null,vd=cbLockV(it,lk);
@@ -7922,7 +7925,11 @@ window.addEventListener("message",async e=>{let h="";try{h=new URL(e.origin).hos
   if(!db||!amOwner){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:!db?"no db":"not owner"},e.origin)}catch(_){}return}
   try{await db.doc("srRaw/"+String(m.id).replace(/[^\w-]/g,"")).set({id:m.id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(m.data)});e.source.postMessage({type:"srAck",id:m.id,ok:true},e.origin)}
   catch(err){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:String(err&&err.code||err).slice(0,80)},e.origin)}catch(_){}}});
-function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr")renderSR();else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
+/* the SR tab is the call's own audit (ticket, recording, scorecard with every grader, coaching) with a strip to switch between recorded calls */
+function srEnter(){if(typeof srListen==="function")srListen();if(!srDocs||!srDocs.length)return false;const d=srDocs.find(x=>x.id===srSel)||srDocs[0];srSel=d.id;
+  const q=(queueAll||[]).find(x=>x.id===d.id);if(!q)return false;srMode=true;openCall(d.id,q&&q.week,false,true);return true}
+const srStripHtml=()=>srMode&&srDocs&&srDocs.length?`<nav class="srcalls" aria-label="Recorded calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===String(callSel)}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>`:"";
+function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr"){if(!srEnter())renderSR()}else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
 const srT=t=>{t=Math.max(0,Number(t)||0);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`};
 const SR_K={click:"Clicked",dblclick:"Double-clicked",type:"Typed",panel:"Screen",page:"Page",load:"Screen",idle:"No activity"};
 function srChart(d){const L=(d.lines||[]).filter(l=>l.f0),dur=Number(d.dur)||Math.max(1,...(d.lines||[]).map(l=>l.e||0));if(!L.length)return "";
@@ -8162,14 +8169,14 @@ const srDuo=d=>`<div class="srduo">${srMomentsHtml(d)}${srPlayerHtml(d)}</div>`;
 /* a call's Audit ticket: the recording, when the call has a screen + voice audit (srAudits/<queueId>) */
 const srDocFor=key=>(srDocs||[]).find(x=>x.id===String(key))||null;
 function srAuditSec(it){if(typeof srListen==="function")srListen();const d=it&&srDocFor(it.key);if(!d)return "";
-  return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srDuo(d)}</section>`}
-function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
+  return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srDuo(d)}${srCoachHtml(d)}</section>`}
+function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(srEnter())return;if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
   if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
   if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
   const d=srDocs.find(x=>x.id===srSel)||srDocs[0];
   v.innerHTML=`<nav class="srcalls" aria-label="Calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>
     <article class="panel srmain">${srDetail(d)}</article>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
-document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;renderSR();return}
+document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;if(!srEnter())renderSR();return}
   const oa=e.target.closest("[data-sraudit]");if(oa){const q=(queueAll||[]).find(x=>x.id===oa.dataset.sraudit);openCall(oa.dataset.sraudit,q&&q.week);setTimeout(()=>{const g=$("#cs-score");if(g)g.scrollIntoView({block:"start"})},400);return}
   const j=e.target.closest("[data-srjump]");if(j&&$("#view-sr")&&!$("#view-sr").hidden){const t=Number(j.dataset.srjump),rows=[...document.querySelectorAll("#srTl li")];const r=rows.find(x=>Number(x.dataset.t)>=t-0.5)||rows[rows.length-1];
     if(r){rows.forEach(x=>x.classList.remove("hit"));r.classList.add("hit")}
