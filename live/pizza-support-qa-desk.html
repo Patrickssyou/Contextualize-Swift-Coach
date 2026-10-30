@@ -1204,6 +1204,7 @@ mark.txhit{background:var(--s2-soft);color:var(--ink);box-shadow:0 0 0 2px var(-
 
 /* ---------- Dashboard: the week's numbers on top; the SA cards lead with the average score ---------- */
 .dmet{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+#rdMetrics{grid-template-columns:minmax(0,1.15fr) minmax(0,1.5fr) repeat(2,minmax(0,1fr))}
 .dm{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
 .dmv{font-family:var(--f-display);font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 .dm.dmain .dmv{font-size:30px;font-family:var(--f-display);font-weight:800}
@@ -1635,6 +1636,12 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .ghr:first-child{border-top:0}.ghh{background:var(--wash,#f6f1ec);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .ghr .n{text-align:right}.ghi{grid-template-columns:minmax(200px,2fr) minmax(60px,.7fr) repeat(var(--gn),minmax(90px,1fr))}
 .ghgap{font-size:11px;padding:1px 5px;border-radius:6px;margin-left:4px}.ghgap.ok{background:#e3f4e8;color:#17663a}.ghgap.mid{background:#fdf1dc;color:#8a5a00}.ghgap.far{background:#fde6e6;color:#a32020}
+.ghprog{margin:10px 0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:13px}.ghprog.up{border-color:#9fd5b2}.ghprog.down{border-color:#efb4b4}
+.ghph{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}.ghpl0{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:6px}
+.ghpl0 li{display:grid;grid-template-columns:90px minmax(0,1fr) 70px 130px;gap:10px;align-items:center}.ghpl{font-weight:600}
+.ghpbar{height:10px;background:var(--wash,#f1ebe5);border-radius:5px;overflow:hidden}.ghpbar i{display:block;height:100%;background:var(--accent,#6d28d9);border-radius:5px}
+.ghd{font-size:11px;padding:1px 6px;border-radius:6px;background:var(--wash,#f1ebe5);white-space:nowrap}.ghd.up{background:#e3f4e8;color:#17663a}.ghd.down{background:#fde6e6;color:#a32020}
+.ghprog p{margin:0}@media(max-width:560px){.ghpl0 li{grid-template-columns:70px minmax(0,1fr) 60px;}.ghpl0 li .ghd{grid-column:2/-1}}
 .ghtrend{margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--wash,#f6f1ec);font-size:13px}.ghtrend.up{background:#e9f6ee}.ghtrend.down{background:#fdeeee}
 @media(max-width:700px){.ghr{grid-template-columns:1.4fr repeat(6,1fr);font-size:12px;padding:8px}.ghsum,.ghitems{overflow-x:auto}.ghi{grid-template-columns:minmax(140px,1.5fr) 56px repeat(var(--gn),minmax(80px,1fr));min-width:max-content}}
 .srgrade{margin:14px 0}
@@ -1768,6 +1775,11 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srlm .lg-w b{margin-right:4px}.srli{width:13px;height:13px;vertical-align:-2px;margin-right:5px}
 .srlm.t-good .srli,.srlm.t-good .lg-w b{color:var(--s3)}.srlm.t-bad .srli,.srlm.t-bad .lg-w b{color:var(--s1)}.srlm.t-note .srli,.srlm.t-note .lg-w b{color:var(--accent)}
 @media (max-width:900px){.srwrap{grid-template-columns:minmax(0,1fr)}.srlog{position:static;max-height:70vh;order:2}}
+.lrsum{list-style:none;margin:8px 0 12px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lrsum li{display:grid;grid-template-columns:200px 110px 190px minmax(0,1fr);gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-size:13px}.lrsum li:first-child{border-top:0}
+.lrtk{color:var(--ink2,inherit)}.lrsum li.lrsh{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#777);background:var(--wash,#f6f1ec)}.lrmore>summary{cursor:pointer;font-size:13px;font-weight:600;padding:6px 0}.lrmore[open]>summary{margin-bottom:8px}
+@media(max-width:700px){.lrsum li{grid-template-columns:1fr auto;}.lrsum li .lrtk,.lrsum li>span:nth-child(3){grid-column:1/-1}}
+.chpool{margin-top:14px}.chpool>summary{cursor:pointer;font-weight:600;font-size:14px;padding:8px 2px}.chpool[open]>summary{margin-bottom:10px}
 .lrcards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .lrcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
 .lrcard.off{opacity:.55}
@@ -1875,7 +1887,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
   <div class="subtabs" role="tablist" aria-label="Audits" id="sub-chats">
     <button type="button" role="tab" data-tab="calib" aria-selected="true"><span class="tn"><span>1</span></span>Round<span class="tst num" id="st-calib"></span></button>
     <button type="button" role="tab" data-tab="chat" aria-selected="false"><span class="tn"><span>2</span></span>Audit<span class="tst num" id="st-chat"></span></button>
-    <button type="button" role="tab" data-tab="sr" aria-selected="false">Screen record + voice recognition audits</button>
+    <button type="button" role="tab" data-tab="sr" aria-selected="false" hidden>Screen record + voice recognition audits</button>
     <button type="button" role="tab" data-tab="chats" aria-selected="false">Dashboard<span class="count" id="chCount"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="learn" aria-selected="false">Learning<span class="tst num" id="st-learn"></span></button>
     <button type="button" role="tab" class="quiet" data-tab="brain" aria-selected="false">Brain</button>
@@ -5716,7 +5728,7 @@ function renderChats(){if(chPanel&&tab!=="chat")chPanelClose();renderChatTabs();
 function renderChatTabs(){const tb=document.querySelector('[role=tab][data-tab="chat"]');if(!tb)return;
   const c=!callSel&&chatSel&&chatBy(chatSel),a=c&&chatAud[c.sid],lk=callSel&&typeof cbItems!=="undefined"?(cbItems["call_"+callSel]||{}).locked:null;tb.classList.toggle("done",!!c||!!lk);
   const st=$("#st-chat");if(st){const d=a&&chatDraft(c.sid),p=lk?lk.pct:d?chScore(d.scores):null;st.textContent=p!=null?fmt(p)+"%":""}
-  const n=chatsOfWeek().filter(x=>x.picked&&!chatRev[x.sid]).length;const cc=$("#chCount");if(cc)cc.textContent=n?String(n):"";
+  const n=chatsOfWeek().filter(x=>x.picked&&!chatRev[x.sid]).length;const cc=$("#chCount");if(cc)cc.textContent="";
   const sl=$("#st-learn");if(sl)sl.textContent=""}
 
 /* ---------- errors: Lightdash and Claude access errors stop a batch; anything else marks that chat and moves on ---------- */
@@ -5931,6 +5943,19 @@ function chStats(list){const sc=list.map(chCurPct).filter(v=>v!=null),fr=list.ma
   list.forEach(c=>{const r=chatRev[c.sid],a=chatAud[c.sid],x=r&&r.pct!=null?r:a&&a.pct!=null?a:null,v=x&&chDocV(x);if(v)mix[v.id]=(mix[v.id]||0)+1});
   return {n:list.length,scored:sc.length,avg:chMeanPct(sc),fr:chMedian(fr),nfr:fr.filter(v=>v!=null).length,comp:chCompTally(list),mine,mix,
     graded:list.filter(c=>chatAud[c.sid]).length,reviewed:list.filter(c=>chatRev[c.sid]).length}}
+/* Dashboard head: the round as a whole (chats and calls), agreed score where agreed, else Claude's */
+function rdMetricsHtml(){const items=typeof cbRoundItems==="function"?cbRoundItems():[];if(!items.length)return "";
+  const P=items.map(it=>({it,p:agItemPct(it)})).filter(x=>x.p!=null),avg=P.length?P.reduce((t,x)=>t+x.p,0)/P.length:null,v=avg==null?null:chatVerdict(avg);
+  const mix={};P.forEach(x=>{const b=chatVerdict(x.p);if(b)mix[b.id]=(mix[b.id]||0)+1});const mixN=P.length;
+  const ag=items.filter(it=>(cbItems[it.ik]||{}).locked).length;
+  const cr=new Map();agStats().forEach(A=>A.cr.forEach(c=>{const x=cr.get(c.label)||{label:c.label,low:0,n:0};x.low+=c.low;x.n+=c.k;cr.set(c.label,x)}));
+  const weak=[...cr.values()].filter(c=>c.low).sort((a,b)=>b.low/b.n-a.low/a.n)[0];
+  const cell=(id,k,big,sub,cls)=>`<div class="dm${cls?" "+cls:""}" id="${id}"><span class="lbl-sm">${k}</span><b class="dmv num">${big}</b>${sub?`<span class="dms">${sub}</span>`:""}</div>`;
+  const bar=`<div class="dm dmix" id="dmMix"><span class="lbl-sm">Verdicts</span>${mixN?`<div class="vbar dbar" role="img" aria-label="${esc(CH_VMIX.map(([id])=>`${chVLabel(id)} ${mix[id]||0}`).join(", "))}">${CH_VMIX.filter(([id])=>mix[id]).map(([id,cl])=>`<i class="${cl}" style="flex-grow:${mix[id]}"></i>`).join("")}</div>`:""}
+    <ul class="dmixl">${CH_VMIX.map(([id,cl])=>`<li data-v="${id}"><i class="${cl}"></i>${esc(chVLabel(id))} <b class="num">${mix[id]||0}</b></li>`).join("")}</ul></div>`;
+  return cell("dmScore","Round score",avg==null?"–":fmt(Math.round(avg*10)/10)+"%",`${v?esc(v.label)+" · ":""}${chPl(P.length,"item")}`,"dmain t-"+chVB(avg))+bar+
+    cell("dmAg","Agreed",`${ag} of ${items.length}`,ag?"":"Claude's scores until agreed")+
+    cell("dmWeak","Weakest row",weak?esc(weak.label):"–",weak?`Low on ${weak.low} of ${weak.n}`:"")}
 function chMetricsHtml(S){const v=chatVerdict(S.avg),slowL=CHAT.slowReplyMin||15,cell=(id,k,big,sub,cls)=>`<div class="dm${cls?" "+cls:""}" id="${id}"><span class="lbl-sm">${k}</span><b class="dmv num">${big}</b>${sub?`<span class="dms">${sub}</span>`:""}</div>`;
   const mixN=CH_VMIX.reduce((t,[id])=>t+(S.mix[id]||0),0);
   const mix=`<div class="dm dmix" id="dmMix"><span class="lbl-sm">Verdicts</span>${mixN?`<div class="vbar dbar" role="img" aria-label="${esc(CH_VMIX.map(([id])=>`${chVLabel(id)} ${S.mix[id]||0}`).join(", "))}">${CH_VMIX.filter(([id])=>S.mix[id]).map(([id,cl])=>`<i class="${cl}" style="flex-grow:${S.mix[id]}"></i>`).join("")}</div>`:""}
@@ -5956,13 +5981,15 @@ function ctTableHtml(id,title,L,none){const G=ctGroup(L);
 function ctDashHtml(wk){const C=ctChatRows(wk),K=ctCallRows();if(!C.length&&!K.length)return "";
   return `<h3 class="h2" id="ctDashH">By case type</h3><div class="ctcols">${ctTableHtml("ctChats","Chats",C,"No graded chats.")}${ctTableHtml("ctCalls","Calls",K,"No round calls.")}</div>`}
 function renderChatQueue(){const v=$("#view-chats");if(!v)return;
-  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="chatMetrics" aria-label="This week"></div><div class="panel quest" id="chatQuest" hidden></div>
+  if(!v.dataset.ready){v.dataset.ready="1";v.innerHTML=`<div class="dmet" id="rdMetrics" aria-label="This round"></div><section class="panel agdash" id="agDash" aria-labelledby="agDashH" hidden></section>
+    <details class="chpool" id="chPool"><summary>WIRA chat pool <span class="hint num" id="chPoolN"></span></summary><div class="dmet" id="chatMetrics" hidden></div><div class="panel quest" id="chatQuest" hidden></div>
     <div class="panel pullbar chatbar"><div class="cbinfo"><div class="h2" style="margin:0">WIRA chats</div><div class="hint cstatus" id="chatStatus" role="status"></div></div><div class="cbtns" id="chatBtns"></div></div>
-    <div class="sastrip" id="chatStrip"></div><section class="panel ctdash" id="ctDash" aria-labelledby="ctDashH" hidden></section><section class="panel agdash" id="agDash" aria-labelledby="agDashH" hidden></section><div class="sagroups" id="chatGroups"></div>`}
+    <div class="sastrip" id="chatStrip"></div><section class="panel ctdash" id="ctDash" aria-labelledby="ctDashH" hidden></section><div class="sagroups" id="chatGroups"></div></details>`}
   const wk=chatsOfWeek(),ready=chatsReady&&chW.week===week,can=!!(db&&mcp),canAi=can&&!!sampleFn,busy=!!(chatRun||chatPullRun),pk=chGradeList("picks").length,all=chGradeList("all").length;
   const graded=wk.filter(c=>chatAud[c.sid]).length,reviewed=wk.filter(c=>chatRev[c.sid]).length,picked=wk.filter(c=>c.picked).length;
   /* a week with no pull shows the Pull button only */
-  $("#chatQuest").hidden=true;$("#chatMetrics").hidden=!wk.length;if(wk.length)$("#chatMetrics").innerHTML=chMetricsHtml(chStats(wk));
+  $("#chatQuest").hidden=true;$("#chatMetrics").hidden=true;$("#chPoolN").textContent=wk.length?chPl(wk.length,"chat"):"";
+  {const h=rdMetricsHtml(),M=$("#rdMetrics");M.hidden=!h;if(M._h!==h){M.innerHTML=h;M._h=h}}
   $("#chatBtns").innerHTML=`<button type="button" class="btn${wk.length?"":" primary"}" id="chatPull"${can&&!busy&&ready?"":" disabled"}>${chatPullRun?"Pulling…":wk.length?"Pull again":"Pull chats"}</button>`+
     (wk.length?`<button type="button" class="btn${pk?" primary":""}" id="chatGradePicks"${canAi&&!busy&&pk?"":" disabled"}>Grade picks<span class="bc num">${pk||""}</span></button>
     <button type="button" class="btn" id="chatGradeAll"${canAi&&!busy&&all?"":" disabled"}>Grade all<span class="bc num">${all||""}</span></button>`:"")+
@@ -5980,7 +6007,7 @@ function renderChatQueue(){const v=$("#view-chats");if(!v)return;
       ${S.fr!=null?`<span class="safr">First reply <b class="num${slow?" t-bad":""}">${esc(chFrt(S.fr))}</b> median</span>`:""}
       ${S.comp.n?`<span class="sacomp t-${S.comp.right===S.comp.n?"good":"bad"}">Comp right <b class="num">${S.comp.right} of ${S.comp.n}</b></span>`:""}
       <span class="sanums">${[["chats",S.n],["graded",S.graded],["reviewed",S.reviewed]].map(([k,n])=>`<span><b class="num">${n}</b>${k}</span>`).join("")}</span></button>`}).join("");
-  {const D=$("#ctDash"),h=ctDashHtml(wk);D.hidden=!h;if(D._h!==h){D.innerHTML=h;D._h=h}}
+  $("#ctDash").hidden=true;
   {const D=$("#agDash"),h=agDashHtml();D.hidden=!h;if(D._h!==h){const op=new Set([...D.querySelectorAll("details[open]")].map(x=>x.dataset.sa));D.innerHTML=h;D._h=h;D.querySelectorAll("details").forEach(x=>{if(op.has(x.dataset.sa))x.open=true})}}
   $("#chatGroups").innerHTML=sas.length?sas.map((sa,i)=>{const l=chSort(wk.filter(c=>c.sa===sa)),picks=l.filter(c=>c.picked),done=picks.filter(c=>chatRev[c.sid]).length;
     const pips=picks.length?`<span class="pips" aria-hidden="true">${picks.map((_,j)=>`<i class="${j<done?"on":""}"></i>`).join("")}</span>`:"";
@@ -6906,7 +6933,21 @@ function lrnLessonsHtml(){const L=chLessons.filter(l=>l.kind!=="not").map(l=>Obj
   const miss=[...G.values()].filter(g=>g.src==="call"&&!cbCG.has(g.ik.slice(5))).map(g=>g.ik.slice(5));
   if(db&&miss.length&&!lrnCGAsk){lrnCGAsk=true;Promise.all(miss.map(k=>db.doc(CG_ROOT+"/"+k).get().then(x=>cbCG.set(k,x&&x.exists?(x.data()||null):null)).catch(()=>cbCG.set(k,null)))).then(()=>{if(tab==="learn")$("#lrLessons").innerHTML=lrnLessonsHtml()})}
   const used=L.filter(lessonOk).length;
-  return `<div class="bhd"><h2>What Claude learned</h2><span class="hint num">${chPl(G.size,"agreed item")} · ${chPl(used,"lesson")} used in the next grades</span></div>${cards.length?`<ol class="lrcards">${cards.join("")}</ol>`:`<p class="lrp">Nothing yet. Lock an agreed score and every row where you moved Claude's mark shows here with your reason.</p>`}`}
+  /* one line per scorecard row: how often the team moved Claude, which way, and the takeaway */
+  const num=v=>{const m=String(v==null?"":v).match(/^(\d+)\/(\d+)$/);return m?Number(m[1]):v==="na"||v==="N/A"?null:isNaN(Number(v))?null:Number(v)};
+  const C=new Map();L.filter(l=>l.kind==="contest").forEach(l=>{const k=l.crit||l.label,c=C.get(k)||{crit:l.crit,label:l.label||l.crit,n:0,up:0,down:0,na:0,sh:[]};c.n++;
+    const f=num(l.from),t=num(l.to);if(f==null&&t!=null)c.na++;else if(f!=null&&t!=null){if(t>f)c.up++;else if(t<f)c.down++;c.sh.push(t-f)}C.set(k,c)});
+  const R0=cbRubric("call",{}),ordc=id=>{const k=R0.findIndex(r=>r.id===id);return k<0?99:k};
+  const sum=[...C.values()].sort((a,b)=>ordc(a.crit)-ordc(b.crit)).map(c=>{const avg=c.sh.length?c.sh.reduce((t,x)=>t+x,0)/c.sh.length:null;
+    const dir=[c.up?`<span class="ghd">▲ ${c.up} up</span>`:"",c.down?`<span class="ghd">▼ ${c.down} down</span>`:"",c.na?`<span class="ghd">${c.na} N/A → scored</span>`:""].filter(Boolean).join(" ");
+    return `<li><b>${esc(c.label)}</b><span class="num">${c.n}${avg!=null?` <span class="hint">· avg ${avg>0?"+":""}${fmt(Math.round(avg*10)/10)}</span>`:""}</span><span>${dir}</span><span class="lrtk">${esc(LRN_TAKE[c.crit]||"")}</span></li>`}).join("");
+  return `<div class="bhd"><h2>What Claude learned</h2><span class="hint num">${chPl(G.size,"agreed item")} · ${chPl(used,"lesson")}</span></div>${cards.length?`<ol class="lrsum" id="lrSum"><li class="lrsh"><span>Row</span><span>Team moved Claude</span><span>Which way</span><span>Takeaway</span></li>${sum}</ol><details class="lrmore"><summary>Notes by item (${cards.length})</summary><ol class="lrcards">${cards.join("")}</ol></details>`:`<p class="lrp">Nothing yet. Lock an agreed score and every row where you moved Claude's mark shows here with your reason.</p>`}`}
+/* Round 1 takeaways, one line per row, written from the team's moves and notes (marks on the 1–5 scale) */
+const LRN_TAKE={tone:"Polite and steady is a 5; only dismissive, insisting language goes low.",clarity:"Credit adapting speech to the listener; mark down when the agent can't re-explain.",
+  spiel:"A full, right opening is a 5. Claude was 1–3 marks too low on every one.",composure:"Steady with an upset caller is a 5.",
+  gathering:"Usually one mark higher than Claude; lower only for a missed fact (a fee) or slow order checks.",rootcause:"Claude was 1–2 marks too low when the cause was found.",
+  immediate:"A proactive fix is a 5; a call that never fixes the issue is a 2.",ownership:"Telling the customer about a delay unasked counts; no follow-up at all is a 1.",
+  longterm:"Not N/A when something could prevent a repeat: raise the friction, save the right address.",ticket:"",first:""};
 /* ---------- Learning: each round's settled items, with every grade Claude ever gave them ----------
    gradeHistory/<itemKey> {ik, kind, key, sa, title, round, roundKey, versions:[{n, at, src:"original"|"regrade", scores, reasons, pct, verdict, lessons, left}]}
    Version 1 is Claude's grade before the team settled (written at lock). Versions are only ever added, never changed.
@@ -6932,11 +6973,20 @@ function ghStats(items,n){const L=items.map(it=>{const h=ghDoc(it.ik),v=h&&(h.ve
   if(!L.length)return null;const sum=f=>L.reduce((t,x)=>t+f(x),0),rows=sum(x=>x.rows);
   return {n:L.length,abs:Math.round(sum(x=>Math.abs(x.gap))/L.length*10)/10,bias:Math.round(sum(x=>x.gap)/L.length*10)/10,exact:rows?Math.round(sum(x=>x.exact)/rows*100):null,near:rows?Math.round(sum(x=>x.near)/rows*100):null,verdict:sum(x=>x.verdict?1:0)}}
 /* the honest read of the newest regrade: same items, original vs newest */
-function ghTrend(items){const maxN=Math.max(0,...items.map(it=>((ghDoc(it.ik)||{}).versions||[]).length));if(maxN<2)return "";
+/* the honest read: same items in every version; distance = average gap to the agreed score (lower = closer) */
+function ghTrend(items){const maxN=Math.max(0,...items.map(it=>((ghDoc(it.ik)||{}).versions||[]).length));if(maxN<1)return "";
   const both=items.filter(it=>{const V=(ghDoc(it.ik)||{}).versions||[];return V.some(x=>x.n===1)&&V.some(x=>x.n===maxN)});if(!both.length)return "";
-  const a=ghStats(both,1),b=ghStats(both,maxN);if(!a||!b)return "";const d=Math.round((a.abs-b.abs)*10)/10;
-  const word=d>=1?"Closer":d<=-1?"Further":"No real change";
-  return `<p class="ghtrend ${d>=1?"up":d<=-1?"down":""}" id="ghTrend"><b>${word}.</b> On the same ${chPl(both.length,"item")}, the average gap went from <b class="num">${fmt(a.abs)}</b> to <b class="num">${fmt(b.abs)}</b> pts; exact rows ${a.exact??"–"}% → ${b.exact??"–"}%; verdicts ${a.verdict} → ${b.verdict} of ${both.length}.</p>`}
+  const S=[...Array(maxN).keys()].map(i=>({n:i+1,s:ghStats(both,i+1)})).filter(x=>x.s);if(!S.length)return "";
+  const lab=n=>{const v=both.map(it=>((ghDoc(it.ik)||{}).versions||[]).find(x=>x.n===n)).find(Boolean);return v?ghLabel(v):"Regrade "+(n-1)};
+  const top=Math.max(...S.map(x=>x.s.abs),1);
+  const rows=S.map((x,k)=>{const prev=k?S[k-1].s.abs:null,d=prev==null?null:Math.round((x.s.abs-prev)*10)/10;
+    const chg=d==null?`<span class="ghd">Start</span>`:Math.abs(d)<1?`<span class="ghd">No real change</span>`:d<0?`<span class="ghd up">${fmt(-d)} pts closer</span>`:`<span class="ghd down">${fmt(d)} pts further</span>`;
+    return `<li><span class="ghpl">${esc(lab(x.n))}</span><span class="ghpbar"><i style="width:${Math.max(3,x.s.abs/top*100)}%"></i></span><b class="num">${fmt(x.s.abs)} pts</b>${chg}</li>`}).join("");
+  const a=S[0].s,b=S[S.length-1].s,d=Math.round((b.abs-a.abs)*10)/10,word=S.length<2?"":d<=-1?"Closer":d>=1?"Further":"No real change";
+  const side=b.bias<0?`below`:`above`;
+  const say=S.length<2?`Claude's first grades are <b class="num">${fmt(a.abs)}</b> pts from the team's agreed score on average, and run <b class="num">${fmt(Math.abs(a.bias))}</b> pts ${a.bias<0?"below":"above"} it.`
+    :`<b>${word}.</b> ${esc(lab(S[S.length-1].n))} is ${Math.abs(d)<1?"about as far from":`<b class="num">${fmt(Math.abs(d))}</b> pts ${d<0?"closer to":"further from"}`} the team than the original. Claude still scores <b class="num">${fmt(Math.abs(b.bias))}</b> pts ${side} the team on average. Exact rows ${a.exact??"–"}% → ${b.exact??"–"}%, verdicts ${a.verdict} → ${b.verdict} of ${both.length}.`;
+  return `<div class="ghprog ${S.length<2?"":d<=-1?"up":d>=1?"down":""}" id="ghTrend"><div class="ghph"><b>Distance from the team</b><span class="hint">Lower is closer · same ${chPl(both.length,"item")}</span></div><ol class="ghpl0">${rows}</ol><p>${say}</p></div>`}
 const ghGapH=g=>g==null?"":`<span class="ghgap num ${Math.abs(g)<=5?"ok":Math.abs(g)<=10?"mid":"far"}">${g>0?"+":g<0?"−":"±"}${fmt(Math.abs(g))}</span>`;
 function ghHtml(){const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=ghItems(R.id);
   const tabs=`<div class="ghtabs" role="group" aria-label="Round">${GH_ROUNDS.map(r=>`<button type="button" class="wksw" data-ghr="${r.id}" aria-pressed="${r.id===R.id}">${esc(r.label)}</button>`).join("")}</div>`;
@@ -6946,15 +6996,21 @@ function ghHtml(){const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=
   const maxN=Math.max(1,...items.map(it=>((ghDoc(it.ik)||{}).versions||[]).length)),Ns=[...Array(maxN).keys()].map(i=>i+1);
   const vlab=n=>{const v=items.map(it=>((ghDoc(it.ik)||{}).versions||[]).find(x=>x.n===n)).find(Boolean);return v?ghLabel(v):"Regrade "+(n-1)};
   const vday=n=>{const v=items.map(it=>((ghDoc(it.ik)||{}).versions||[]).find(x=>x.n===n)).find(Boolean);return v&&v.at?lrnDay(v.at):""};
-  const sum=`<div class="ghsum" role="table" id="ghSum"><div class="ghr ghh" role="row"><span role="columnheader">Grade</span><span role="columnheader" class="n">Items</span><span role="columnheader" class="n">Avg gap</span><span role="columnheader" class="n">Claude vs team</span><span role="columnheader" class="n">Rows exact</span><span role="columnheader" class="n">Rows ±1</span><span role="columnheader" class="n">Verdicts</span></div>
-    ${Ns.map(n=>{const S=ghStats(items,n);return S?`<div class="ghr" role="row"><span role="cell"><b>${esc(vlab(n))}</b> <span class="hint num">${esc(vday(n))}</span></span><span role="cell" class="n num">${S.n}</span><span role="cell" class="n num">${fmt(S.abs)} pts</span><span role="cell" class="n num">${S.bias>0?"+":S.bias<0?"−":"±"}${fmt(Math.abs(S.bias))}</span><span role="cell" class="n num">${S.exact??"–"}%</span><span role="cell" class="n num">${S.near??"–"}%</span><span role="cell" class="n num">${S.verdict} of ${S.n}</span></div>`:""}).join("")}</div>`;
+  const sum=`<div class="ghsum" role="table" id="ghSum"><div class="ghr ghh" role="row"><span role="columnheader">Grade</span><span role="columnheader" class="n">Items</span><span role="columnheader" class="n">Gap to team</span><span role="columnheader" class="n">Claude vs team</span><span role="columnheader" class="n">Rows exact</span><span role="columnheader" class="n">Rows ±1</span><span role="columnheader" class="n">Verdicts</span></div>
+    ${Ns.map(n=>{const S=ghStats(items,n),O=n>1?ghStats(items,1):null;
+      /* versus the original: green = closer to the team, red = further */
+      const mv=(cur,org,lowerBetter,u)=>{if(!O||cur==null||org==null)return "";const d=Math.round((cur-org)*10)/10;if(!d)return ` <span class="ghd">=</span>`;const good=lowerBetter?d<0:d>0;return ` <span class="ghd ${good?"up":"down"}">${d>0?"▲":"▼"}${fmt(Math.abs(d))}${u||""}</span>`};
+      return S?`<div class="ghr" role="row"><span role="cell"><b>${esc(vlab(n))}</b> <span class="hint num">${esc(vday(n))}</span></span><span role="cell" class="n num">${S.n}</span><span role="cell" class="n num">${fmt(S.abs)} pts${mv(S.abs,O&&O.abs,true)}</span><span role="cell" class="n num">${fmt(Math.abs(S.bias))} ${S.bias<0?"lower":S.bias>0?"higher":""}${mv(Math.abs(S.bias),O&&Math.abs(O.bias),true)}</span><span role="cell" class="n num">${S.exact??"–"}%${mv(S.exact,O&&O.exact,false)}</span><span role="cell" class="n num">${S.near??"–"}%${mv(S.near,O&&O.near,false)}</span><span role="cell" class="n num">${S.verdict} of ${S.n}${mv(S.verdict,O&&O.verdict,false)}</span></div>`:""}).join("")}</div>`;
   const rows=items.slice().sort((a,b)=>chSaOrder(items.map(x=>x.sa)).indexOf(a.sa)-chSaOrder(items.map(x=>x.sa)).indexOf(b.sa)).map(it=>{const h=ghDoc(it.ik),V=(h&&h.versions)||[];
     const cells=Ns.map(n=>{const v=V.find(x=>x.n===n);if(!v)return `<span role="cell" class="n tkmut">–</span>`;const c=ghCmp(it,v);return `<span role="cell" class="n"><b class="num">${c.pct==null?"–":fmt(c.pct)+"%"}</b> ${ghGapH(c.gap)}</span>`}).join("");
-    return `<div class="ghr ghi" role="row" style="--gn:${maxN}"><span role="cell"><button type="button" class="lrlink" data-lropen="${esc(it.ik)}">${esc(it.title||"")}</button><span class="hint"> ${esc([it.sa,it.kind==="chat"?"Chat":"Call"].join(" · "))}</span></span><span role="cell" class="n"><b class="num">${fmt(it.lk.pct)}%</b></span>${cells}</div>`}).join("");
-  const itab=`<div class="ghitems" role="table" id="ghItems" style="--gn:${maxN}"><div class="ghr ghi ghh" role="row" style="--gn:${maxN}"><span role="columnheader">Item</span><span role="columnheader" class="n">Team</span>${Ns.map(n=>`<span role="columnheader" class="n">${esc(vlab(n))}</span>`).join("")}</div>${rows}</div>`;
+    const o=V.find(x=>x.n===1),l=maxN>1?V.find(x=>x.n===maxN):null,co=o&&ghCmp(it,o),cl=l&&ghCmp(it,l);
+    const dd=co&&cl&&co.gap!=null&&cl.gap!=null?Math.round((Math.abs(cl.gap)-Math.abs(co.gap))*10)/10:null;
+    const move=maxN<2?"":`<span role="cell" class="n">${dd==null?`<span class="tkmut">–</span>`:Math.abs(dd)<1?`<span class="ghd">Same</span>`:dd<0?`<span class="ghd up">Closer ${fmt(-dd)}</span>`:`<span class="ghd down">Further ${fmt(dd)}</span>`}</span>`;
+    return `<div class="ghr ghi" role="row" style="--gn:${maxN}"><span role="cell"><button type="button" class="lrlink" data-lropen="${esc(it.ik)}">${esc(it.title||"")}</button><span class="hint"> ${esc([it.sa,it.kind==="chat"?"Chat":"Call"].join(" · "))}</span></span><span role="cell" class="n"><b class="num">${fmt(it.lk.pct)}%</b></span>${cells}${move}</div>`}).join("");
+  const gn=maxN+(maxN>1?1:0),itab=`<div class="ghitems" role="table" id="ghItems" style="--gn:${gn}"><div class="ghr ghi ghh" role="row" style="--gn:${gn}"><span role="columnheader">Item</span><span role="columnheader" class="n">Team</span>${Ns.map(n=>`<span role="columnheader" class="n">${esc(vlab(n))}</span>`).join("")}${maxN>1?`<span role="columnheader" class="n">vs original</span>`:""}</div>${rows.replace(/style="--gn:\d+"/g,`style="--gn:${gn}"`)}</div>`;
   const can=amOwner&&!!db&&!!sampleFn&&!!mcp;
   const ctl=can?`<div class="row">${ghRun?`<span class="hint" id="ghLine">${esc(ghRun.line||"Regrading…")}</span><button type="button" class="btn small" id="ghStop">Stop</button>`:`<button type="button" class="btn primary" id="ghGo">Regrade ${esc(R.label)}</button>`}${ghNote?`<span class="hint">${esc(ghNote)}</span>`:""}</div>`:"";
-  return head+sum+ghTrend(items)+itab+ctl}
+  return head+ghTrend(items)+sum+itab+ctl}
 /* version 1: Claude's grade on the item as it stood when the team locked it (never overwritten) */
 async function ghSnap(it){if(!db||!it)return;const ik=it.ik;const ref=db.doc(GH_ROOT+"/"+ik),s=await ref.get();if(s&&s.exists)return;let v=null;
   if(it.kind==="call"){const sg=(srDocFor(it.key)||{}).grade,sr=!!(ROUNDS[it.week||it.round]&&sg&&sg.scores),g=sr?sg:cbCG.get(String(it.key))||sg||null;if(g&&g.scores)v={n:1,at:g.at||new Date().toISOString(),src:"original",scores:clone(g.scores),via:sr||!cbCG.get(String(it.key))?"screen + voice":"transcript"}}
