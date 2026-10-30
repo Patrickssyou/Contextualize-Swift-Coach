@@ -24,3 +24,11 @@ Written Oct 30, 2026, when Round 1 was archived and Round 2 (Oct 23–30) starte
 Same 15 items: average gap **23.5 pts** (original 21.3), Claude 21.5 pts below the team, 25% of rows exact (was 28%), 64% within one mark (was 68%), verdicts 4 of 15 (was 5). **Further.** The in-page call grader did not move toward the team even with the 32 Round 1 lessons in its prompt; it still marks low by habit.
 
 Round 2's screen + voice grades were written with the same lessons by a different grader (this session), and they run much higher (most calls 70–90). Whether that is closer to the team is unknown until Round 2 settles; it will show as Round 2's "Original" in Learning.
+
+## Scorecard text v5 (Oct 30)
+
+Patrick replaced the level descriptions with v5. Rows, weights, the 0–4 raw scale and N/A rules did not change. Round 2 only was regraded on v5; Round 1 history stays as it was.
+
+- Each Round 2 screen + voice audit keeps its earlier grade as `gradeV4` next to the new `grade` (`text: "v5"`). Nothing was overwritten.
+- Where a Round 1 lesson and the v5 text disagree, the v5 text wins (e.g. a manager-line opening without the agent's name is now raw 3, not 4).
+- Round 2 calls moved from an average of 77.7 to 73.9 under v5 (48 calls). The main drivers: openings missing the name, Gathering 5 now needs a check of what else is affected, Composure 5 needs the other side settled, and order remarks count as the right record on MGR/DE calls.

@@ -2929,114 +2929,20 @@ const RUBRIC_V4_ID = "v4";
 /* when Ownership applies (QA lead, Oct 21): the passes print this line for chats and calls */
 const OWNERSHIP_RULE = `- ownership: "na" when the case was fully closed then and there (on the call or in the chat): nothing left to follow up, nothing promised for later, no other team needed. Score it only when something was left to follow up, a promise was made for later, or another team should have been involved; then 0 if nobody followed it up. Never score ownership down on a case that closed cleanly.`;
 const RUBRIC_GROUPS_V4 = [{id:"communication",label:"Communication",w:30},{id:"problem",label:"Problem solving",w:30},{id:"resolution",label:"Resolution",w:40}];
+/* scorecard text v5 (Patrick, Oct 30): new level wording on the v4 rows, weights and N/A rules */
+const RUBRIC_TEXT_V = "v5";
 const RUBRIC_V4 = [
-  {id:"first",kind:"chat",group:"communication",label:"First response",w:5,
-    desc:"How well the first reply fits this case: it shows the SA took in what the client actually raised and says the right next step for it. Quality in context, not timing: how fast it came doesn't count, and a short reply can meet the bar.",
-    lv:["The first reply defended, blamed or concluded before checking, or never answered what the client raised",
-      "A generic holding line that ignores the case (\"let me check\", \"one moment\" with nothing tied to what the client raised), or a reply that misreads the request",
-      "Touches the issue, but vaguely, or the next step it names isn't quite right for this case",
-      "Fits the case: answers what the client raised and states the right next step for it. Short is fine when the step is right (\"Got it. Let me call the customer.\" meets the bar when calling the customer is the right move)",
-      "As 3, and specific: names the order or detail and what will be checked or done, with the urgency the case needs"]},
-  {id:"spiel",kind:"call",group:"communication",label:"Opening spiel",w:5,
-    desc:"The right opening for this type of call. Inbound from a restaurant (client line): \"Hi, this is <name> from Tarro, how can I help you?\", asking the restaurant name or ID when it isn't known. Inbound on a store's manager or delivery line: answer as the store, \"Hi, this is <name>, the manager, how can I help you?\", never as Tarro. Outbound to the restaurant: greet by name, say who is calling from Tarro and why. Outbound to a customer: speak for the store (\"This is <name> from <restaurant>, calling about your order ...\"), not as Tarro.",
-    lv:["No opening, or the wrong identity for the line (announced Tarro to a customer on the store's line, or no name at all)",
-      "Opening for the wrong type of call, or missing most of it (no name, no who-we-are, no offer to help)",
-      "The right opening but missing an element of that line's spiel (the name, Tarro on the client line, \"the manager\" on the manager line, the offer to help, or on an outbound call why we're calling)",
-      "The full right opening for this type of call: on the client line, name, Tarro and the offer to help; on the manager or delivery line, name, \"the manager\" and the offer to help (the restaurant's name isn't needed there); on an outbound call, name, who we are and why we're calling",
-      "As 3, warm and clear, and moves straight to the caller's concern (on an outbound call, the reason and the order named in the first turn)"]},
-  {id:"tone",group:"communication",label:"Tone & language",w:10,
-    desc:"Friendly, respectful, never aggressive or defensive. Chat: friendliness of the wording, and whether the client shows confusion (\"huh?\", \"what do you mean\", asking the same thing again). Call: also a neutral accent and little verbal collision; accent and talk-over can't be heard, so read the transcript cues: the other side saying \"huh?\", \"what?\", \"sorry?\", asking to repeat, misheard words, and broken or cut-off sentences on both sides (talking over each other). Name the cue the mark rests on.",
-    lv:["Rude, aggressive, dismissive or defensive; argued with or blamed the client",
-      "Curt or cold, or the client is repeatedly confused by the wording (asks what was meant, asks again)",
-      "Polite but flat or stiff, or one or two signs the client didn't follow the wording",
-      "Friendly, respectful and professional throughout; the client follows without asking what was meant",
-      "As 3 under pressure: stays warm with a frustrated client and eases the tension"],
-    lvCall:["Rude, aggressive, dismissive or defensive; argued with the caller",
-      "Curt or cold, or repeated cues the caller couldn't follow (several \"huh?\", \"what?\", \"sorry?\", requests to repeat, misheard words) or constant talk-over (many cut-off sentences on both sides)",
-      "Polite but flat, or a few such cues (a request to repeat, a misheard word, a stretch of talk-over)",
-      "Friendly and respectful; the caller follows without asking to repeat; turns don't collide",
-      "As 3 under pressure: stays warm with a frustrated caller, de-escalates, no talk-over"]},
-  {id:"clarity",group:"communication",label:"Clarity of communication",w:10,
-    desc:"Speaks the client's language with little jargon; the client understood what happens, why and when; the intention of each message or turn is clear; understanding confirmed before closing. A compensation amount need not be stated unless the client asks.",
-    lv:["The client was left unsure of the outcome, or the messages contradict each other",
-      "Vague, jargon-heavy or confusing about what happens and why",
-      "Gave the outcome but not the why or when, or didn't confirm the client understood",
-      "Plain words the client uses; what, why and when explained; understanding confirmed before closing",
-      "As 3, and handled pushback clearly (explained the math or the policy when challenged)"],
-    lvCall:["The caller was left unsure of the outcome, or what was said contradicts itself",
-      "Vague, jargon-heavy or confusing; the caller had to ask what was meant",
-      "Gave the outcome, but not the why or when, or no confirmation the caller understood",
-      "Plain words, what, why and when explained; the caller confirmed the outcome before the close",
-      "As 3, and handled pushback clearly (explained the math or the policy when challenged)"]},
-  {id:"composure",group:"communication",label:"Composure",w:5,
-    desc:"No panic, no lost train of thought. Chat: stays on the thread after pushback or bad news, doesn't contradict an earlier message, doesn't fumble or go silent after a challenge. Call: also no long fumbling or filler loops, no abrupt hold or hand-off to escape a hard moment, recovers after a mistake.",
-    lv:["Lost the thread under pressure: contradicted itself on the facts or the outcome, or went silent or handed off to escape the challenge",
-      "Rattled by pushback: shifting answers, backtracking, or a reply that ignores the challenge",
-      "Mostly steady, with one wobble (a muddled reply after pushback, a correction that confuses)",
-      "Steady throughout: keeps the thread after pushback or bad news, consistent answers, recovers cleanly after a slip",
-      "As 3 in a hard case: a hostile client or bad news handled calmly, step by step"],
-    lvCall:["Lost the thread: contradicted itself, long fumbling, or an abrupt hold or hand-off to escape the moment",
-      "Rattled: filler loops (\"uh, so, uh\"), restarts, shifting answers after pushback",
-      "Mostly steady, with one wobble (a fumbled stretch, a muddled answer after bad news)",
-      "Steady throughout: keeps the thread after pushback or bad news, no fumbling, recovers cleanly after a slip",
-      "As 3 on a hard call: a hostile caller or bad news handled calmly, step by step"]},
-  {id:"gathering",group:"problem",label:"Gathering information",w:15,
-    desc:"Checked the right evidence (the recording, the order, the settings, the account) and asked only what was needed, before acting. Every factual claim holds up.",
-    lv:["Acted or concluded without checking anything, or a claim to the client is contradicted by the evidence",
-      "Checked the wrong thing, or acted on an assumption the evidence doesn't support",
-      "Checked the main thing but missed a piece the case needed (the recording, the order, a setting), or asked for what was already on hand",
-      "Checked what the case needed before acting (the recording and the order for an order problem; the setup, settings or account for a request); asked only what was needed; claims hold up",
-      "As 3, early and efficiently, and used the evidence to settle the case (quoted the recording or the order back)"],
-    lvCall:["Acted on assumptions without gathering the needed information",
-      "Proceeded with gaps in key information, or re-probed a lot",
-      "Got the main facts; some needless questions or a missed follow-up",
-      "Gathered every key fact, checked the order or recording where needed, no redundant probing",
-      "As 3, quickly, and used what was checked to settle the case on the call"]},
-  {id:"rootcause",group:"problem",label:"Root cause & fault attribution",w:15,na:"nothing went wrong (a plain request: menu, hours, settings, how-to)",
-    desc:"The right root cause and the right fault; owned it when it was Tarro's, pushed back when it wasn't. Includes the account of what happened given to the client.",
-    lv:["No diagnosis, or blamed the wrong party to the client",
-      "Wrong root cause, or the fault misread",
-      "Right issue, but the root cause or the fault is partly off, or the right fault wasn't owned or pushed back clearly",
-      "Right root cause and right fault; owned it when Tarro's, pushed back politely when not",
-      "As 3, and told the client plainly what happened, with the evidence (what the recording or the order shows)"]},
-  {id:"immediate",group:"resolution",label:"Immediate resolution",w:15,
-    desc:"The right solution for the client now: the right action for the case type (the policy path for compensation; the right team, ticket or setting for a request; the restaurant's decision carried out for a customer credit), on the right channel, with amounts and terms exactly right (compensation on the items only, exact to the cent, recorded), promising only what Tarro or the store will actually do. On chat compensation cases the system's compensation check caps this mark. When the fix went to another team through a child task, judge it by what the task shows: the right work asked for, and the task's comments and status showing it was done (or still open, or done wrong).",
-    lv:["No action, the action made it worse, a promise that can't be kept or the policy doesn't allow, or money given or promised and recorded nowhere",
-      "An action that doesn't fit the case type or was carried out wrong, a wrong amount or terms, or a commitment Tarro or the store won't meet",
-      "The right kind of action, but incomplete, slow, on the wrong channel, close-but-not-exact money, or an overpromise or an unconfirmed commitment",
-      "The right action for the case type, carried out, money exact and recorded; promised only what will happen",
-      "As 3, promptly and fully, confirmed done with the client"],
-    lvCall:["No action, the action made it worse, a promise that can't be kept or the policy doesn't allow, or money given or promised and said nowhere",
-      "The action didn't fit the situation or was carried out wrong, a wrong amount, or a commitment Tarro or the store won't meet",
-      "The right kind of action, but incomplete, slow, needed help, money not exact, or an overpromise or an unconfirmed commitment",
-      "The right action for the case type, taken and carried out correctly, money exact; promised only what will happen",
-      "As 3, promptly, with the outcome confirmed on the call"]},
-  {id:"longterm",group:"resolution",label:"Long-term solution",w:5,na:"a one-off with nothing the client could prevent or do themselves next time. A change the client could make in CMA (a menu price, item or modifier) is never N/A",
-    desc:"Showed the client how to avoid it next time: how to do it themselves in CMA (a menu price change is self-servable; doing it for the client without showing how scores low), or flagged the repeat issue or fix to the right owner. A Slack thread that suggests a fix or enhancement to the right team counts as flagging it.",
-    lv:["A repeat or self-servable issue and nothing done for next time (e.g. changed a menu price for the client without showing how)",
-      "Mentioned it only when asked, gave unclear or wrong steps, or raised it to the wrong owner",
-      "Mentioned what the client can do (or what will be fixed) but didn't walk through it or action it",
-      "Walked the client through the CMA steps, or flagged the repeat issue to the right owner with enough to act on",
-      "As 3, and confirmed the client can do it next time, or the fix is concrete and owned"]},
-  {id:"ticket",group:"resolution",label:"Documentation",w:10,na:"the case needed no record at all (closed then and there, nothing owed to anyone). Never N/A on a CL call: the client line always needs a WIRA ticket",
-    desc:"The right record for the case, in the right place, that the next person can act on. What counts depends on the case. CL call (client line): a WIRA ticket, always. DE call (delivery line): a saved order remark, plus a WIRA ticket when a follow-up is owed or another team must act. MGR call (manager line): a saved order remark is the record; a WIRA ticket only when another team must act. Chat: the chat itself is the record; a child task or an internal note is needed when work goes to another team, a follow-up is owed, or an amount is set. Missing the record the case needed is the lowest mark. Read the child task or ticket the SA made as the team that receives it: is it understandable without opening the call or chat (what is asked, for which restaurant, item, order or amount, and what is needed next)? Is the category and intent the right one for the request (a menu change under the menu category with an add or update dish intent; a customer contact under a customer contact intent; a printer under client tech)? Name the category, intent and what the description is missing.",
-    lv:["Not recorded when it was needed (no child task or note when work went to another team, a follow-up was owed or an amount was set)",
-      "Recorded to the wrong team or tag, or a description too thin to act on",
-      "Recorded to the right team, with a minor tag error or thin notes",
-      "Right place, right team and tag, and a description of what was asked and what was done",
-      "As 3, and the next person can act without asking anything (order, amount, owner, next step)"],
-    lvCall:["Missing the record this call type needs (CL: no WIRA ticket; MGR or DE: no order remark; DE with a follow-up owed: no WIRA ticket)",
-      "Recorded in the wrong place, to the wrong team or tag, or too thin to act on",
-      "The right place and team, with a minor tag error or thin notes",
-      "The right record for the call type (CL: a WIRA ticket to the right team and tag; MGR: the order remark saved; DE: the order remark, plus a WIRA ticket when a follow-up is owed), saying what was asked and what was done",
-      "As 3, and the next person can act without asking anything (order, amount, owner, next step)"]},
-  {id:"ownership",group:"resolution",label:"Ownership",w:10,na:"the case was fully closed then and there (on the call or in the chat): nothing left to follow up, nothing promised for later, no other team needed",
-    desc:"Followed the case through: chased what was pending, tagged the right team, and pulled in another team or the lead when needed, with a summary and a recommendation; didn't hand off what Support could fix. Scored only when something was left to follow up, a promise was made for later, or another team should have been involved; then 0 if nobody followed it up. A case fully closed then and there is N/A. Read the SLACK threads: an escalation there counts as pulling in another team or the lead; judge whether it went to the right channel and people, with a summary and a recommendation, and whether it was needed (escalating what Support could fix scores low).",
-    lv:["Dropped it: nothing followed up, a needed escalation not made, or handed off what Support could fix",
-      "Tagged someone with no summary, or the follow-up left with nobody named",
-      "The pending step done or chased, but late; or another team or the lead was pulled in with a summary but no recommendation",
-      "The pending step done or chased; when another team or the lead was needed, pulled in with a summary and a recommendation",
-      "As 3, and closed the loop with the client once the other team or the lead acted"]}];
+  {id:"tone",group:"communication",label:"Tone & language",w:10,desc:"Friendly and professional, neutral accent, little talk-over. Speaks the same language as the client. Calls: read the transcript cues (\"huh?\", \"what?\", repeats, misheard words, cut-off sentences on both sides) and name the cue the mark rests on.",lv:["Talks over, argues or sounds dismissive. The client feels unheard.", "Polite but flat, awkward or agent-like. Too many sorries or fillers; pushes their own fix without reading the room.", "Polite, no talk-over or clashes, but little warmth or empathy.", "Warm, confident and concise. Reads the room; empathy fits who is at fault.", "Builds rapport and adapts pace, accent and language to the client. Turns a tense call friendly."]},
+  {id:"clarity",group:"communication",label:"Clarity of communication",w:10,desc:"The client understands the concern being addressed and the resolution given, and doesn't have to ask for a repeat. A compensation amount need not be stated unless the client asks.",lv:["The client leaves confused (\"something isn't adding up\"). The concern or the fix is never explained.", "The gist lands, but with stumbles, vague words, or the same line repeated when the client doesn't get it.", "The message lands but not smoothly. The outcome is not read back or confirmed.", "States the issue and the fix plainly, explains before a hold. The client understands with no confusion.", "Rephrases when the client doesn't get it, says what happens next and how to avoid it, and the client understands."]},
+  {id:"first",kind:"chat",group:"communication",label:"First response",w:5,desc:"The first reply fits the case, not a generic holding line. Quality in context, not speed.",lv:["A generic holding line that completely misses the request.", "The reply is a generic holding line.", "The reply is generic but gives the next step.", "The reply names the case and the next step.", "The first reply gives context and a clear action from the team, in one message (not split over several lines)."]},
+  {id:"spiel",kind:"call",group:"communication",label:"Opening spiel",w:5,desc:"The right opening for the line: client line \"Hi, this is <name> from Tarro, how can I help you?\" (ask the restaurant name or ID when it isn't known); store manager or delivery line, answer as the store: \"Hi, this is <name>, the manager, how can I help you?\", never as Tarro; outbound to a restaurant: name, from Tarro, why; outbound to a customer: speak for the store. Elements: name, who we are (Tarro / the manager / the store), the offer to help, and on outbound calls why we're calling.",lv:["No real opening, the wrong spiel for the line, or a completely different restaurant named.", "Two elements missing and the introduction is stiff.", "One or two elements missing, usually the name, but the right opening for the line.", "The right opening for the call type, missing one element.", "The full opening for the line, delivered smoothly."]},
+  {id:"composure",group:"communication",label:"Composure",w:5,desc:"Stays on track after pushback: no fumbling, filler loops or contradicting yourself, and no visible confusion on screen.",lv:["Loses the thread, argues or gets defensive, or uses a hold or hand-off to escape.", "Sounds nervous, stutters, contradicts themselves or mixes up orders mid-call.", "Mostly steady; a few wobbles or filler loops, then recovers.", "Steady with upset clients, customers and drivers. No fumbling; stays on task.", "Calm and in control, settles the other side and keeps the call moving."]},
+  {id:"gathering",group:"problem",label:"Gathering information",w:15,desc:"Asks the right questions, probes, and checks the right records (order, status, notes, recording).",lv:["Acts on the caller's word alone; completely misses the facts of the case, which leads to an error.", "Checks some things but slowly and misses a key fact; doesn't probe enough.", "Checks the order or record but is relatively slow to act; probes the facts but isn't sharp.", "Quickly finds the right order, status or notes, or checks the recording when needed; may ask for some unnecessary information.", "As 4, quickly and with no wasted questions, and also checks what else is affected (other items, repeat customers)."]},
+  {id:"rootcause",group:"problem",label:"Root cause & fault attribution",w:15,na:"nothing went wrong (a plain request: menu, hours, settings, how-to)",desc:"Finds what actually went wrong and who is at fault.",lv:["No cause found, or the wrong one. A mismatch is left unexplained.", "Blames the store, customer or driver without evidence, or is slow to see an obvious mismatch.", "Finds what happened but not why, or leaves fault implied; doesn't check with the store or agent.", "Finds the real cause from the evidence and traces back the source of the issue.", "Finds the root cause with ease, traces back the source of the issue, and states the fault neutrally."]},
+  {id:"immediate",group:"resolution",label:"Immediate resolution",w:15,desc:"Finds the right, appropriate fix for the issue raised. No overpromising; a compensation amount follows the policy.",lv:["No real fix. Unsure what to do, or the fix makes it worse; the customer or client leaves without a clear action.", "The fix doesn't fit, or has to go back and change the fix.", "The right fix, but slowly, only after the client suggests it, or it needs a second call.", "The right fix offered with relative ease, aligned with the customer's or client's desired outcome.", "The right fix, fast and proactive, while managing the customer's and client's sentiment."]},
+  {id:"ticket",group:"resolution",label:"Documentation",w:10,na:"the case needed no record at all (closed then and there, nothing owed to anyone). Never N/A on a CL call: the client line always needs a WIRA ticket",desc:"Filed when needed, with the right team, tag and description, or an order remark saved when that is the right record. On a store manager or delivery call the right record is usually an order remark, not a WIRA ticket.",lv:["A needed ticket or remark not filed: no order remark and no WIRA documentation.", "Not the right record for the call type (e.g. a WIRA ticket on a manager call instead of an order remark), the wrong team tagged, or unclear documentation.", "The right team, but a thin description that can cause confusion.", "The right ticket or remark, team and tag; a clear issue, action taken and next step.", "As 4, with clear action steps for the team when needed, plus related details that give useful context, concisely."]},
+  {id:"ownership",group:"resolution",label:"Ownership",w:10,na:"the case was fully closed then and there (on the call or in the chat): nothing left to follow up, nothing promised for later, no other team needed",desc:"Takes the case to the end without passing it off unnecessarily; completes or chases any pending step.",lv:["Passes responsibility to someone else unnecessarily when they could resolve it themselves, or no follow-up at all to the teams that needed it.", "Takes some steps but leaves an open item with no owner (a callback, an allowance request, an escalation).", "Does the needed steps, but only when prompted (salvages after the client asks for credit).", "Does or chases every pending step. Escalates with a summary and recommendation only when needed.", "Spots the next problem and handles it unasked (tells the customer about the delay, wins back an at-risk customer)."]},
+  {id:"longterm",group:"resolution",label:"Long-term solution",w:5,na:"a one-off with nothing the client could prevent or do themselves next time. A change the client could make in CMA (a menu price, item or modifier) is never N/A",desc:"Prevents a repeat of the same incident.",lv:["No prevention where it was clearly needed (expired stock not flagged, an address deleted but not fixed).", "Attempted but incomplete: asked about next time but didn't record it, or no note for a repeat customer.", "A partial fix: doesn't address the source fully, but records the required action.", "Fixes this case at its source (e.g. a customer note: allergy, no onions), but not the wider impact.", "Fixes the source and the wider impact where it applies: flags similar items, raises recurring friction to the owning team and closes the loop."]}];
 const rubricV4 = kind => RUBRIC_V4.filter(r=>!r.kind||r.kind===(kind==="call"?"call":"chat")).map(r=>Object.assign({},r,{lv:(kind==="call"&&r.lvCall||r.lv).slice()}));
 const CALL_RUBRIC_V4 = rubricV4("call");
 /* v4 as the call brain's items */
@@ -7187,7 +7093,7 @@ const CG_ROOT="callGrades",CL_ROOT="callLessons",cbCG=new Map(),cbGRErr=new Map(
 let cbCGSub={qid:"",off:null},cbCGRound="",cbGR=null,cbGRNote=null;
 
 /* ---------- listeners (once, after db is ready) ---------- */
-function calibListen(){if(!db)return;
+function calibListen(){if(!db)return;if(typeof srListen==="function")srListen();
   db.collection("calibMarks").onSnapshot(s=>{const m=new Map();s.docs.forEach(d=>m.set(d.id,d.data()||{}));cbGraders=m;cbGradersReady=true;
     const ids=[...m.keys()];if(myId&&!ids.includes(myId))ids.push(myId);ids.forEach(cbListenMarks);cbRender()},()=>{cbGradersReady=true;cbRender()});
   db.collection("calibItems").onSnapshot(s=>{cbItems=Object.fromEntries(s.docs.map(d=>[d.id,d.data()||{}]));cbItemsReady=true;cbRender(true)},()=>{cbItemsReady=true});
@@ -7603,7 +7509,7 @@ const cbUngradedChats=()=>cbChatItems().map(it=>chatBy(it.key)).filter(c=>c&&chC
 /* Regrade: every round item not yet agreed, graded again from scratch with the newest lessons (contests, reinforcements, Claude- or panel-settled rows) */
 const cbRegradeList=()=>cbRoundItems().filter(it=>!(cbItems[it.ik]||{}).locked);
 async function cbRegrade(){if(cbRgRun||cbGR||cbChRun||(typeof chatRun!=="undefined"&&chatRun))return;const L=cbRegradeList();if(!L.length)return;cbRgRun=true;renderCalib();
-  try{const calls=L.filter(it=>it.kind==="call").map(it=>Object.assign({},it,{q:Object.assign({},it.q||{},{aiFacts:null})}));
+  try{const calls=L.filter(it=>it.kind==="call"&&!(ROUNDS[it.week||it.round]&&((srDocFor(it.key)||{}).grade||{}).scores)).map(it=>Object.assign({},it,{q:Object.assign({},it.q||{},{aiFacts:null})}));
     calls.forEach(it=>{cbQ.delete(String(it.key));cbQRun.delete(String(it.key))});
     if(calls.length&&cbCanGrade())await cbGradeRun(calls,false);
     const chs=L.filter(it=>it.kind==="chat").map(it=>chatBy(it.key)).filter(c=>c&&chCanGrade(c));
@@ -8061,7 +7967,7 @@ const srRoundDocs=()=>(srDocs||[]).filter(x=>{const q=(queueAll||[]).find(d=>d.i
 function srEnter(){if(typeof srListen==="function")srListen();const D=srRoundDocs();if(!D.length)return false;const d=D.find(x=>x.id===srSel)||D[0];srSel=d.id;
   const q=(queueAll||[]).find(x=>x.id===d.id);if(!q)return false;srMode=true;openCall(d.id,q&&q.week,false,true);return true}
 const srStripHtml=()=>srMode&&srRoundDocs().length?`<nav class="srcalls" aria-label="Recorded calls">${srRoundDocs().map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===String(callSel)}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>`:"";
-function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(tab==="sr"){if(!srEnter())renderSR()}else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
+function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(tab==="sr"){if(!srEnter())renderSR()}else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit();else if(tab==="calib"&&typeof cbRender==="function")cbRender(true);else if(tab==="learn")renderLearn()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
 const srT=t=>{t=Math.max(0,Number(t)||0);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`};
 const SR_K={click:"Clicked",dblclick:"Double-clicked",type:"Typed",panel:"Screen",page:"Page",load:"Screen",idle:"No activity"};
 function srChart(d){const L=(d.lines||[]).filter(l=>l.f0),dur=Number(d.dur)||Math.max(1,...(d.lines||[]).map(l=>l.e||0));if(!L.length)return "";

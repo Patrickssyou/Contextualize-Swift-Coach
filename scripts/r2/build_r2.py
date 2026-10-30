@@ -30,7 +30,7 @@ for f in sorted(glob.glob('audits/*.json')):
     d0 = datetime.date.fromisoformat(c['date'])
     doc = dict(id=c['key'], callId=c['callId'], sa=c['sa'], alias=A.get('alias') or c['sa'].split()[0], restaurant=c['restaurant'], kind=c['kind'], date=d0.strftime('%b ') + str(d0.day),
                dur=dur, stats=stats, lines=lines, screen=screen, silences=(o.get('voice') or {}).get('silences') or [], audit=A['audit'], at=o.get('at'), v=1, round=c['pool'],
-               grade=dict(scores=A['grade']['scores'], reasons=A['grade'].get('reasons') or {}, rubric='call-v4', v='sr-grade-2', by='claude', at=datetime.datetime.utcnow().isoformat() + 'Z', lessons=32))
+               grade=dict(scores=A['grade']['scores'], reasons=A['grade'].get('reasons') or {}, rubric='call-v4', v='sr-grade-v5', text='v5', by='claude', at=datetime.datetime.utcnow().isoformat() + 'Z', lessons=32))
     built.append(doc)
 json.dump([dict(id=d['id'], kind=d['kind'], scores=d['grade']['scores']) for d in built], open('pct_in.json', 'w'))
 subprocess.run(['node', '/tmp/claude-0/-home-claude/1b142488-5d26-5ec4-ac9b-9c6af59eb289/scratchpad/sr/t/pct.js', 'pct_in.json', 'pct_out.json'], check=True, capture_output=True)
