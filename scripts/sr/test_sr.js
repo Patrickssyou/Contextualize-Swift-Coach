@@ -73,6 +73,10 @@ const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
  const z=await page.evaluate(()=>({zoom:srP.zoom,tr:srP.media.rep.wrapper.style.transform,left:srP.media.rep.wrapper.style.left}));
  ok(z.zoom===2&&/^-?\d+px$/.test(z.left),'click zooms in at the spot, whole-pixel offset '+JSON.stringify(z));
  await page.screenshot({path:S+'/sr/t/p_zoom.png'});
+ const f0=await page.evaluate(()=>[srP.fx,srP.fy,srP.media.rep.wrapper.style.left]);
+ await page.mouse.move(bb.x+bb.width*.5,bb.y+bb.height*.5);await page.mouse.down();await page.mouse.move(bb.x+bb.width*.2,bb.y+bb.height*.5,{steps:6});await page.mouse.up();await page.waitForTimeout(150);
+ const f1=await page.evaluate(()=>({fx:srP.fx,left:srP.media.rep.wrapper.style.left,zoom:srP.zoom}));
+ ok(f1.zoom===2&&f1.fx>f0[0]&&f1.left!==f0[2],'drag pans while zoomed, stays zoomed '+JSON.stringify({f0,f1}));
  await page.keyboard.press('Escape');await page.waitForTimeout(200);ok(!(await page.evaluate(()=>srP.big)),'Esc closes the big view');
  await page.waitForTimeout(8000);ok(!(await page.evaluate(()=>srP.playing)),'stops at the end of the last clip');
  }

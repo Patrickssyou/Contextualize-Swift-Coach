@@ -1716,7 +1716,7 @@ table.cblist{width:100%;border-collapse:collapse;min-width:560px}
 .srlim{margin-top:10px}
 .srimp{margin-top:14px;padding:10px 14px}.srimp summary{cursor:pointer;font-size:13px;color:var(--muted)}.srimp textarea{width:100%;margin:8px 0;font:12px ui-monospace,monospace}
 .srplay{margin:0 0 16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
-.srstage{position:relative;aspect-ratio:16/9;max-height:440px;width:100%;background:#16141d;color:#eeecf5;overflow:hidden;cursor:zoom-in}.srstage.zoomed{cursor:zoom-out}.srstage.norec{cursor:default}
+.srstage{position:relative;aspect-ratio:16/9;max-height:440px;width:100%;background:#16141d;color:#eeecf5;overflow:hidden;cursor:zoom-in}.srstage.zoomed{cursor:grab;touch-action:none}.srstage.zoomed.dragging{cursor:grabbing}.srstage.zoomed.dragging *{user-select:none}.srstage.norec{cursor:default}
 .srplay.big{position:fixed;inset:12px;z-index:1000;display:flex;flex-direction:column;background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
 .srplay.big .srstage{flex:1 1 auto;aspect-ratio:auto;max-height:none;height:auto;min-height:0}
 html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;inset:0;background:rgba(10,8,16,.55);z-index:999}
@@ -8164,7 +8164,7 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
   const kinds=SR_KO.filter(k=>F.some(f=>srKind(f)===k));
   const hasMedia=!!(d.media&&d.media.asset);
   return `<section class="srplay${srP.big?" big":""}" id="srPlay" data-id="${esc(d.id)}" data-dur="${dur}">
-    <div class="srstage${hasMedia?"":" norec"}${srP.zoom>1?" zoomed":""}" id="srStage" title="${hasMedia?(srP.zoom>1?"Click to fit":"Click to zoom in"):""}"><div class="srnow" id="srNow"></div><div class="srrep" id="srRep" hidden></div>${hasMedia?"":`<span class="srnorec">No recording loaded</span>`}</div>
+    <div class="srstage${hasMedia?"":" norec"}${srP.zoom>1?" zoomed":""}" id="srStage" title="${hasMedia?(srP.zoom>1?"Drag to look around · click to fit":"Click to zoom in"):""}"><div class="srnow" id="srNow"></div><div class="srrep" id="srRep" hidden></div>${hasMedia?"":`<span class="srnorec">No recording loaded</span>`}</div>
     <div class="srctl">
       <button type="button" class="srbtn srpp" id="srPP" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg></button>
       <span class="num srclock"><b id="srClock">0:00</b> / ${srT(dur)}</span>
@@ -8255,13 +8255,20 @@ function srFit(){const M=srP.media;if(!M||!M.rep)return;const st=srQ("#srStage")
 
 window.addEventListener("resize",()=>srFit());
 /* zoom and the big view change classes in place: the replay iframe is never moved, so playback keeps going */
-function srZoomPaint(){const st=srQ("#srStage");if(st){st.classList.toggle("zoomed",srP.zoom>1);st.title=srP.zoom>1?"Click to fit":"Click to zoom in"}
+function srZoomPaint(){const st=srQ("#srStage");if(st){st.classList.toggle("zoomed",srP.zoom>1);st.title=srP.zoom>1?"Drag to look around · click to fit":"Click to zoom in"}
   document.querySelectorAll("#srPlay [data-srzoom]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.srzoom===srP.zoom)));srFit()}
 function srSetBig(on){srP.big=on;const P=srQ("#srPlay");if(!P)return;P.classList.toggle("big",on);document.documentElement.classList.toggle("srbigon",on);
   const b=srQ("#srBig");if(b){b.setAttribute("aria-pressed",String(on));b.setAttribute("aria-label",on?"Close the big view":"Expand");
     b.innerHTML=on?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}
   requestAnimationFrame(()=>srFit())}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&srP.big){srSetBig(false)}});
+/* zoomed in: drag the screen to look around; a click without a drag still goes back to fit */
+let srDrag=null;
+document.addEventListener("pointerdown",e=>{const st=e.target.closest&&e.target.closest("#srStage");if(!st||srP.zoom<=1||!srP.media||!srP.media.rep||e.button!==0)return;
+  const r=srP.media.rep.wrapper.getBoundingClientRect();srDrag={x:e.clientX,y:e.clientY,fx:srP.fx,fy:srP.fy,w:r.width||1,h:r.height||1,moved:false};st.classList.add("dragging");try{st.setPointerCapture(e.pointerId)}catch(_){}});
+document.addEventListener("pointermove",e=>{if(!srDrag)return;const dx=e.clientX-srDrag.x,dy=e.clientY-srDrag.y;if(!srDrag.moved&&Math.hypot(dx,dy)<4)return;srDrag.moved=true;
+  srP.fx=Math.max(0,Math.min(1,srDrag.fx-dx/srDrag.w));srP.fy=Math.max(0,Math.min(1,srDrag.fy-dy/srDrag.h));srFit()});
+document.addEventListener("pointerup",()=>{const st=srQ("#srStage");if(st)st.classList.remove("dragging");if(srDrag&&!srDrag.moved)srDrag=null});
 /* after a re-render, put the live replay node back so a db update doesn't kill playback */
 function srMount(d){if(srP.id!==d.id){srPause();srMediaDrop();srP.id=d.id;srP.t=0}
   const M=srP.media;if(M&&M.id===d.id&&M.ready&&M.node&&srQ("#srRep")!==M.node){srMakeRep(M);srMediaSync(srP.playing)}
@@ -8271,7 +8278,7 @@ document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#
   if(e.target.closest("#srPP")){srP.playing?srPause():srPlay();return}
   if(e.target.closest("#srBig")){srSetBig(!srP.big);return}
   const zb=e.target.closest("[data-srzoom]");if(zb){srP.zoom=+zb.dataset.srzoom;if(srP.zoom===1){srP.fx=srP.fy=.5}srZoomPaint();return}
-  const stg=e.target.closest("#srStage");if(stg&&srP.media&&srP.media.rep){const M=srP.media,w=M.rep.wrapper,ifr=M.rep.iframe,r=w.getBoundingClientRect();
+  const stg=e.target.closest("#srStage");if(stg&&srDrag&&srDrag.moved){srDrag=null;return}if(stg&&srP.media&&srP.media.rep){const M=srP.media,w=M.rep.wrapper,ifr=M.rep.iframe,r=w.getBoundingClientRect();
     if(srP.zoom>1){srP.zoom=1;srP.fx=srP.fy=.5}else if(r.width&&r.height){srP.fx=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));srP.fy=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));srP.zoom=2}
     srZoomPaint();return}
   const pin=e.target.closest("[data-srseek]");if(pin){const d=srDoc(),cl=srClips(d),t=+pin.dataset.srseek,c=cl.find(c=>t>=c.s&&t<=c.e);srP.pick=t;srSeek(srP.hl&&c?Math.max(c.s,t-4):t,true);srMomScroll(t);return}
