@@ -1754,6 +1754,8 @@ html.srbigon{overflow:hidden}html.srbigon body::after{content:"";position:fixed;
 .srcurvew{position:relative;height:64px;cursor:pointer;border-bottom:1px solid var(--line)}
 .srcurve{position:absolute;inset:0;width:100%;height:100%}
 .srta{fill:#7c3aed;shape-rendering:crispEdges}.srtc{fill:#f08a24;shape-rendering:crispEdges}.srto{fill:#9aa0a6;shape-rendering:crispEdges}.srmid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.srlegrow{background:color-mix(in srgb,#7c3aed 10%,transparent);border-top:2px solid #7c3aed}.srlegrow b{color:#6d28d9}
+.srleg{stroke:#7c3aed;stroke-width:2;vector-effect:non-scaling-stroke}.srlegl{position:absolute;top:-2px;transform:translateX(4px);font-size:10.5px;font-weight:600;color:#6d28d9;background:var(--panel,#fff);padding:0 4px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:1}
 .srsave{fill:#0f7b4a;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke}.srpost{fill:color-mix(in srgb,var(--ink) 7%,transparent)}.srhang{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
 .srksave i{background:#0f7b4a}.srkpost i{background:color-mix(in srgb,var(--ink) 14%,transparent)}
 .srcut{fill:color-mix(in srgb,var(--s0,#c0392b) 55%,transparent)}
@@ -8161,9 +8163,10 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
   const L=(d.lines||[]).filter(l=>+l.e>+l.t),mid=H/2,lw=(l)=>Math.max(1,x(+l.e)-x(+l.t)).toFixed(2),
     lane=l=>l.who==="agent"?`<rect x="${x(+l.t).toFixed(2)}" y="${mid-9}" width="${lw(l)}" height="7" class="srta"><title>${esc(srT(+l.t))} · Tarro</title></rect>`
       :`<rect x="${x(+l.t).toFixed(2)}" y="${mid+2}" width="${lw(l)}" height="7" class="${l.who==="other"?"srto":"srtc"}"><title>${esc(srT(+l.t))} · ${l.who==="other"?"Someone else":"Caller"}</title></rect>`;
-  const cuts=srCuts(d),saves=srSaves(d),hang=+d.dur||0,past=hang&&dur>hang+2;
+  const cuts=srCuts(d),saves=srSaves(d),hang=+d.dur||0,LG=(d.legs||[]).filter(l=>+l.off>0),postEnd=LG.length?+LG[0].off-4:dur,past=hang&&postEnd>hang+2;
   const p="";const talk=L.map(lane).join("")+`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="srmid"/>`+cuts.map(c=>`<rect x="${(x(c.t)-3).toFixed(1)}" y="1" width="6" height="${H-4}" class="srcut"><title>${esc(srT(c.t)+" · "+(c.by==="agent"?"agent cut in":"caller cut in"))}</title></rect>`).join("")
-    +(past?`<rect x="${x(hang).toFixed(1)}" y="0" width="${(W-x(hang)).toFixed(1)}" height="${H}" class="srpost"/><line x1="${x(hang).toFixed(1)}" x2="${x(hang).toFixed(1)}" y1="0" y2="${H}" class="srhang"><title>${esc(srT(hang))} · hang-up</title></line>`:"")
+    +LG.map(l=>`<line x1="${x(+l.off).toFixed(1)}" x2="${x(+l.off).toFixed(1)}" y1="0" y2="${H}" class="srleg"/>`).join("")
+    +(past?`<rect x="${x(hang).toFixed(1)}" y="0" width="${(x(postEnd)-x(hang)).toFixed(1)}" height="${H}" class="srpost"/><line x1="${x(hang).toFixed(1)}" x2="${x(hang).toFixed(1)}" y1="0" y2="${H}" class="srhang"><title>${esc(srT(hang))} · hang-up</title></line>`:"")
     +saves.map(v=>`<rect x="${(x(v.t)-2.5).toFixed(1)}" y="${(mid-7).toFixed(1)}" width="5" height="14" rx="1" class="srsave"><title>${esc(srT(v.t)+" · "+v.l)}</title></rect>`).join("");
   const sil=(d.silences||[]).filter(s=>+s[1]>=10).map(s=>`<rect x="${x(+s[0]).toFixed(1)}" y="${H-3}" width="${Math.max(2,x(+s[1])).toFixed(1)}" height="3" class="srsil"/>`).join("");
   const step=dur>900?120:dur>360?60:30,ticks=[];for(let t=0;t<=dur;t+=step)ticks.push(t);
@@ -8192,6 +8195,7 @@ function srPlayerHtml(d){const dur=srDur(d),C=srCurve(d),clips=srClips(d),F=((d.
           ${clips.map(c=>`<rect x="${x(c.s).toFixed(1)}" y="0" width="${(x(c.e)-x(c.s)).toFixed(1)}" height="${H}" class="srclip"/>`).join("")}
           ${talk}${sil}
         </svg>
+        ${LG.map((l,i)=>`<span class="srlegl" style="left:${(x(+l.off)/W*100).toFixed(2)}%">${esc(String(l.label||("Leg "+(i+2))).split(" · ")[0])}</span>`).join("")}
         <div class="srhead" id="srHead"></div><div class="srhover" id="srHover" hidden></div>
       </div>
       <div class="srticks">${ticks.map(t=>`<span style="left:${(t/dur*100).toFixed(2)}%">${t>=60?Math.round(t/60)+"m":t+"s"}</span>`).join("")}</div>
@@ -8326,13 +8330,15 @@ function srLogRows(d){const A=d.audit||{},R=[];
   (d.lines||[]).forEach(l=>R.push({t:+l.t||0,src:"voice",who:l.who==="agent"?(d.alias||"Agent"):l.who==="other"?"Store":"Caller",cls:l.who||"",txt:l.txt||"",flag:l.flag||""}));
   (d.screen||[]).filter(s=>s.k!=="load"&&s.k!=="page"&&(s.l||s.v||s.k==="idle")).forEach(s=>R.push({t:+s.t||0,src:"screen",who:SR_K[s.k]||s.k,cls:"k-"+s.k,txt:(s.l||"")+(s.v?` “${s.v}”`:"")+(s.k==="idle"&&s.d?` · ${Math.round(s.d)} s`:"")}));
   (A.findings||[]).forEach(f=>R.push({t:+f.t||0,src:"moment",f}));
-  return R.sort((a,b)=>a.t-b.t||(a.src==="moment"?-1:b.src==="moment"?1:0))}
+  (d.legs||[]).forEach((l,i)=>R.push({t:+l.off-.01,src:"leg",txt:l.label||("Follow-up "+(i+1))}));
+  return R.sort((a,b)=>a.t-b.t||(a.src==="leg"?-1:b.src==="leg"?1:a.src==="moment"?-1:b.src==="moment"?1:0))}
 function srLogHtml(d){const R=srLogRows(d),cl=srClips(d),inC=t=>!cl.length||cl.some(c=>t>=c.s-.5&&t<=c.e+.5),G=[];
   R.forEach(r=>{const g=G[G.length-1];if(g&&g.src===r.src&&r.src!=="moment")g.rows.push(r);else G.push({src:r.src,rows:[r]})});
   const row=r=>{const out=inC(r.t)?"":" out";
+    if(r.src==="leg")return `<li class="lg-r srlr srlegrow" data-t="${r.t}"><button type="button" class="lg-t num srlt" data-srlog="${r.t+.01}">${srT(r.t+.01)}</button><span class="lg-w"><b>${esc(r.txt)}</b></span></li>`;
     if(r.src==="moment"){const f=r.f,k=srKind(f);return `<li class="lg-r srlr srlm k-${k} t-${esc(f.tone||"note")}${out}" data-t="${r.t}"><button type="button" class="lg-t num srlt" data-srlog="${r.t}">${srT(r.t)}</button><span class="lg-w">${srSvgI(k,"sri srli")}<b>${esc(SR_KL[k])}</b> ${esc(f.text)}</span></li>`}
     return `<li class="lg-r srlr ${esc(r.cls)}${r.flag?" flag":""}${out}" data-t="${r.t}"><button type="button" class="lg-t num srlt" data-srlog="${r.t}">${srT(r.t)}</button><span class="lg-w"><b>${esc(r.who)}</b> ${esc(r.txt)}${r.flag?` <span class="srflag">${esc(r.flag)}</span>`:""}</span></li>`};
-  const head=g=>{if(g.src==="moment")return "";const a=g.rows[0].t,b=g.rows[g.rows.length-1].t;
+  const head=g=>{if(g.src==="moment"||g.src==="leg")return "";const a=g.rows[0].t,b=g.rows[g.rows.length-1].t;
     return `<div class="lg-gh"><span class="lg-src">${g.src==="voice"?"Call":"Screen"}</span><span class="lg-meta num">${srT(a)}${b>a+1?"–"+srT(b):""}</span></div>`};
   return `<aside class="panel tlog srlog${srP.hl?" hlon":""}" id="srLog" aria-label="Call log"><header class="lg-hd"><span>Call log</span><span class="num tkmut">${R.length} events</span></header>
     <ol class="lg-list" id="srLogL">${G.map(g=>`<li class="lg-g${g.src==="moment"?" srlmg":""}">${head(g)}<ol class="lg-rows">${g.rows.map(row).join("")}</ol></li>`).join("")}</ol></aside>`}

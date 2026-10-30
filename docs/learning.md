@@ -38,3 +38,9 @@ Patrick replaced the level descriptions with v5. Rows, weights, the 0–4 raw sc
 From desk v92 a row is worth mark ÷ 5 (marks 1–5), N/A at full marks: a 4 on every row is 80%. Bands: above 85 outperformed, 75–85 hitting expectations, 65–75 some gaps, below 65 not yet at standard.
 
 No mark changed, Claude's or the team's. Every % saved before v5 (Σ(mark/4 × w) on raw 0–4) is shown on the v5 scale in memory with the exact link v5 = 20 + 0.8 × old; new saves carry `pv: 5`. Both sides move together, so gaps shrink by the same 0.8 factor: Round 1 original gap 21.3 → 17.0 pts, Regrade 1 23.5 → 18.8 pts (still Further). Verdict matches change because the bands changed (original 6 of 15, Regrade 1 5 of 15).
+
+## Follow-up calls by the same agent (Oct 30)
+
+Round 2 calls now carry the same agent's later calls on the case (callbacks to the store, customer or driver), appended on one timeline in the recording. Only the audited agent's own talk legs that started after the audited call; voicemail, silent legs, earlier calls and other agents' calls are left out. 10 calls have them (14 legs).
+
+Those 10 were regraded on v5 as a case (audited call + follow-ups). The audited-call-only grade is kept as `gradeSolo`, the earlier v4 grade as `gradeV4`. Opening spiel still comes from the audited call only.
