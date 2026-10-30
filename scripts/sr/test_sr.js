@@ -53,7 +53,7 @@ const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
  if(vp.width>1000){
  // paste a recording bundle
  
- await page.evaluate(t=>{const dt=new DataTransfer();dt.setData('text/plain',t);document.querySelector('#view-sr .srmain').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))},JSON.stringify(bundle));
+ await page.evaluate(t=>{const dt=new DataTransfer();dt.setData('text/plain',t);document.querySelector('#view-sr .srmain').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))},JSON.stringify({kind:'srMediaZ',callId:bundle.callId,clips:bundle.clips.map(c=>({s:c.s,e:c.e})),z:require('zlib').gzipSync(JSON.stringify(bundle)).toString('base64')}));
  await page.waitForTimeout(800);console.log('   paste msg:',await page.textContent('#toast'));
  await page.evaluate(()=>document.activeElement.blur());await page.evaluate(()=>renderSR());await page.waitForTimeout(1200);
  const m=await page.evaluate(()=>({media:!!srDoc().media,ready:srP.media&&srP.media.ready,err:srP.media&&srP.media.err,rep:!!document.querySelector('#srRep iframe'),clips:srClips(srDoc()).length}));

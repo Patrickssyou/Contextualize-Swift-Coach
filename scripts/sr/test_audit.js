@@ -23,7 +23,7 @@ const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
  ok(pk.n===1&&pk.idx===7&&pk.vis,vp.width+': timeline icon highlights its log row '+JSON.stringify(pk));
  await page.screenshot({path:S+'/sr/t/a_'+vp.width+'.png',fullPage:vp.width<500});
  await page.evaluate(()=>srPause());
- await page.evaluate(()=>{callSel=null;setTab("calib")});await page.waitForTimeout(300);
+ await page.evaluate(()=>{callSel=null;week="2026-10-05";setTab("calib")});await page.waitForTimeout(300);
  await page.locator('[role=tab][data-tab="sr"]').click();await page.waitForTimeout(800);
  const T=await page.evaluate(()=>({tab,srMode,callSel,strip:document.querySelectorAll('#view-chat .srcalls .srcall').length,tk:!!document.querySelector('#view-chat #cTicket .tkh, #view-chat #cTicket'),rec:!!document.querySelector('#view-chat #srSec #srPlay'),coach:!!document.querySelector('#view-chat #cs-coach .srcoach'),
    cols:[...document.querySelectorAll('#view-chat #cbGrid th, #view-chat #cbGrid [role=columnheader], #view-chat #cbGrid .cbgh')].map(x=>x.textContent.trim()).join('|'),sel:document.querySelector('[role=tab][data-tab="sr"]').getAttribute('aria-selected'),srHidden:document.querySelector('#view-sr').hidden}));

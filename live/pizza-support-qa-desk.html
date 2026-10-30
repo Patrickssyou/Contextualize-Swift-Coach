@@ -5719,10 +5719,10 @@ let callSel=null;
 {const h=(()=>{try{return decodeURIComponent((location.hash||"").slice(1))}catch(e){return ""}})();
   if(/^call\/./.test(h)){const p=h.slice(5).split("/");callSel=p.pop();if(p.length&&chatWeek(p[0])&&!ONLY_WEEK)week=chatWeek(p[0])}}
 function openChat(sid,wk,fromBack){if(!fromBack&&!(tab==="chat"&&!callSel&&String(chatSel)===String(sid)))navPush();
-  wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
+  wk=wk?(ROUNDS[wk]||R1_KEYS.includes(wk)||isCandKey(wk)?wk:chatWeek(wk)):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   callSel=null;chatSel=String(sid);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
 function openCall(id,wk,fromBack,keepSr){if(!keepSr)srMode=false;if(!fromBack&&!(tab==="chat"&&callSel===String(id)))navPush();
-  wk=wk?chatWeek(wk):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
+  wk=wk?(ROUNDS[wk]||R1_KEYS.includes(wk)||isCandKey(wk)?wk:chatWeek(wk)):"";if(wk&&wk!==week){week=wk;chatsWeekListen()}
   callSel=String(id);chatPickOpen=null;setTab("chat");window.scrollTo({top:0})}
 
 /* ---------- in-page history: the artifact frame may not pass browser Back, so Back pops this stack (a chat, a call or a tab) ---------- */
@@ -7051,7 +7051,7 @@ function ghHtml(){const R=GH_ROUNDS.find(r=>r.id===ghRound)||GH_ROUNDS[0],items=
   return head+sum+ghTrend(items)+itab+ctl}
 /* version 1: Claude's grade on the item as it stood when the team locked it (never overwritten) */
 async function ghSnap(it){if(!db||!it)return;const ik=it.ik;const ref=db.doc(GH_ROOT+"/"+ik),s=await ref.get();if(s&&s.exists)return;let v=null;
-  if(it.kind==="call"){const g=cbCG.get(String(it.key))||(srDocFor(it.key)||{}).grade||null;if(g&&g.scores)v={n:1,at:g.at||new Date().toISOString(),src:"original",scores:clone(g.scores),via:cbCG.get(String(it.key))?"transcript":"screen + voice"}}
+  if(it.kind==="call"){const sg=(srDocFor(it.key)||{}).grade,sr=!!(ROUNDS[it.week||it.round]&&sg&&sg.scores),g=sr?sg:cbCG.get(String(it.key))||sg||null;if(g&&g.scores)v={n:1,at:g.at||new Date().toISOString(),src:"original",scores:clone(g.scores),via:sr||!cbCG.get(String(it.key))?"screen + voice":"transcript"}}
   else{const a=chatAud[it.key];if(a&&a.grade&&a.grade.scores)v={n:1,at:a.gradedAt||new Date().toISOString(),src:"original",scores:clone(a.grade.scores),pct:a.pct??null,verdict:a.verdict||null}}
   if(!v)return;const R=GH_ROUNDS.find(r=>r.keys.includes(it.week||it.round))||{};
   await ref.set({ik,kind:it.kind,key:String(it.key),sa:it.sa||"",title:it.title||"",round:R.id||null,roundKey:it.week||it.round||null,versions:[v]})}
@@ -7308,7 +7308,7 @@ function cbCallItem(id){id=String(id||"");const hit=cbCallItems().find(x=>x.key=
 function cbItemOnScreen(){if(tab!=="chat")return null;if(callSel)return "call_"+callSel;const c=chatSel&&chatBy(chatSel),it=cbItemFor(c);return it?it.ik:null}
 /* Claude's marks and reasons: a call's callGrades doc; the chat's audit when it is loaded, else the marks at draw */
 function cbClaude(it){const W=(marks,why,cites,g)=>{const x=scMapMarks(it.kind==="chat"?"chat":"call",marks,cbT(it.kind,it));return {marks:x.marks,old:x.old,why:cbMM(it,why||{}),cites:cbMM(it,cites||{}),g}};
-  if(it.kind==="call"){const g=cbCG.get(String(it.key))||(typeof srDocFor==="function"&&(srDocFor(it.key)||{}).grade)||null;return g&&g.scores&&typeof g.scores==="object"?W(g.scores,g.reasons,g.cites,g):null}
+  if(it.kind==="call"){const sg=typeof srDocFor==="function"&&(srDocFor(it.key)||{}).grade,g=(ROUNDS[it.week||it.round]&&sg&&sg.scores?sg:null)||cbCG.get(String(it.key))||sg||null;return g&&g.scores&&typeof g.scores==="object"?W(g.scores,g.reasons,g.cites,g):null}
   if(it.kind!=="chat")return null;const a=chatAud[it.key],G=(a&&a.grade)||{};
   if(G.scores)return W(G.scores,G.reasons);return it.s&&it.s.aiScores?W(it.s.aiScores,{}):null}
 const it0=ik=>String(ik).startsWith("call_")?"call":"chat";
@@ -7836,7 +7836,7 @@ function cbBoardHtml(it){const q=it.q||{},lk=(cbItems[it.ik]||{}).locked,v=cbLoc
 function cbCallAudit(v,force){const it=cbCallItem(callSel);if(typeof chPanel!=="undefined"&&chPanel)chPanelClose();
   const lk=(cbItems[it?it.ik:""]||{}).locked,inR=it&&cbInRound(it.ik);
   if(it)cbCGWatch(it.key);const ck=String(callSel||"");
-  const sig=JSON.stringify([callSel,week,!!it,typeof srDocs!=="undefined"&&srDocs?(srDocs.find(x=>x.id===String(callSel))||{}).at||srDocs.length:0,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
+  const sig=JSON.stringify([callSel,week,!!it,typeof srDocs!=="undefined"&&srDocs?(d=>d?(d.at||"")+"|"+((d.media||{}).asset||""):srDocs.length)(srDocs.find(x=>x.id===String(callSel))):0,it&&it.q&&chHash(it.q),lk&&lk.at,inR,cbTkTab,cbEvMore,it&&cbRowsOf(it.ik),queueReady,myId,amOwner,
     cbCG.has(ck),cbCGSig(cbCG.get(ck)),ctSig("call",ck),cbGraders.has(myId),cbGR?cbGR.qid||"-":"",cbGRErr.get(ck)||"",cbCanGrade(),!!(typeof chatRun!=="undefined"&&chatRun),srMode]);
   if(!force&&sig===cbAuditSig&&$("#view-chat #cbGrid")){chNavPaint();cbRailPaint();cbGRPaint();return}
   cbAuditSig=sig;const nav=srStripHtml()+`<nav class="cnav" id="chNav" aria-label="Audits">${chNavHtml()}</nav>`;
@@ -7942,7 +7942,7 @@ async function cbGradeRun(list,one){if(cbGR||(typeof chatRun!=="undefined"&&chat
     cbGRRefresh()}}
 function cbGRRefresh(){if(tab==="chat"&&callSel)renderChatAudit();if(tab==="calib")renderCalib()}
 /* the round's calls Claude hasn't graded (read so far) */
-const cbUngraded=()=>cbCallItems().filter(it=>cbCG.has(String(it.key))&&!cbCG.get(String(it.key)));
+const cbUngraded=()=>cbCallItems().filter(it=>cbCG.has(String(it.key))&&!cbCG.get(String(it.key))&&!((srDocFor(it.key)||{}).grade||{}).scores);
 /* a locked call: a contest lesson where the panel moved Claude's mark, a reinforce lesson where it kept it and said why. callLessons/<queueId>_<crit> */
 async function cbCallLocked(it,R,marks,A,subd,at){const C=cbClaude(it);if(!C||!db)return "";const q=it.q||{};let n=0;
   for(const r of R){const cl=C.marks[r.id],ag=marks[r.id];if(cl===undefined)continue;
@@ -8056,10 +8056,12 @@ window.addEventListener("message",async e=>{let h="";try{h=new URL(e.origin).hos
   try{await db.doc("srRaw/"+String(m.id).replace(/[^\w-]/g,"")).set({id:m.id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(m.data)});e.source.postMessage({type:"srAck",id:m.id,ok:true},e.origin)}
   catch(err){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:String(err&&err.code||err).slice(0,80)},e.origin)}catch(_){}}});
 /* the SR tab is the call's own audit (ticket, recording, scorecard with every grader, coaching) with a strip to switch between recorded calls */
-function srEnter(){if(typeof srListen==="function")srListen();if(!srDocs||!srDocs.length)return false;const d=srDocs.find(x=>x.id===srSel)||srDocs[0];srSel=d.id;
+/* the recorded calls of the round on screen (Current SAs or SA candidates); Round 1's recordings stay with Round 1 */
+const srRoundDocs=()=>(srDocs||[]).filter(x=>{const q=(queueAll||[]).find(d=>d.id===x.id);return q&&q.week===week}).sort((a,b)=>{const o=cbRoundItems(week).map(x=>x.key),i=k=>{const n=o.indexOf(k);return n<0?999:n};return i(a.id)-i(b.id)});
+function srEnter(){if(typeof srListen==="function")srListen();const D=srRoundDocs();if(!D.length)return false;const d=D.find(x=>x.id===srSel)||D[0];srSel=d.id;
   const q=(queueAll||[]).find(x=>x.id===d.id);if(!q)return false;srMode=true;openCall(d.id,q&&q.week,false,true);return true}
-const srStripHtml=()=>srMode&&srDocs&&srDocs.length?`<nav class="srcalls" aria-label="Recorded calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===String(callSel)}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>`:"";
-function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(!srSel&&srDocs.length)srSel=srDocs[0].id;if(tab==="sr"){if(!srEnter())renderSR()}else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
+const srStripHtml=()=>srMode&&srRoundDocs().length?`<nav class="srcalls" aria-label="Recorded calls">${srRoundDocs().map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===String(callSel)}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>`:"";
+function srListen(){if(!db||srOff)return;srOff=db.collection("srAudits").onSnapshot(s=>{srDocs=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>String(a.sa||"").localeCompare(String(b.sa||"")));if(tab==="sr"){if(!srEnter())renderSR()}else if(tab==="chat"&&callSel&&typeof renderChatAudit==="function")renderChatAudit()},()=>{srDocs=srDocs||[];if(tab==="sr")renderSR()})}
 const srT=t=>{t=Math.max(0,Number(t)||0);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`};
 const SR_K={click:"Clicked",dblclick:"Double-clicked",type:"Typed",panel:"Screen",page:"Page",load:"Screen",idle:"No activity"};
 function srChart(d){const L=(d.lines||[]).filter(l=>l.f0),dur=Number(d.dur)||Math.max(1,...(d.lines||[]).map(l=>l.e||0));if(!L.length)return "";
@@ -8220,7 +8222,9 @@ function srMediaSync(on){const M=srP.media;if(!M||!M.ready||M.id!==srP.id)return
 const srB64=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u};
 async function srLoadMedia(d){if(!d||!d.media||!d.media.asset)return;if(srP.media&&srP.media.id===d.id)return;srMediaDrop();
   const M={id:d.id,ready:false};srP.media=M;srPaint();
-  try{const r=await fetch(d.media.url||("/_blob/"+d.media.asset));if(!r.ok)throw new Error("recording "+r.status);const j=await r.json();if(srP.media!==M)return;
+  try{const r=await fetch(d.media.url||("/_blob/"+d.media.asset));if(!r.ok)throw new Error("recording "+r.status);let j=await r.json();
+    if(j&&j.kind==="srMediaZ"){const st=new Blob([srB64(j.z)]).stream().pipeThrough(new DecompressionStream("gzip"));j=Object.assign(await new Response(st).json(),{kind:"srMedia"})}
+    if(srP.media!==M)return;
     const AC=window.AudioContext||window.webkitAudioContext;M.ctx=AC?new AC({sampleRate:j.sr||8000}):null;
     M.clips=(j.clips||[]).map(c=>{const u=srB64(c.pcm),n=u.length>>1,dv=new DataView(u.buffer),f=new Float32Array(n);for(let i=0;i<n;i++)f[i]=dv.getInt16(i*2,true)/32768;let buf=null;if(M.ctx){buf=M.ctx.createBuffer(1,n,j.sr||8000);buf.copyToChannel(f,0)}return {s:+c.s,e:+c.e,buf}});
     M.audioStart=+j.audioStart||0;M.t0=+j.t0||((j.events||[])[0]||{}).timestamp||M.audioStart;
@@ -8254,17 +8258,25 @@ document.addEventListener("keydown",e=>{if((tab!=="sr"&&tab!=="chat")||!srQ("#sr
   else if(e.key==="ArrowRight")srSeek(srP.t+5,false);else if(e.key==="ArrowLeft")srSeek(srP.t-5,false)});
 /* owner only: paste a recording bundle (made in a logged-in GreenDot tab) to store it in the asset store and point the audit at it */
 let srPasteNote="";const srMediaImpHtml=()=>amOwner&&srTools()?`<details class="panel srimp"${srPasteNote?" open":""}><summary>Add recording clips</summary><div class="srpaste" id="srPaste" tabindex="0" role="textbox" aria-label="Paste recording">Click here and paste</div><span class="hint" id="srPasteMsg">${esc(srPasteNote)}</span></details>`:"";
+/* the owner pastes, anywhere on the SR screens with no box on screen (or in the hidden box): a recording bundle ({kind:"srMedia"|"srMediaZ", callId, …}),
+   several at once ({kind:"srBatch", items:[…]}), or extracted call data for Claude to audit ({kind:"srRaw", calls:{callId: data}} → srRaw/<callId>) */
+async function srSaveBundle(j,txt){const doc=(srDocs||[]).find(x=>x.callId===j.callId);if(!doc)return "No audit for call "+String(j.callId).slice(0,8);
+  const A=await window.claude.use("assets");if(!A)return "Can't store files here";
+  const up=await A.upload(new Blob([txt||JSON.stringify(j)],{type:"application/json"}));
+  await db.doc("srAudits/"+doc.id).update({media:{asset:up.id,url:up.url,size:up.sizeBytes,clips:(j.clips||[]).map(c=>[+c.s,+c.e]),zip:j.kind==="srMediaZ",at:new Date().toISOString()}});
+  if(srP.id===doc.id)srMediaDrop();return ""}
 document.addEventListener("paste",async e=>{const z=e.target.closest&&e.target.closest("#srPaste");const txt=(e.clipboardData||window.clipboardData).getData("text");
-  /* the owner can also paste a bundle anywhere on the SR tab, with no box on screen */
-  const quiet=!z&&amOwner&&tab==="sr"&&!(e.target.closest&&e.target.closest("input,textarea,[contenteditable]"))&&/^\s*\{"kind":"srMedia"/.test(txt||"");if(!z&&!quiet)return;e.preventDefault();
+  const onSR=tab==="sr"||srMode||(tab==="chat"&&!!callSel);
+  const quiet=!z&&amOwner&&onSR&&!(e.target.closest&&e.target.closest("input,textarea,[contenteditable]"))&&/^\s*\{"kind":"sr(Media|MediaZ|Batch|Raw)"/.test(txt||"");if(!z&&!quiet)return;e.preventDefault();
   const say=s=>{srPasteNote=z?s:"";const m=$("#srPasteMsg");if(m)m.textContent=s;if(quiet&&typeof toast==="function")toast(s)};let j;try{j=JSON.parse(txt)}catch(_){say("Not a recording bundle.");return}
-  if(!j||j.kind!=="srMedia"||!/^[0-9a-f-]{36}$/.test(j.callId||"")){say("Not a recording bundle.");return}
-  const doc=(srDocs||[]).find(x=>x.callId===j.callId);if(!doc){say("No audit for call "+j.callId.slice(0,8)+".");return}
-  say(`Saving ${(txt.length/1048576).toFixed(1)} MB…`);
-  try{const A=await window.claude.use("assets");if(!A){say("Can't store files here.");return}
-    const up=await A.upload(new Blob([txt],{type:"application/json"}));
-    await db.doc("srAudits/"+doc.id).update({media:{asset:up.id,url:up.url,size:up.sizeBytes,clips:(j.clips||[]).map(c=>[+c.s,+c.e]),at:new Date().toISOString()}});
-    say("Saved for "+(doc.sa||"call")+".");if(srP.id===doc.id){srMediaDrop()}}
+  try{
+    if(j&&j.kind==="srRaw"&&j.calls&&typeof j.calls==="object"){let n=0;for(const [id,d] of Object.entries(j.calls)){if(!/^[0-9a-f-]{36}$/.test(id))continue;await db.doc("srRaw/"+id).set({id,at:new Date().toISOString(),by:myId||null,json:JSON.stringify(d)});n++}
+      say(`Saved ${chPl(n,"call")} for auditing.`);return}
+    const L=j&&j.kind==="srBatch"&&Array.isArray(j.items)?j.items:[j];
+    if(!L.every(b=>b&&(b.kind==="srMedia"||b.kind==="srMediaZ")&&/^[0-9a-f-]{36}$/.test(b.callId||""))){say("Not a recording bundle.");return}
+    say(`Saving ${(txt.length/1048576).toFixed(1)} MB…`);const miss=[];let n=0;
+    for(const b of L){const m=await srSaveBundle(b,L.length===1?txt:null);if(m)miss.push(m);else n++}
+    say(n===1&&!miss.length?"Saved for "+(((srDocs||[]).find(x=>x.callId===L[0].callId)||{}).sa||"call")+".":`Saved ${chPl(n,"recording")}${miss.length?" · "+miss.join(" · "):""}`)}
   catch(err){say("Couldn't save: "+String(err&&(err.code||err.message)||err).slice(0,80))}});
 
 /* the call log (MGR tool style): what was said and done on screen, grouped by source, each time a button that jumps the player there */
@@ -8305,9 +8317,10 @@ function srAuditSec(it){if(typeof srListen==="function")srListen();const d=it&&s
   return `<section class="tksec srsec" id="srSec"><div class="tkch"><h3 class="tkh">Screen recording and voice</h3></div>${srDuo(d)}</section>`}
 function renderSR(){const v=$("#view-sr");if(!v||tab!=="sr")return;srListen();if(srEnter())return;if(v.querySelector("#srImpTx")&&v.querySelector("#srImpTx").value)return;if(document.activeElement&&document.activeElement.id==="srPaste")return;
   if(srDocs==null){v.innerHTML=`<div class="panel empty">Loading…</div>`;return}
-  if(!srDocs.length){v.innerHTML=`<div class="panel empty">No screen and voice audits yet.</div>${srImportHtml()}`;return}
-  const d=srDocs.find(x=>x.id===srSel)||srDocs[0];
-  v.innerHTML=`<nav class="srcalls" aria-label="Calls">${srDocs.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>
+  const SD=srDocs.filter(x=>!(queueAll||[]).some(q=>q.id===x.id));
+  if(!SD.length){v.innerHTML=`<div class="panel empty">No screen and voice audits for this round yet.</div>${srImportHtml()}`;return}
+  const d=SD.find(x=>x.id===srSel)||SD[0];
+  v.innerHTML=`<nav class="srcalls" aria-label="Calls">${SD.map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===d.id}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>
     <article class="panel srmain">${srDetail(d)}</article>${srMediaImpHtml()}${srImportHtml()}`;srMount(d)}
 document.addEventListener("click",e=>{const p=e.target.closest("[data-srpick]");if(p){srSel=p.dataset.srpick;if(!srEnter())renderSR();return}
   const oa=e.target.closest("[data-sraudit]");if(oa){const q=(queueAll||[]).find(x=>x.id===oa.dataset.sraudit);openCall(oa.dataset.sraudit,q&&q.week);setTimeout(()=>{const g=$("#cs-score");if(g)g.scrollIntoView({block:"start"})},400);return}

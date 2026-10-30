@@ -1,0 +1,23 @@
+const {chromium}=require('/home/claude/contextualize-swift-coach/node_modules/playwright');const fs=require('fs'),path=require('path');
+const S='/tmp/claude-0/-home-claude/1b142488-5d26-5ec4-ac9b-9c6af59eb289/scratchpad',B='/home/claude/contextualize-swift-coach/data/backup-2026-10-30';
+const src=fs.readFileSync('test_sr.js','utf8');const MOCK=eval("("+src.slice(src.indexOf('const MOCK='),src.indexOf('const LD=0')).replace(/^const MOCK=/,"").replace(/;\s*$/,"")+")");
+const html='<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>\n'+fs.readFileSync(S+'/desk.html','utf8')+'\n</body></html>';
+const rd=f=>{const j=JSON.parse(fs.readFileSync(f,'utf8'));return j&&j.data&&typeof j.data==='object'&&!Array.isArray(j.data)&&Object.keys(j).length<=3?j.data:j};
+const seed=[];const walk=(dir,pre)=>fs.readdirSync(dir).forEach(f=>{const p=path.join(dir,f);if(fs.statSync(p).isDirectory())walk(p,pre+f+'/');else if(f.endsWith('.json'))seed.push([pre+f.slice(0,-5),rd(p)])});
+['calibRounds','calibItems','queue','callGrades','callLessons','learning','meta','settings','chatWeeks','calibMarks'].forEach(c=>{if(fs.existsSync(B+'/'+c))walk(B+'/'+c,c+'/')});
+['calibRounds','queue'].forEach(c=>walk('/home/claude/contextualize-swift-coach/data/r2/db/'+c,c+'/'));fs.readdirSync('/home/claude/contextualize-swift-coach/data/r2/docs').forEach(f=>seed.push(['srAudits/'+f.slice(0,-5),JSON.parse(fs.readFileSync('/home/claude/contextualize-swift-coach/data/r2/docs/'+f))]));fs.readdirSync('/home/claude/contextualize-swift-coach/data/r2/hist').forEach(f=>seed.push(['gradeHistory/'+f.slice(0,-5),JSON.parse(fs.readFileSync('/home/claude/contextualize-swift-coach/data/r2/hist/'+f))]));
+// archived round flags as live
+['2026-10-05','2026-10-12','2026-11-02'].forEach(k=>{const x=seed.find(s=>s[0]==='calibRounds/'+k);x[1].archived='r1'});
+const ok=(c,m)=>{console.log((c?'ok   ':'FAIL ')+m);if(!c)process.exitCode=1};
+(async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1280,height:900}}),page=await ctx.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>r.request().url().startsWith('http://qa.test/')?r.fulfill({contentType:'text/html',body:html}):r.abort());
+ await page.addInitScript(MOCK,[seed]);await page.goto('http://qa.test/#calib');await page.waitForTimeout(2500);
+ await page.locator('[role=tab][data-tab="sr"]').click();await page.waitForTimeout(1500);
+ const T=await page.evaluate(()=>({tab,srMode,callSel,week,rd:srRoundDocs().length,strip:document.querySelectorAll('#view-chat .srcalls .srcall').length,nav:(document.querySelector('#navPos')||{}).textContent,claude:(document.querySelector('#tkClaude')||{}).textContent}));
+ console.log(JSON.stringify(T));ok(T.strip===24,'strip has the 24 SA calls');
+ await page.screenshot({path:'r2_sr.png'});
+ await page.evaluate(()=>{document.querySelector('.wkswitch [data-wk="2026-11-09"]').click()});await page.waitForTimeout(800);
+ await page.locator('[role=tab][data-tab="sr"]').click();await page.waitForTimeout(1500);
+ const C=await page.evaluate(()=>({week,strip:document.querySelectorAll('#view-chat .srcalls .srcall').length}));console.log(JSON.stringify(C));ok(C.strip===24,'candidates strip 24');
+ console.log(errors);await b.close()})();
