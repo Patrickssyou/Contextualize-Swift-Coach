@@ -3,10 +3,10 @@ and the wrap-up after hang-up up to the agent's last screen action. Clip ends ar
 import json,glob,re,sys
 SAVE=re.compile(r'save|submit|create|remark|ticket|task|confirm|update|send|note',re.I)
 def windows(d):
-    dur=d['dur'] or 0;sc=d.get('screen') or []
+    dur=d['dur'] or 0;sc=[x for x in d.get('screen') or [] if not x.get('leg')]
     act=[x['t'] for x in sc if x['k'] in('click','dblclick','type')]
     end=max([dur]+act)+5
-    W=[[t-20,t+20] for t in (x['t'] for x in d['audit']['findings'])]
+    W=[[t-20,t+20] for t in (x['t'] for x in d['audit']['findings'] if not x.get('leg'))]
     W+=[[x['t']-8,x['t']+6] for x in sc if x['k'] in('click','dblclick') and SAVE.search(x.get('l',''))]
     post=[t for t in act if t>dur]
     if post: W.append([dur-5,max(post)+5])

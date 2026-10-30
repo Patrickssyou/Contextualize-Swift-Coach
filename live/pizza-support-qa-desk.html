@@ -8140,7 +8140,7 @@ function srKind(f){if(f.kind&&SR_ICON[f.kind])return f.kind;const x=String(f.tex
   if(c==="ownership")return "ownership";
   if(/tone|composure|empathy/.test(c))return f.tone==="bad"?"friction":"tone";
   return f.tone==="bad"?"friction":"info"}
-const SR_PAD=20;
+const SR_PAD=20,SR_AUDIO_LAG=1.2;
 function srClips(d){const dur=srDur(d),F=((d.audit||{}).findings||[]).map(f=>+f.t).filter(t=>!isNaN(t)).sort((a,b)=>a-b),o=[];
   if(d.media&&Array.isArray(d.media.clips)&&d.media.clips.length)return d.media.clips.map(c=>({s:+c[0],e:+c[1]}));
   for(const t of F){const s=Math.max(0,t-SR_PAD),e=Math.min(dur,t+SR_PAD);if(o.length&&s<=o[o.length-1].e+4)o[o.length-1].e=Math.max(o[o.length-1].e,e);else o.push({s,e})}return o}
@@ -8240,7 +8240,9 @@ function srMediaSync(on){const M=srP.media;if(!M||!M.ready||M.id!==srP.id)return
   const ms=Math.max(0,M.audioStart+srP.t*1000-M.t0);
   if(M.rep){try{M.rep.setConfig({speed:srP.rate});if(on)M.rep.play(ms);else M.rep.pause(ms)}catch(e){}}
   if(!on||!M.ctx)return;const i=M.clips.findIndex(c=>srP.t>=c.s&&srP.t<c.e);if(i<0)return;const c=M.clips[i];
-  if(M.ctx.state==="suspended")M.ctx.resume();const s=M.ctx.createBufferSource();s.buffer=c.buf;s.playbackRate.value=srP.rate;s.connect(M.ctx.destination);s.start(0,Math.max(0,srP.t-c.s));M.src=s}
+  if(M.ctx.state==="suspended")M.ctx.resume();const s=M.ctx.createBufferSource();s.buffer=c.buf;s.playbackRate.value=srP.rate;s.connect(M.ctx.destination);
+  /* recordings cut from v2 (ring skipped) still run ~1.2 s ahead of the captions and the screen: measured on 4 calls, same on each */
+  const off=srP.t-c.s-(M.lag||0);if(off>=0)s.start(0,off);else s.start(M.ctx.currentTime+(-off)/srP.rate,0);M.src=s}
 const srB64=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u};
 async function srLoadMedia(d){if(!d||!d.media||!d.media.asset)return;if(srP.media&&srP.media.id===d.id)return;srMediaDrop();
   const M={id:d.id,ready:false};srP.media=M;srPaint();
@@ -8249,7 +8251,7 @@ async function srLoadMedia(d){if(!d||!d.media||!d.media.asset)return;if(srP.medi
     if(srP.media!==M)return;
     const AC=window.AudioContext||window.webkitAudioContext;M.ctx=AC?new AC({sampleRate:j.sr||8000}):null;
     M.clips=(j.clips||[]).map(c=>{const u=srB64(c.pcm),n=u.length>>1,dv=new DataView(u.buffer),f=new Float32Array(n);for(let i=0;i<n;i++)f[i]=dv.getInt16(i*2,true)/32768;let buf=null;if(M.ctx){buf=M.ctx.createBuffer(1,n,j.sr||8000);buf.copyToChannel(f,0)}return {s:+c.s,e:+c.e,buf}});
-    M.audioStart=+j.audioStart||0;M.t0=+j.t0||((j.events||[])[0]||{}).timestamp||M.audioStart;
+    M.audioStart=+j.audioStart||0;M.lag=(+j.v||1)>=2?SR_AUDIO_LAG:0;M.t0=+j.t0||((j.events||[])[0]||{}).timestamp||M.audioStart;
     M.events=j.events||[];srMakeRep(M);
     M.ready=true;srPaint();srFit();srMediaSync(srP.playing)}
   catch(e){M.err="Couldn't load the recording.";srPaint()}}

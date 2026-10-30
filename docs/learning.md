@@ -44,3 +44,7 @@ No mark changed, Claude's or the team's. Every % saved before v5 (Σ(mark/4 × w
 Round 2 calls now carry the same agent's later calls on the case (callbacks to the store, customer or driver), appended on one timeline in the recording. Only the audited agent's own talk legs that started after the audited call; voicemail, silent legs, earlier calls and other agents' calls are left out. 10 calls have them (14 legs).
 
 Those 10 were regraded on v5 as a case (audited call + follow-ups). The audited-call-only grade is kept as `gradeSolo`, the earlier v4 grade as `gradeV4`. Opening spiel still comes from the audited call only.
+
+## Audio sync fix (Oct 30)
+
+GreenDot's call audio file starts at the call start (ring and hold music included, ~4 s on most calls, up to 109 s), while captions and the screen recording start at `audio_start_utc`. Until desk v102 the audio was played from the file start, so it ran ahead of the screen. The extract and clip scripts now skip that lead-in; a residual ~1.2 s (measured on four calls, the same on each) is corrected in the player. Voice measures (pitch, dead air, talk time) were re-measured on all 48 calls. The audits' holds and pauses came from caption times and screen activity, so no grade changed.
