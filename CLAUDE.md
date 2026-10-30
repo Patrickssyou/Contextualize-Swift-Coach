@@ -33,7 +33,7 @@ Two brains live in the page: the call brain in `src/core.js` (parked in its own 
 - Calls vs cases: a call is handled by one SA; a case involves another SA, a pool seat or CRT and is graded once as a team. Voicemail and silent legs are set aside.
 - UI copy: plain, short, no helper subtext under controls. Patrick wants direct feedback, not reassurance.
 - Learning is measured honestly (`docs/learning.md`): Claude's earlier grades are never changed; a regrade is blind (no team marks or notes for that item, and the item's own lessons left out); progress and regression are both reported as they are.
-- Rounds: Round 1 is archived (only its 15 settled items, shown in Learning). Round 2 is Oct 23–30, 2 chats + 4 calls per person (CL > DE > MGR), current SAs and SA candidates kept apart.
+- Rounds: Round 1 is archived (only its 15 settled items, shown in Learning). Round 2 is Oct 23–30, 2 chats + 4 calls per person (CL > DE > MGR), current SAs and SA candidates kept apart. Lourdes Rabina was dropped from the candidate round on Oct 30 (not moving forward); her 4 calls are kept in the round doc under `dropped`, hidden, and never redrawn.
 
 ## Studio workflow (lanes)
 

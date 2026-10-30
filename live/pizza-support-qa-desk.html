@@ -4039,7 +4039,7 @@ const R1_KEYS=["2026-10-05","2026-10-12","2026-11-02"],CAND_R1="2026-11-02";
 const ONLY_WEEK="2026-10-23",CAND_WEEK="2026-11-09",CAND_TEACH=["Joana Tormis","Lourdes Rabina"];
 const isCandKey=w=>w===CAND_WEEK||w===CAND_R1;
 /* the candidate pool: Lightdash full names (logins are read from their calls) and WIRA names */
-const CAND_ROSTER=[{name:"Joana Tormis",full:["Joana Tormis"],logins:["zzjtormis"]},{name:"Lourdes Rabina",full:["Lou Rabina","Lourdes Rabina"],logins:["zzlorabina"]},
+const CAND_ROSTER=[{name:"Joana Tormis",full:["Joana Tormis"],logins:["zzjtormis"]},
   {name:"Nichole Alanano",full:["Nichole Alanano"],logins:["zznalanano"]},{name:"Rolence Vinas",full:["Rolence Vinas Gd","Rolence Vinas"],logins:["rvinasgd"]},
   {name:"Reese Rendal",full:["Reese Rendal"],logins:["rrendalgd"]},{name:"Stephen Larot",full:["Stephen Larot"],logins:["slarotgd"]}];
 const rgFrom=w=>(ROUNDS[w]||{}).from||w,rgTo=w=>(ROUNDS[w]||{}).to||addDaysU(w,6);
@@ -7413,7 +7413,9 @@ function cbShuffle(x){x=x.slice();for(let i=x.length-1;i>0;i--){const j=Math.flo
 function cbDrawnBefore(){const S=new Set();cbRounds.forEach(r=>(r.items||[]).forEach(x=>S.add((x.kind||r.kind||"call")+"|"+x.key)));
   lrnRounds().forEach(r=>(r.sample||[]).forEach(x=>S.add("chat|"+x.sid)));((lrnState&&lrnState.marked)||[]).forEach(x=>S.add("chat|"+x));return S}
 /* the SAs: everyone with a gradable chat or a call this week, in roster order */
-function cbDrawPool(w){const chatsW=chW.week===w?chatsOfWeek().filter(c=>chCanGrade(c)&&c.sa):[],callsW=(queueAll||[]).filter(q=>!q.removed&&q.week===w&&q.agent);
+/* SAs the owner dropped from a round (round doc `dropped.sas`): never drawn or topped up again */
+const cbDropped=w=>{const r=cbWeekRound(w);return new Set(((r&&r.dropped)||{}).sas||[])};
+function cbDrawPool(w){const D=cbDropped(w),chatsW=chW.week===w?chatsOfWeek().filter(c=>chCanGrade(c)&&c.sa&&!D.has(c.sa)):[],callsW=(queueAll||[]).filter(q=>!q.removed&&q.week===w&&q.agent&&!D.has(q.agent));
   return {chatsW,callsW,sas:chSaOrder(chatsW.map(c=>c.sa).concat(callsW.map(q=>q.agent)))}}
 /* Round 2 calls: the pull already ranked them (pos: CL, CL, DE, MGR, then by line priority CL > DE > MGR); take the first n not drawn before */
 const cbPickRanked=(mine,prev,n)=>mine.slice().sort((a,b)=>(a.pos??0)-(b.pos??0)).filter(q=>!prev.has("call|"+q.id)).slice(0,n).sort((a,b)=>String(a.callDate+a.callTime).localeCompare(String(b.callDate+b.callTime)));
@@ -7963,7 +7965,7 @@ window.addEventListener("message",async e=>{let h="";try{h=new URL(e.origin).hos
   catch(err){try{e.source.postMessage({type:"srAck",id:m.id,ok:false,why:String(err&&err.code||err).slice(0,80)},e.origin)}catch(_){}}});
 /* the SR tab is the call's own audit (ticket, recording, scorecard with every grader, coaching) with a strip to switch between recorded calls */
 /* the recorded calls of the round on screen (Current SAs or SA candidates); Round 1's recordings stay with Round 1 */
-const srRoundDocs=()=>(srDocs||[]).filter(x=>{const q=(queueAll||[]).find(d=>d.id===x.id);return q&&q.week===week}).sort((a,b)=>{const o=cbRoundItems(week).map(x=>x.key),i=k=>{const n=o.indexOf(k);return n<0?999:n};return i(a.id)-i(b.id)});
+const srRoundDocs=()=>(srDocs||[]).filter(x=>{const q=(queueAll||[]).find(d=>d.id===x.id);return q&&q.week===week&&(!cbWeekRound(week)||cbRoundItems(week).some(i=>i.key===x.id))}).sort((a,b)=>{const o=cbRoundItems(week).map(x=>x.key),i=k=>{const n=o.indexOf(k);return n<0?999:n};return i(a.id)-i(b.id)});
 function srEnter(){if(typeof srListen==="function")srListen();const D=srRoundDocs();if(!D.length)return false;const d=D.find(x=>x.id===srSel)||D[0];srSel=d.id;
   const q=(queueAll||[]).find(x=>x.id===d.id);if(!q)return false;srMode=true;openCall(d.id,q&&q.week,false,true);return true}
 const srStripHtml=()=>srMode&&srRoundDocs().length?`<nav class="srcalls" aria-label="Recorded calls">${srRoundDocs().map(x=>`<button type="button" class="srcall" data-srpick="${esc(x.id)}" aria-pressed="${x.id===String(callSel)}"><b>${esc(x.sa||"")}</b><span>${esc([x.restaurant,x.kind,x.dur?srT(x.dur):""].filter(Boolean).join(" · "))}</span></button>`).join("")}</nav>`:"";
